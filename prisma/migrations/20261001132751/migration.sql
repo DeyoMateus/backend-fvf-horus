@@ -1,0 +1,5 @@
+-- RenameIndex
+ALTER INDEX "amostras_hora_confiavel_motoristaId_deviceUuidUsado_elapse_idx" RENAME TO "amostras_hora_confiavel_motoristaId_deviceUuidUsado_elapsed_idx";
+
+-- RenameIndex
+ALTER INDEX "verificacoes_relogio_pendentes_motoristaId_deviceUuidUsad_idx" RENAME TO "verificacoes_relogio_pendentes_motoristaId_deviceUuidUsado__idx";

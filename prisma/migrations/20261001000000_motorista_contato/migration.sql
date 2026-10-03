@@ -1,0 +1,11 @@
+-- Rodada 39 , "Meu perfil" no app do motorista: telefone passa a
+-- existir no cadastro (nulável, motorista antigo continua sem valor
+-- até editar pela primeira vez pelo app).
+--
+-- Rodada 40: e-mail do motorista foi retirado por pedido explícito do
+-- usuário (não tem necessidade) ANTES desta migração ter sido
+-- aplicada em produção , por isso o e-mail nunca chegou a existir de
+-- verdade num banco real; este arquivo foi editado no lugar de criar
+-- uma segunda migração de "DROP COLUMN" só pra desfazer algo que
+-- nunca rodou.
+ALTER TABLE "motoristas" ADD COLUMN "telefone" TEXT;

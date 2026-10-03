@@ -1,0 +1,53 @@
+import { AuditService } from '../common/audit/audit.service';
+import { EnvelopeEncryptionService } from '../common/crypto/envelope-encryption.service';
+import { HashChainService } from '../common/hash-chain/hash-chain.service';
+import { CertificateService } from '../common/signature/certificate.service';
+import { SignatureService } from '../common/signature/signature.service';
+import { PrismaService } from '../common/prisma/prisma.service';
+import { CreateRegistroJornadaAjudanteDto } from './dto/create-registro-jornada-ajudante.dto';
+export declare class RegistrosJornadaAjudanteService {
+    private readonly prisma;
+    private readonly hashChain;
+    private readonly crypto;
+    private readonly certificados;
+    private readonly assinaturas;
+    private readonly audit;
+    constructor(prisma: PrismaService, hashChain: HashChainService, crypto: EnvelopeEncryptionService, certificados: CertificateService, assinaturas: SignatureService, audit: AuditService);
+    create(ajudanteId: string, deviceUuidUsado: string, dto: CreateRegistroJornadaAjudanteDto, ip?: string, userAgent?: string): Promise<{
+        id: string;
+        createdAt: Date;
+        observacao: string | null;
+        tipoEvento: import("@prisma/client").$Enums.TipoEvento;
+        timestampEvento: Date;
+        latitude: import("@prisma/client/runtime/library").Decimal | null;
+        longitude: import("@prisma/client/runtime/library").Decimal | null;
+        precisaoGpsM: number | null;
+        sequencial: number;
+        hashAnterior: string;
+        hashAtual: string;
+        assinaturaDigital: string | null;
+        algoritmoAssinatura: string;
+        deviceUuidUsado: string;
+        idempotencyKey: string | null;
+        ajudanteId: string;
+    }>;
+    listarPorAjudante(ajudanteId: string): Promise<{
+        id: string;
+        createdAt: Date;
+        observacao: string | null;
+        tipoEvento: import("@prisma/client").$Enums.TipoEvento;
+        timestampEvento: Date;
+        latitude: import("@prisma/client/runtime/library").Decimal | null;
+        longitude: import("@prisma/client/runtime/library").Decimal | null;
+        precisaoGpsM: number | null;
+        sequencial: number;
+        hashAnterior: string;
+        hashAtual: string;
+        assinaturaDigital: string | null;
+        algoritmoAssinatura: string;
+        deviceUuidUsado: string;
+        idempotencyKey: string | null;
+        ajudanteId: string;
+    }[]>;
+    private arredondarCoordenada;
+}

@@ -1,0 +1,1586 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// FVF HÓRUS - BUNKER CENTRAL (PostgreSQL)
+// Arquitetura de seguranca bancaria para controle de jornada:
+//  - Ledger append-only com cadeia de hashes (hashAnterior/hashAtual)
+//  - Assinatura digital por registro (nao-repudio)
+//  - Envelope encryption do certificado do motorista (AES-256-GCM)
+//  - Device binding: cada motorista so bate ponto do aparelho vinculado
+//    (deviceUuid entra no hash de cada registro)
+//  - Tratamento de ponto: correcao/justificativa feita pelo RH/gestor,
+//    sem nunca alterar um RegistroJornada existente
+//  - Trilha de auditoria imutavel (AuditLog)
+//  - Autenticacao/RBAC dos usuarios da empresa
+// ==========================================
+
+enum TipoEvento {
+  INICIO_JORNADA
+  INICIO_DESCANSO
+  FIM_DESCANSO
+  INICIO_DIRECAO
+  FIM_DIRECAO
+  ESPERA_CARGA_DESCARGA
+  FIM_ESPERA_CARGA_DESCARGA
+  /// Fecha uma ESPERA_CARGA_DESCARGA igual FIM_ESPERA_CARGA_DESCARGA
+  /// (conta pro mesmo limite legal de espera), mas sinaliza
+  /// especificamente que foi uma ENTREGA concluída , dispara a baixa
+  /// automática (FIFO) do CT-e mais antigo ainda em aberto vinculado a
+  /// este motorista. Ver RegistrosJornadaService.avaliarDescarregamento.
+  FIM_DESCARREGAMENTO
+  FIM_JORNADA
+  OUTRO
+}
+
+enum StatusMotorista {
+  ATIVO
+  INATIVO
+  SUSPENSO
+}
+
+enum PapelUsuario {
+  ADMIN
+  GESTOR
+}
+
+enum ActorType {
+  USUARIO_EMPRESA
+  MOTORISTA
+  /// Rodada 66 , ver model Ajudante.
+  AJUDANTE
+  SISTEMA
+  SUPER_ADMIN
+}
+
+/// Dono da plataforma FVF Hórus (Rodada 31) , não pertence a NENHUM
+/// Grupo, não tem `papel` (ADMIN/GESTOR são conceitos de dentro de um
+/// grupo) e nunca aparece em nenhuma tabela protegida por Row-Level
+/// Security: é justamente quem PROVISIONA o primeiro Grupo + primeira
+/// Empresa (CNPJ) + primeiro usuário ADMIN de cada cliente novo , sem
+/// isso, não existe forma de uma empresa ganhar uma conta (o cadastro
+/// de Grupo/Empresa/UsuarioEmpresa é sempre protegido por JWT+RBAC, sem
+/// nenhum endpoint público de auto-registro, por desenho desde a
+/// Rodada 5). Login e emissão de token completamente separados do
+/// `AuthService` de UsuarioEmpresa (ver `super-admin/`) , mesmo bcrypt
+/// custo 12, mesmo padrão de refresh token rotativo.
+model SuperAdminUsuario {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  senhaHash String
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens SuperAdminRefreshToken[]
+  resetTokensSenha SuperAdminPasswordResetToken[]
+
+  @@map("super_admin_usuarios")
+}
+
+model SuperAdminRefreshToken {
+  id           String            @id @default(uuid())
+  tokenHash    String            @unique
+  superAdminId String
+  superAdmin   SuperAdminUsuario @relation(fields: [superAdminId], references: [id])
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime          @default(now())
+
+  @@index([superAdminId])
+  @@map("super_admin_refresh_tokens")
+}
+
+/// Token de recuperação de senha do super admin (Rodada 33) , mesmo
+/// padrão do PasswordResetToken de UsuarioEmpresa, mas fora da lista
+/// de modelos com RLS (o super admin não pertence a nenhum grupo,
+/// mesmo princípio do SuperAdminRefreshToken).
+model SuperAdminPasswordResetToken {
+  id           String            @id @default(uuid())
+  tokenHash    String            @unique
+  superAdminId String
+  superAdmin   SuperAdminUsuario @relation(fields: [superAdminId], references: [id])
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime          @default(now())
+
+  @@index([superAdminId])
+  @@map("super_admin_password_reset_tokens")
+}
+
+/// Um grupo econômico (holding/transportadora) pode ter mais de um CNPJ
+/// operando sob o mesmo login , cada CNPJ é uma Empresa própria (mantém
+/// seu próprio registroInpiAfd, já que o AFD é sempre por CNPJ), mas o
+/// LOGIN e todo o isolamento entre clientes (tenant) é por Grupo, não
+/// por Empresa. Ver claude/arquitetura-seguranca-controle-jornada.md.
+model Grupo {
+  id          String   @id @default(uuid())
+  razaoSocial String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  empresas Empresa[]
+  usuarios UsuarioEmpresa[]
+  regrasSindicais RegraSindical[]
+  feriados        Feriado[]
+  /// Rodada 66 , ver comentário em AuditLog.grupoId.
+  auditLogs       AuditLog[]
+
+  @@map("grupos")
+}
+
+/// Regra de Convenção Coletiva de Trabalho (CCT) / Acordo Coletivo (ACT) do
+/// setor de transporte. Por força do "Negociado sobre o Legislado" (Art.
+/// 611-A da CLT), o que o sindicato da categoria/base territorial negociou
+/// costuma valer sobre a regra geral da CLT , por isso nenhum destes
+/// parâmetros pode ficar fixo (hardcoded) no motor de apuração: o gestor
+/// cadastra uma regra por convenção e vincula aos CNPJs (Empresa) que ela
+/// cobre. Pertence sempre a um Grupo (quem cadastra é o RH da empresa-mãe),
+/// nunca a um CNPJ isolado, porque a mesma convenção normalmente cobre
+/// vários CNPJs da mesma base territorial.
+///
+/// IMPORTANTE (ver FAQ do produto): estes parâmetros alimentam a
+/// APURAÇÃO de horas (categorização e alertas de desvio) , o sistema não
+/// calcula folha de pagamento completa a partir de salário/DSR/verbas, só
+/// organiza e categoriza a jornada pra apoiar o fechamento feito pelo RH
+/// ou pela contabilidade.
+model RegraSindical {
+  id     String @id @default(uuid())
+  grupoId String
+  grupo   Grupo  @relation(fields: [grupoId], references: [id])
+
+  /// Nome livre pra identificar a convenção (ex.: "Sindicato Rodoviário
+  /// de SP - Base 2026/2027") , não há integração automática com nenhum
+  /// cadastro oficial de sindicatos, é só um rótulo do gestor.
+  nome String
+
+  /// RODOVIARIO (interestadual/longa distância, Lei 13.103) ou URBANO
+  /// (curta distância/entrega urbana) , muda como a hora noturna
+  /// reduzida é contada (ver duracaoMinutoNoturnoMin abaixo).
+  categoriaTransporte CategoriaTransporteSindical @default(RODOVIARIO)
+
+  // ---- Tolerância de marcação ----
+  /// Minutos de tolerância no início/fim de jornada antes de contar
+  /// atraso ou hora extra (comum em CCT: 5 a 10 minutos).
+  toleranciaMarcacaoMin Int @default(0)
+
+  // ---- Horas extras (faixas escalonadas) ----
+  /// Minutos de direção "normais" no dia antes de virar hora extra
+  /// (a CLT/Lei do Motorista dá 8h = 480min; a CCT pode negociar outro
+  /// valor). Acima disso, primeiro entra a faixa 1 (percentualHoraExtra1)
+  /// até limiteHoraExtraFaixa1Min minutos, depois a faixa 2
+  /// (percentualHoraExtra2) pro que passar disso.
+  limiteJornadaNormalMin    Int     @default(480)
+  limiteHoraExtraFaixa1Min  Int     @default(120) // ex.: 2 primeiras horas extras a 50%
+  percentualHoraExtra1      Decimal @default(50) @db.Decimal(5, 2)
+  percentualHoraExtra2      Decimal @default(70) @db.Decimal(5, 2) // demais horas extras (70% ou 100%, conforme CCT)
+  /// Percentual diferenciado pra trabalho aos domingos/feriados em
+  /// viagem , comum nas CCTs do setor.
+  percentualHoraExtraDomingoFeriado Decimal? @db.Decimal(5, 2)
+
+  // ---- Adicional noturno ----
+  percentualAdicionalNoturno Decimal @default(20) @db.Decimal(5, 2) // CLT art. 73: 20%
+  /// Duração real, em minutos, de "1 hora noturna" pra fins de
+  /// contagem , 60 pro rodoviário (sem hora reduzida) ou 52.5 (52min30s)
+  /// pro urbano com hora noturna reduzida. Guardado em minutos inteiros
+  /// e centésimos via Decimal pra não perder a fração dos 30 segundos.
+  duracaoMinutoNoturnoMin Decimal @default(60) @db.Decimal(5, 2)
+
+  // ---- Banco de horas (Rodada 37) ----
+  /// Toggle explícito: liga/desliga o controle de banco de horas para
+  /// os motoristas vinculados a esta convenção. Desligado (padrão) =
+  /// hora extra é só apurada/paga direto, igual sempre foi. Ligado =
+  /// a hora extra apurada passa a ser tratada como CRÉDITO no banco de
+  /// horas do motorista (ver AjusteBancoHoras), a compensar em folga ou
+  /// pagar, de acordo com a lei/CCT , nunca ambos ao mesmo tempo pro
+  /// mesmo período (decisão de quando compensar/pagar é do gestor,
+  /// registrada manualmente como um ajuste de débito).
+  bancoHorasAtivo Boolean @default(false)
+  /// Nulo = sem prazo definido pra zerar o banco. Em meses: prazo que
+  /// a CCT dá pra zerar o banco (comum: 3, 6 ou 12) , usado só como
+  /// referência informativa por enquanto (o sistema não expira saldo
+  /// automaticamente; é o gestor que decide compensar/pagar).
+  bancoHorasPrazoExpiracaoMeses Int?
+  /// A partir de quantos minutos acumulados o painel do RH recebe um
+  /// alerta de que o motorista está perto do limite do acordo.
+  bancoHorasLimiteAlertaMin     Int?
+
+  // ---- Fracionamento de descanso/refeição (Lei 13.103 + CCT) ----
+  /// A Lei do Motorista permite fracionar o repouso diário (11h) e o
+  /// intervalo intrajornada, mas a CCT pode travar um mínimo pro
+  /// primeiro período (ex.: "não pode ser inferior a 3h contínuas").
+  primeiroPeriodoDescansoMinimoMin Int @default(180)
+  intervaloRefeicaoMinimoMin       Int @default(60)
+
+  // ---- Tempo de espera (carga/descarga) ----
+  /// Percentual sobre o salário-hora aplicado à espera , o Dossiê de
+  /// Espera usa isso pra ter validade incontestável na cobrança ou na
+  /// defesa trabalhista, aplicando a fórmula exata negociada pelo
+  /// sindicato daquela base territorial.
+  percentualHoraEspera         Decimal  @default(30) @db.Decimal(5, 2)
+  /// Quando a espera acontece durante o horário de refeição, algumas
+  /// CCTs preveem um percentual diferente (opcional).
+  percentualHoraEsperaRefeicao Decimal? @db.Decimal(5, 2)
+
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  empresas Empresa[]
+
+  @@index([grupoId])
+  @@map("regras_sindicais")
+}
+
+enum CategoriaTransporteSindical {
+  RODOVIARIO
+  URBANO
+}
+
+model Empresa {
+  id          String   @id @default(uuid())
+  razaoSocial String
+  cnpj        String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  /// Igual ao `ativo` de UsuarioEmpresa/status de Motorista: nunca se
+  /// apaga um CNPJ, só se desativa (arquivo morto). Editável pelo
+  /// super admin (Rodada 31) , hoje é só informativo/de acompanhamento,
+  /// não bloqueia nada em runtime (ex.: motoristas desse CNPJ ainda
+  /// conseguem bater ponto normalmente).
+  ativo Boolean @default(true)
+
+  /// Número de registro do software no INPI, exigido pela Portaria
+  /// 671/2021 (MTE) pra compor o nome do arquivo AFD do REP-P
+  /// (AFD<INPI><CNPJ>REP_P). Enquanto for null, a exportação de AFD
+  /// bloqueia com uma mensagem clara em vez de gerar um arquivo com
+  /// número fictício , ver claude/bloqueios-dependentes-do-usuario.md.
+  registroInpiAfd String?
+
+  grupoId String
+  grupo   Grupo  @relation(fields: [grupoId], references: [id])
+
+  motoristas      Motorista[]
+  /// Rodada 66 , ver comentário no model Ajudante.
+  ajudantes       Ajudante[]
+  documentosCarga DocumentoCarga[]
+
+  /// CCT/ACT aplicada a este CNPJ (Rodada 27). Nullable: nem toda empresa
+  /// tem uma convenção coletiva configurada ainda , nesse caso os
+  /// parâmetros legais padrão (CLT/Lei 13.103) continuam valendo. Uma
+  /// mesma RegraSindical pode ser reaproveitada por vários CNPJs do
+  /// mesmo grupo (ex.: mesma base territorial/sindicato).
+  regraSindicalId String?
+  regraSindical   RegraSindical? @relation(fields: [regraSindicalId], references: [id])
+
+  feriados Feriado[]
+
+  @@index([grupoId])
+  @@index([regraSindicalId])
+  @@map("empresas")
+}
+
+model UsuarioEmpresa {
+  id        String       @id @default(uuid())
+  nome      String
+  email     String       @unique
+  senhaHash String
+  papel     PapelUsuario @default(GESTOR)
+  ativo     Boolean      @default(true)
+
+  /// Formato E.164 (ex.: +5511999998888). Opcional , sem isso, esse
+  /// gestor simplesmente não recebe alertas críticos via WhatsApp
+  /// (continua recebendo tudo pelo painel normalmente).
+  telefoneWhatsapp String?
+
+  /// O tenant de verdade é o Grupo, não a Empresa (CNPJ) , um usuário
+  /// enxerga TODAS as empresas/CNPJs do grupo dele, nunca de outro
+  /// grupo. Renomeado de empresaId em 2026-09 quando o modelo passou a
+  /// suportar múltiplos CNPJs por login.
+  grupoId String
+  grupo   Grupo  @relation(fields: [grupoId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens              RefreshToken[]
+  resetTokensSenha           PasswordResetToken[]
+  dispositivosVinculados     DispositivoVinculado[]
+  dispositivosVinculadosAjudante DispositivoVinculadoAjudante[]
+  tratamentosPonto           TratamentoPonto[]
+  solicitacoesTrocaRevisadas SolicitacaoTrocaDispositivo[]
+  documentosCargaEnviados    DocumentoCarga[]
+  folgasConcedidas           FolgaConcedida[]
+  solicitacoesAjusteDecididas SolicitacaoAjustePonto[]
+  feriadosCriados            Feriado[]
+  ajustesBancoHorasRegistrados AjusteBancoHoras[]
+  integridadeAceites           IntegridadeAceite[]
+
+  @@index([grupoId])
+  @@map("usuarios_empresa")
+}
+
+model RefreshToken {
+  id        String         @id @default(uuid())
+  tokenHash String         @unique
+  usuarioId String
+  usuario   UsuarioEmpresa @relation(fields: [usuarioId], references: [id])
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime       @default(now())
+
+  @@index([usuarioId])
+  @@map("refresh_tokens")
+}
+
+/// Token de recuperação de senha (Rodada 33) , de uso único, vida
+/// curta (1h). Só o hash SHA-256 é gravado (mesmo padrão do
+/// RefreshToken), nunca o valor em texto puro; o valor real só existe
+/// no link enviado por e-mail. `usedAt` marca que já foi consumido ,
+/// nunca reutilizável, mesmo dentro da validade.
+model PasswordResetToken {
+  id        String         @id @default(uuid())
+  tokenHash String         @unique
+  usuarioId String
+  usuario   UsuarioEmpresa @relation(fields: [usuarioId], references: [id])
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime       @default(now())
+
+  @@index([usuarioId])
+  @@map("password_reset_tokens")
+}
+
+model Motorista {
+  id     String          @id @default(uuid())
+  nome   String
+  cpf    String          @unique
+  cnh    String          @unique
+  status StatusMotorista @default(ATIVO)
+
+  /// Contato do motorista (Rodada 39 , "Meu perfil" no app). Nasce
+  /// vazio pra quem já era cadastrado antes desta rodada (por isso
+  /// nulável no banco); o app exige nome/telefone preenchidos antes de
+  /// deixar salvar uma edição vazia, mas isso é validação de aplicação
+  /// (DTO), não de schema, porque motorista antigo sem contato ainda
+  /// cadastrado não pode virar erro de leitura. Sem e-mail de propósito
+  /// (Rodada 40, pedido do usuário: não tem necessidade para o
+  /// motorista) , diferente de UsuarioEmpresa (ADMIN/GESTOR), cujo
+  /// e-mail é a própria credencial de login do painel.
+  telefone String?
+
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+
+  hashGenesis String @unique
+
+  certificadoPfxEnc      Bytes?
+  certificadoIv          String?
+  certificadoAuthTag     String?
+  certificadoFingerprint String?
+  certificadoValidoAte   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// "Excluir cadastro" (Rodada 65) , pedido explícito do usuário:
+  /// diferente de INATIVO/SUSPENSO (que já eram "arquivo morto" desde
+  /// a Rodada 31, sem apagar nada), aqui o motorista some da listagem
+  /// normal do painel. Continua sendo um soft-delete: a linha em si
+  /// NUNCA é removida do banco , não dá pra apagar de verdade sem
+  /// quebrar toda a cadeia de hash e o ledger de RegistroJornada
+  /// (motoristaId é obrigatório e referenciado por dezenas de tabelas
+  /// de histórico/auditoria). nome/cpf/cnh continuam intactos, então
+  /// qualquer busca por nome ou qualquer relatório que já existia
+  /// (holerite, indicadores, alertas, AFD) continua encontrando os
+  /// registros normalmente , só a listagem de motoristas ATIVOS do
+  /// painel para de trazer este id por padrão.
+  excluidoEm           DateTime?
+  excluidoPorUsuarioId String?
+  motivoExclusao       String?
+
+  registros                    RegistroJornada[]
+  amostrasLocalizacao          AmostraLocalizacao[]
+  dispositivoVinculado         DispositivoVinculado?
+  tratamentosPonto             TratamentoPonto[]
+  alertasJornada               AlertaJornada[]
+  solicitacoesTrocaDispositivo SolicitacaoTrocaDispositivo[]
+  autorrelatosFolga            AutorrelatoFolga[]
+  folgasConcedidas             FolgaConcedida[]
+  veiculoVinculado              VeiculoVinculado?
+  documentosCarga              DocumentoCarga[]
+  solicitacoesAjustePonto       SolicitacaoAjustePonto[]
+  ajustesBancoHoras             AjusteBancoHoras[]
+  amostrasHoraConfiavel         AmostraHoraConfiavel[]
+  verificacoesRelogioPendentes  VerificacaoRelogioPendente[]
+  integridadeAceites            IntegridadeAceite[]
+
+  @@map("motoristas")
+}
+
+/// Vínculo do motorista com o aparelho físico onde ele bate ponto.
+/// Só existe o vínculo ATUAL (igual senha: trocar substitui, não acumula
+/// histórico) , vincular um novo aparelho invalida o anterior na hora.
+/// Vincular/revogar só pode ser feito por um usuário da empresa
+/// (ADMIN/GESTOR), nunca pelo próprio motorista.
+model DispositivoVinculado {
+  id String @id @default(uuid())
+
+  motoristaId String    @unique
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  deviceUuid       String @unique
+  deviceApiKeyHash String
+
+  /// Expo push token do aparelho , registrado pelo próprio app depois do
+  /// vínculo (rota protegida pelo MotoristaDeviceGuard, não pelo painel).
+  /// Usado pelo motor de alertas críticos de jornada pra avisar o
+  /// motorista direto no celular, além do gestor ver no painel.
+  pushToken String?
+
+  vinculadoPorUsuarioId String
+  vinculadoPorUsuario   UsuarioEmpresa @relation(fields: [vinculadoPorUsuarioId], references: [id])
+
+  vinculadoEm  DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("dispositivos_vinculados")
+}
+
+enum TecnologiaRastreador {
+  GPS
+  SATELITAL
+  CELULAR
+  RFID
+  /// Rodada 105 , pedido do usuário: sinal híbrido (combina GPS e
+  /// comunicação por satélite, comum em rastreadores veiculares de
+  /// frota que não dependem de cobertura de celular).
+  HIBRIDO
+  OUTRO
+}
+
+/// Veículo de TRAÇÃO vinculado ao motorista (o cavalo mecânico que puxa
+/// a carga , não o reboque/carreta). Obrigatório desde que este modelo
+/// existe: todo motorista novo já nasce com uma placa. Preparado para a
+/// integração futura com rastreadores (idRastreador/tecnologiaRastreador),
+/// mas nenhum dos dois é obrigatório , só a placa.
+///
+/// O motorista PODE trocar a própria placa pelo app (ex.: foi realocado
+/// pra outro cavalo) , diferente do DispositivoVinculado, aqui não há
+/// fluxo de aprovação do gestor, mas toda troca (depois do cadastro
+/// inicial) grava um registro de auditoria (`VEICULO_TROCADO`) que o
+/// gestor vê no perfil do motorista, pra confirmar que a troca faz
+/// sentido. Ver VeiculosService.
+model VeiculoVinculado {
+  id String @id @default(uuid())
+
+  motoristaId String    @unique
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  /// Normalizada em maiúsculas, sem espaço, no cadastro/atualização ,
+  /// aceita tanto o formato antigo (ABC1234) quanto o Mercosul (ABC1D23).
+  placa String
+
+  idRastreador         String?
+  tecnologiaRastreador TecnologiaRastreador?
+
+  atualizadoPorTipo ActorType
+  atualizadoPorId   String?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("veiculos_vinculados")
+}
+
+/// Amostragem periódica de GPS em segundo plano ("luneta" , item
+/// pendente do motor de conformidade legal). Complementa os pontos de
+/// GPS que já existem em cada RegistroJornada (início/fim de trecho de
+/// direção): hoje a regra de "2 conferências consecutivas" (ociosidade
+/// suspeita) só usa esses pontos de início/fim, que são uma
+/// aproximação honesta mas grosseira. Com amostras periódicas de
+/// verdade, a regra pode ficar mais precisa no futuro , a integração
+/// em si ainda não foi feita, isto é só a captura e o armazenamento.
+model AmostraLocalizacao {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  latitude     Decimal @db.Decimal(10, 7)
+  longitude    Decimal @db.Decimal(10, 7)
+  precisaoGpsM Float?
+
+  /// Momento real da captura no aparelho (pode chegar ao backend muito
+  /// depois, já que a captura funciona offline e só sincroniza quando
+  /// há conexão , mesmo padrão do resto do app).
+  capturadoEm DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([motoristaId, capturadoEm])
+  @@map("amostras_localizacao")
+}
+
+model RegistroJornada {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  tipoEvento      TipoEvento
+  timestampEvento DateTime
+  latitude        Decimal?   @db.Decimal(10, 7)
+  longitude       Decimal?   @db.Decimal(10, 7)
+  precisaoGpsM    Float?
+
+  // Não é mais coletado na tela de registro de ponto nem em novos
+  // registros desde a Rodada 59 (sempre null a partir daí) , mas a
+  // coluna precisa continuar existindo: o valor de registros antigos faz
+  // parte do payload já usado para calcular hashAtual/hashAnterior
+  // desses registros (HashChainService). Removê-la do banco quebraria
+  // a verificação de integridade de qualquer registro antigo que tinha
+  // odômetro preenchido.
+  odometro Int?
+  observacao String?
+
+  sequencial   Int
+  hashAnterior String
+  hashAtual    String @unique
+
+  assinaturaDigital   String?
+  algoritmoAssinatura String  @default("RSA-SHA256")
+
+  /// Aparelho físico (vinculado ao motorista) que efetivamente enviou o
+  /// evento , entra no cálculo do hash: se o registro for reapresentado
+  /// por outro aparelho depois de uma troca de vínculo, o hash não bate.
+  deviceUuidUsado String
+
+  /// Rodada 88 , relógio monotônico do aparelho (Android
+  /// `SystemClock.elapsedRealtime()` / iOS `ProcessInfo.systemUptime`,
+  /// em milissegundos), capturado no exato momento do toque. Ao
+  /// contrário do relógio de parede, NÃO pode ser alterado pelo usuário
+  /// (só reseta ao reiniciar o aparelho) , comparado com o valor do
+  /// registro anterior do MESMO device em `RegistrosJornadaService.create`
+  /// pra detectar relógio manualmente adiantado/atrasado entre dois
+  /// toques, mesmo sem internet (ver bloqueio
+  /// REGISTRO_REJEITADO_RELOGIO_MONOTONICO_DIVERGENTE). Fica `null` em
+  /// registros de app sem o módulo nativo (Expo Go, ou instalações
+  /// anteriores a esta rodada) , nesse caso a checagem é simplesmente
+  /// pulada pra este par de eventos, sem afetar o resto do fluxo.
+  /// NÃO entra no cálculo do hash (`HashChainService.canonicalizar`) ,
+  /// é um sinal auxiliar de antifraude, não conteúdo do ledger.
+  elapsedRealtimeMs Float?
+
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+
+  tratamentosReferenciando TratamentoPonto[]
+  alertasGerados           AlertaJornada[]
+  solicitacoesAjusteReferenciando SolicitacaoAjustePonto[]
+
+  /// Rodada 92 , presente só enquanto este registro ainda não pôde ser
+  /// conferido contra nenhuma amostra de hora confiável do mesmo boot
+  /// (ver RelogioConfiavelService). Deletado assim que a verificação é
+  /// resolvida (divergente ou não) , nunca é um histórico permanente,
+  /// só uma fila de pendências.
+  verificacaoRelogioPendente VerificacaoRelogioPendente?
+
+  @@unique([motoristaId, sequencial])
+  @@index([motoristaId, timestampEvento])
+  @@map("registros_jornada")
+}
+
+/// Rodada 92 , "amostra de hora confiável": par (hora real do SERVIDOR,
+/// relógio monotônico do aparelho naquele instante) capturado pelo app
+/// sempre que ele tem uma chance barata de confirmar a hora com uma
+/// fonte que o motorista não controla , ao abrir o app (cold start) e
+/// sempre que a conectividade volta (NetInfo), não só quando bate um
+/// ponto. Ver POST /dispositivo/relogio/sincronizar.
+///
+/// É o que fecha (parcialmente , ver TipoAlertaJornada
+/// RELOGIO_DIVERGENTE_DETECTADO_RETROATIVAMENTE) a lacuna da Rodada 91:
+/// lá, a única "âncora" disponível pra comparar era o relógio de PAREDE
+/// do próprio aparelho num registro anterior , por isso a conta nunca
+/// fechava (as duas pontas eram controladas pelo mesmo relógio que se
+/// quer desconfiar). Aqui uma das pontas (horaServidorNoMomento) vem do
+/// relógio do SERVIDOR, não do aparelho , isso é o "externo e confiável"
+/// que faltava.
+///
+/// Não é WORM: são só pontos de referência operacionais, sem valor
+/// jurídico próprio (o ledger continua sendo só RegistroJornada); nada
+/// impede limpar amostras antigas no futuro se o volume crescer demais.
+model AmostraHoraConfiavel {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  deviceUuidUsado String
+
+  /// Relógio monotônico do aparelho (mesmo significado de
+  /// RegistroJornada.elapsedRealtimeMs) no momento exato em que o app
+  /// capturou esta amostra , usado pra saber se esta amostra é do MESMO
+  /// boot de um registro (comparável) ou de um boot diferente (não
+  /// comparável, igual já acontecia na checagem nº3).
+  elapsedRealtimeMsNoMomento Float
+
+  /// `new Date()` do SERVIDOR no momento em que recebeu a chamada ,
+  /// não é o `createdAt` do banco pelo mesmo motivo de
+  /// `horaRecebimentoServidor` em RegistrosJornadaService.create (não
+  /// acoplar ao relógio da transação).
+  horaServidorNoMomento DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([motoristaId, deviceUuidUsado, elapsedRealtimeMsNoMomento])
+  @@map("amostras_hora_confiavel")
+}
+
+/// Rodada 92 , fila de registros aceitos SEM nenhuma amostra de hora
+/// confiável do mesmo boot pra comparar na hora (ver checagem nº4 em
+/// RegistrosJornadaService.create). Cada linha é resolvida (e apagada)
+/// assim que uma amostra comparável chega , ver
+/// RelogioConfiavelService.resolverPendencias. Nunca é consultada pelo
+/// motorista nem pelo gestor diretamente; é só bookkeeping interno.
+///
+/// Não é WORM de propósito: ao contrário de RegistroJornada/AlertaJornada,
+/// isto é descartável por definição , uma vez resolvida, a pendência não
+/// tem mais nenhum valor (o resultado da verificação já virou alerta, se
+/// for o caso).
+model VerificacaoRelogioPendente {
+  id String @id @default(uuid())
+
+  registroJornadaId String          @unique
+  registroJornada   RegistroJornada @relation(fields: [registroJornadaId], references: [id])
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  deviceUuidUsado   String
+  elapsedRealtimeMs Float
+  timestampEvento   DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([motoristaId, deviceUuidUsado, elapsedRealtimeMs])
+  @@map("verificacoes_relogio_pendentes")
+}
+
+/// Correção/justificativa lançada pelo RH/gestor (nunca pelo motorista,
+/// nunca alterando um RegistroJornada existente). Ex.: motorista esqueceu
+/// de bater o fim da jornada , o gestor registra aqui o horário que deve
+/// ser considerado, com o motivo, ficando permanentemente rastreável quem
+/// fez e por quê. É só um registro informativo (entra na conferência da
+/// folha de ponto) , não existe fluxo de aprovação.
+model TratamentoPonto {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  usuarioId String
+  usuario   UsuarioEmpresa @relation(fields: [usuarioId], references: [id])
+
+  tipoEvento      TipoEvento
+  timestampEvento DateTime
+  motivo          String
+
+  /// Registro da jornada mais próximo ao qual este ajuste se refere
+  /// (ex.: o INICIO_DESCANSO que ficou sem FIM_DESCANSO). Opcional porque
+  /// nem todo ajuste tem um registro anterior claro para apontar.
+  registroReferenciaId String?
+  registroReferencia   RegistroJornada? @relation(fields: [registroReferenciaId], references: [id])
+
+  /// Ancoragem no ledger real do motorista: o hashAtual do último
+  /// RegistroJornada dele no momento do ajuste (ou o hashGenesis, se
+  /// ainda não houver nenhum), provando sobre qual estado da cadeia o
+  /// ajuste foi lançado.
+  hashReferencia String
+  /// Fingerprint do próprio ajuste (sha256 dos campos acima + hashReferencia).
+  hashRegistro   String @unique
+
+  /// Momento em que o motorista deu ciência deste ajuste no app (leu o
+  /// comprovante). Nunca é obrigatório para o ajuste valer , só registra
+  /// que o motorista já viu, para o histórico dele.
+  motoristaCienciaEm DateTime?
+
+  evidencias TratamentoPontoEvidencia[]
+
+  /// Preenchido quando este TratamentoPonto nasceu de um pedido de ajuste
+  /// aprovado (fluxo motorista pede -> RH decide, Rodada 27) , nulo
+  /// quando foi lançado direto pelo RH/gestor (fluxo original).
+  solicitacaoOrigem SolicitacaoAjustePonto?
+
+  createdAt DateTime @default(now())
+
+  @@index([motoristaId, timestampEvento])
+  @@map("tratamentos_ponto")
+}
+
+/// Feriado aceito pela empresa/grupo para fins de pagamento (Rodada 29):
+/// diferente do domingo (sempre calculável por dia da semana), um
+/// feriado varia de cidade para cidade , não existe fonte de dados
+/// nacional/municipal confiável embutida no sistema. Quem decide o que
+/// a empresa aceita como feriado (e se paga com o percentual
+/// equivalente a domingo, ou não) é sempre o RH, cadastrando
+/// manualmente. Pertence ao Grupo por padrão (vale pra todos os CNPJs),
+/// com `empresaId` opcional pra restringir a um CNPJ específico , útil
+/// quando o grupo tem filiais em cidades diferentes, cada uma com seu
+/// próprio calendário municipal.
+model Feriado {
+  id String @id @default(uuid())
+
+  grupoId String
+  grupo   Grupo  @relation(fields: [grupoId], references: [id])
+
+  /// Nulo = vale para todos os CNPJs do grupo. Preenchido = só aquele CNPJ.
+  empresaId String?
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  data      DateTime @db.Date
+  descricao String
+
+  /// Se este feriado deve receber o mesmo percentual diferenciado que a
+  /// RegraSindical do CNPJ aplica a domingos
+  /// (`percentualHoraExtraDomingoFeriado`). false = feriado só
+  /// registrado/informativo, sem impacto no cálculo (ex.: um ponto
+  /// facultativo que a empresa decidiu não equiparar a domingo).
+  pagoComoDomingo Boolean @default(true)
+
+  ativo Boolean @default(true)
+
+  criadoPorUsuarioId String?
+  criadoPorUsuario   UsuarioEmpresa? @relation(fields: [criadoPorUsuarioId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([grupoId, data])
+  @@index([empresaId, data])
+  @@map("feriados")
+}
+
+/// Prova anexada pelo gestor ao fechar/ajustar um ponto sem o motorista ter
+/// batido (ex.: print do rastreador, print de conversa de WhatsApp). Guarda
+/// o arquivo no R2 (chaveStorage) ou, se o storage não estiver configurado,
+/// direto no Postgres (conteudo) , mesmo padrão de fallback do XML de
+/// CT-e/MDF-e em StorageService/documentos-carga.
+model TratamentoPontoEvidencia {
+  id String @id @default(uuid())
+
+  tratamentoId String
+  tratamento   TratamentoPonto @relation(fields: [tratamentoId], references: [id])
+
+  nomeArquivo   String
+  contentType   String
+  tamanhoBytes  Int
+
+  /// Chave do objeto no R2, quando o storage está configurado.
+  chaveStorage String?
+  /// Bytes do arquivo direto no banco, fallback quando não há R2 configurado.
+  conteudo     Bytes?
+
+  createdAt DateTime @default(now())
+
+  @@index([tratamentoId])
+  @@map("tratamentos_ponto_evidencias")
+}
+
+/// Solicitação de ajuste de ponto FEITA PELO MOTORISTA (Rodada 27): "esqueci
+/// de bater, quero corrigir para tal horário". Fluxo sempre em duas etapas
+/// , pedido do motorista, depois decisão do RH , nunca vira um horário
+/// oficial sozinho. Se aprovada, gera um TratamentoPonto (o mesmo registro
+/// paralelo ancorado no ledger já usado pelo lançamento direto do
+/// RH/gestor) e É ESSE registro que entra na apuração/holerite. Se
+/// rejeitada, fica só como histórico , nada muda na jornada do motorista.
+///
+/// Cada solicitação é decidida isoladamente: aprovar ou rejeitar uma nunca
+/// altera nenhuma outra solicitação nem nenhum TratamentoPonto já
+/// existente (nunca há operação em lote aqui, de propósito).
+model SolicitacaoAjustePonto {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  tipoEvento      TipoEvento
+  /// Horário que o motorista alega ser o correto.
+  timestampEvento DateTime
+  /// Texto do próprio motorista explicando o esquecimento/erro.
+  justificativa   String
+
+  /// Registro real mais próximo ao qual o pedido se refere (opcional,
+  /// mesma ideia do registroReferenciaId de TratamentoPonto).
+  registroReferenciaId String?
+  registroReferencia   RegistroJornada? @relation(fields: [registroReferenciaId], references: [id])
+
+  status StatusSolicitacaoAjuste @default(PENDENTE)
+
+  decididoPorUsuarioId String?
+  decididoPorUsuario   UsuarioEmpresa? @relation(fields: [decididoPorUsuarioId], references: [id])
+  decididoEm            DateTime?
+  /// Texto do RH explicando a decisão , obrigatório na rejeição (pra não
+  /// deixar o motorista sem entender o motivo), opcional na aprovação.
+  motivoDecisao         String?
+
+  /// Preenchido só quando aprovada: o TratamentoPonto oficial gerado a
+  /// partir deste pedido (ancorado no ledger, é o que entra na apuração).
+  tratamentoPontoId String?           @unique
+  tratamentoPonto   TratamentoPonto? @relation(fields: [tratamentoPontoId], references: [id])
+
+  evidencias SolicitacaoAjustePontoEvidencia[]
+
+  createdAt DateTime @default(now())
+
+  @@index([motoristaId, status])
+  @@map("solicitacoes_ajuste_ponto")
+}
+
+enum StatusSolicitacaoAjuste {
+  PENDENTE
+  APROVADA
+  REJEITADA
+}
+
+/// Prova anexada pelo motorista ao pedir o ajuste (print de rastreador,
+/// print de conversa etc.) , mesmo padrão de fallback R2/Postgres de
+/// TratamentoPontoEvidencia, mas presa à solicitação (existe desde o
+/// pedido, antes de qualquer decisão do RH).
+model SolicitacaoAjustePontoEvidencia {
+  id String @id @default(uuid())
+
+  solicitacaoId String
+  solicitacao   SolicitacaoAjustePonto @relation(fields: [solicitacaoId], references: [id])
+
+  nomeArquivo   String
+  contentType   String
+  tamanhoBytes  Int
+
+  chaveStorage String?
+  conteudo     Bytes?
+
+  createdAt DateTime @default(now())
+
+  @@index([solicitacaoId])
+  @@map("solicitacoes_ajuste_ponto_evidencias")
+}
+
+model AuditLog {
+  id         String    @id @default(uuid())
+  actorType  ActorType
+  actorId    String?
+  acao       String
+  entidade   String
+  entidadeId String?
+  detalhes   Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+  /// Rodada 66 , painel visual de auditoria (item pedido pelo usuário).
+  /// A migration `row_level_security` deixou esta tabela DE FORA de
+  /// propósito porque não havia um grupoId estável (actorId podia ser
+  /// motorista, usuário ou o próprio SISTEMA). Agora `AuditService.registrar`
+  /// preenche este campo automaticamente a partir do TenantContext ativo
+  /// no momento da chamada (quando existe um) , nunca fica nulo numa
+  /// requisição autenticada normal do painel/app; fica nulo só nos poucos
+  /// pontos que legitimamente cruzam grupos (SISTEMA/varredura periódica,
+  /// job agendado, login antes de saber o grupo, super admin). Não é
+  /// protegido por RLS (nunca precisa ser , o filtro por grupo aqui é só
+  /// pra exibição no painel ADMIN/GESTOR; SUPER_ADMIN sempre vê tudo,
+  /// grupoId nulo incluso).
+  grupoId    String?
+  grupo      Grupo?    @relation(fields: [grupoId], references: [id], onDelete: SetNull)
+
+  @@index([entidade, entidadeId])
+  @@index([createdAt])
+  @@index([grupoId, createdAt])
+  @@map("audit_log")
+}
+
+// ==========================================
+// MOTOR DE LIMITES LEGAIS DE JORNADA (Lei 13.103/2015 - "Lei do Motorista")
+//  - Direção contínua: máx. 5h30 sem pausa de pelo menos 30min
+//  - Jornada de direção: 8h regular + até 2h extra (10h total/dia)
+//  - Espera em carga/descarga: alerta em 3h e 4h45; a partir de 5h passa
+//    a contar como tempo à disposição (base para "diária de espera" /
+//    dossiê de cobrança do frete)
+// Os alertas aqui são gerados automaticamente pelo JornadaLegalService a
+// cada novo RegistroJornada, dentro da mesma transação. Diferente do
+// ledger (registros_jornada/tratamentos_ponto), esta tabela NÃO é WORM:
+// é notificação operacional, então o gestor pode marcar como visto sem
+// que isso reescreva história nenhuma da cadeia de hashes.
+// ==========================================
+
+enum TipoAlertaJornada {
+  DIRECAO_CONTINUA_PROXIMA_LIMITE
+  DIRECAO_CONTINUA_EXCEDIDA
+  JORNADA_DIRECAO_PROXIMA_LIMITE
+  JORNADA_DIRECAO_EXCEDIDA
+  ESPERA_PROXIMA_LIMITE
+  ESPERA_LIMITE_LEGAL_ATINGIDO
+  /// "Regra das 2 Conferências Consecutivas": duas conferências de GPS
+  /// consecutivas (início/fim de dois trechos "Em Direção" seguidos)
+  /// mostram deslocamento mínimo, apesar do tempo decorrido , sinal de
+  /// que o veículo pode não ter se movido de fato enquanto marcado como
+  /// "em direção" (motor parado, GPS/hodômetro batido por engano, ou
+  /// tentativa de fraude). Ver JornadaLegalService.avaliarOciosidadeDirecao.
+  OCIOSIDADE_DIRECAO_SUSPEITA
+
+  /// Distância entre duas coordenadas de GPS consecutivas do mesmo
+  /// motorista, dividida pelo tempo decorrido, implica uma velocidade
+  /// fisicamente improvável para um caminhão (ver
+  /// AntifraudeService.VELOCIDADE_MAXIMA_KMH) , sinal de GPS
+  /// falsificado (mock location que passou pela checagem do app) ou
+  /// registro batido de um local diferente de onde o motorista de fato
+  /// está.
+  VELOCIDADE_IMPOSSIVEL_ENTRE_REGISTROS
+
+  /// O horário do evento informado pelo aparelho (timestampEvento,
+  /// capturado no momento do toque, inclusive offline) está no futuro
+  /// em relação ao horário em que o servidor recebeu o registro , só é
+  /// possível se o relógio do aparelho foi adiantado de propósito, já
+  /// que o evento não pode ter acontecido antes de o motorista tocar no
+  /// botão. Ver AntifraudeService.avaliarRelogioDispositivo.
+  RELOGIO_DISPOSITIVO_SUSPEITO
+
+  /// Uma jornada inteira (INICIO_JORNADA até FIM_JORNADA) ou um trecho
+  /// de direção (INICIO_DIRECAO até FIM_DIRECAO) durou tempo real
+  /// implausivelmente curto , sinal de que os eventos foram todos
+  /// batidos em sequência rápida agora, simulando um dia inteiro de
+  /// trabalho que não aconteceu. Ver AntifraudeService.avaliarRitmoBatidasSuspeito.
+  SEQUENCIA_JORNADA_MUITO_RAPIDA
+
+  /// O odômetro informado é MENOR que o último odômetro registrado
+  /// para este motorista , fisicamente impossível pra um veículo em
+  /// uso normal (sem troca de veículo/reset documentado). Ver
+  /// AntifraudeService.avaliarOdometroRegressivo.
+  ODOMETRO_REGRESSIVO
+
+  /// O próprio app detectou sinais de aparelho comprometido no momento
+  /// do registro (root/jailbreak, hooking/instrumentação, ou outra
+  /// flag de integridade que não chega a bloquear o toque, diferente do
+  /// mock location , esse já é barrado antes de chegar aqui). Promovido
+  /// de simples linha de auditoria para alerta visível ao gestor. Ver
+  /// AntifraudeService.alertaIntegridadeDispositivo e
+  /// mobile/src/security/deviceIntegrity.ts.
+  INTEGRIDADE_DISPOSITIVO_SUSPEITA
+
+  /// Já existe um `RegistroJornada` batido nesse dia calendário e o
+  /// RH/gestor concedeu (ou já existia) uma `FolgaConcedida` cobrindo o
+  /// mesmo dia , o registro batido NUNCA é apagado/alterado (impossível
+  /// pelo trigger WORM e pela ausência de rota de update/delete), então
+  /// este alerta só avisa pra alguém conferir o conflito manualmente.
+  /// Ver FolgaConcedidaService.conceder e
+  /// RegistrosJornadaService.avaliarFolgaConflitante.
+  PONTO_REGISTRADO_EM_DIA_DE_FOLGA
+
+  /// GPS do aparelho no momento do "Fim de descarregamento" está a mais
+  /// de 500m do endereço do destinatário do CT-e (geocodificado
+  /// automaticamente a partir do XML) , cerca virtual (geofence) da
+  /// entrega. NUNCA bloqueia o registro (fail-open, como todo o resto
+  /// do motor de conformidade): só avisa o gestor pra conferir. A
+  /// posição usada hoje é sempre o GPS do próprio aparelho; o campo
+  /// `detalhes.fontePosicao` já marca isso, deixando espaço pra no
+  /// futuro comparar (ou combinar) com a posição triangulada por um
+  /// rastreador veicular (ver VeiculoVinculado.idRastreador /
+  /// tecnologiaRastreador) sem precisar de outro redesenho de schema.
+  /// Ver RegistrosJornadaService.avaliarCercaVirtualEntrega.
+  ENTREGA_FORA_DA_CERCA_VIRTUAL
+
+  /// Rodada 68 , pedido do usuário: "esse tempo em que o motorista
+  /// iniciou a jornada mas não definiu que está dirigindo, aguardando
+  /// algo... precisa ficar separado dos outros tempos". Jornada aberta
+  /// (desde INICIO_JORNADA) mas sem nenhuma etapa em aberto (não é
+  /// direção, não é descanso, não é espera em carga/descarga, nem
+  /// "aguardando documentação") há tempo demais , o motorista bateu
+  /// "Início de jornada" (ou fechou uma etapa) e não escolheu a
+  /// próxima ação. Duas severidades, mesmo padrão de escalonamento já
+  /// usado para direção contínua/jornada de direção (ATENCAO então
+  /// CRITICO, nunca os dois pro mesmo período). Ver
+  /// JornadaLegalService.avaliarTempoIndefinido.
+  TEMPO_INDEFINIDO_PROXIMO_LIMITE
+  TEMPO_INDEFINIDO_PROLONGADO
+
+  /// Rodada 71 , pedido do usuário: a lei não impede o motorista de
+  /// iniciar outra jornada sem cumprir o descanso interjornada mínimo
+  /// (11h/660min entre o "Fim de jornada" anterior e este novo "Início
+  /// de jornada"), mas o gestor precisa ser avisado (mesmo canal
+  /// crítico de push+WhatsApp já usado pelos outros alertas CRÍTICO) e
+  /// o motorista precisa ver uma explicação e confirmar que quer
+  /// mesmo seguir assim, no próprio app. Só uma verificação pontual no
+  /// momento do "Início de jornada" (não escalona por severidade como
+  /// direção/espera/tempo indefinido) , ver
+  /// JornadaLegalService.avaliarDescansoInterjornada. Mesmo conceito
+  /// já calculado (mas só informativamente, sem alerta) no relatório
+  /// REP-P , ver RepPService.calcularDescansoInterjornada.
+  DESCANSO_INTERJORNADA_INSUFICIENTE
+
+  /// Rodada 72 , pedido do usuário: "início de direção sem CT-e
+  /// vinculado ou emitido a pouco tempo... o sistema entende que o
+  /// motorista está rodando vazio... busca por CT-e em aberto... se
+  /// houver, envia notificação ao gestor e uma msg pelo WhatsApp".
+  /// Nunca bloqueia o registro , é fail-open como todo o resto do
+  /// motor. Ver RegistrosJornadaService.avaliarCteAbertoSemVinculoRecente.
+  CTE_EM_ABERTO_SEM_VINCULO_RECENTE
+
+  /// Rodada 87 , pedido do usuário: mesmo depois de bloquear relógio
+  /// adiantado e relógio andando pra trás (ver
+  /// RegistrosJornadaService.create), ainda sobra uma lacuna real: o
+  /// motorista pode atrasar o relógio do aparelho, bater um evento com
+  /// um horário passado plausível (não anterior ao ÚLTIMO evento dele,
+  /// então não cai no bloqueio de retrocesso) e sincronizar depois ,
+  /// isso é EXATAMENTE o mesmo formato de um envio offline legítimo
+  /// (motorista sem sinal por horas, evento real sincronizado depois),
+  /// então não dá pra bloquear sem quebrar o caso de uso principal do
+  /// app ("funciona sem internet"). Em vez de bloquear, sinaliza pro
+  /// gestor investigar quando o atraso entre o horário do evento e o
+  /// horário em que o SERVIDOR recebeu é grande demais pra ser só
+  /// "ficou sem sinal" , ver AntifraudeService.avaliarSincronizacaoTardiaSuspeita.
+  SINCRONIZACAO_TARDIA_SUSPEITA
+
+  /// Rodada 92 , fecha (de forma retroativa, nunca em tempo real) a
+  /// lacuna documentada na Rodada 91: um registro foi aceito logo após
+  /// o aparelho reiniciar, SEM nenhuma "amostra de hora confiável"
+  /// (ver model AmostraHoraConfiavel) daquele boot pra comparar contra
+  /// , ou seja, na hora, não tinha como provar nem desmentir que o
+  /// relógio de parede tinha sido mexido. Quando o aparelho finalmente
+  /// sincroniza com o servidor (e manda uma amostra de hora confiável
+  /// daquele MESMO boot), o sistema reavalia esse registro pendente: se
+  /// o tempo de parede decorrido entre a amostra e o registro não bate
+  /// com o tempo monotônico decorrido entre os dois, é prova de que o
+  /// relógio foi manipulado , mas o registro em si NUNCA é alterado ou
+  /// apagado (impossível pelo trigger WORM), só fica marcado aqui pra
+  /// investigação do gestor. Ver RelogioConfiavelService.resolverPendencias.
+  RELOGIO_DIVERGENTE_DETECTADO_RETROATIVAMENTE
+}
+
+enum SeveridadeAlerta {
+  INFO
+  ATENCAO
+  CRITICO
+}
+
+model AlertaJornada {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  tipo       TipoAlertaJornada
+  severidade SeveridadeAlerta
+  mensagem   String
+
+  /// Janela de tempo (jornada/turno em avaliação) a que o alerta se refere.
+  janelaInicio DateTime
+  janelaFim    DateTime
+
+  minutosAcumulados Int
+
+  /// Registro cuja criação disparou esta avaliação.
+  registroGeradorId String
+  registroGerador   RegistroJornada @relation(fields: [registroGeradorId], references: [id])
+
+  /// Dados de apoio (ex.: para ESPERA_LIMITE_LEGAL_ATINGIDO, o resumo que
+  /// alimenta o Dossiê de Cobrança: registros envolvidos, minutos totais).
+  detalhes Json?
+
+  visualizadoEm           DateTime?
+  visualizadoPorUsuarioId String?
+
+  /// Rodada 126, pedido do usuário: o motorista também pode dar ciência
+  /// de que viu o alerta no próprio app , distinto de `visualizadoEm`
+  /// (que é do gestor no painel). Sem usuarioId porque a identidade já
+  /// é garantida pelo device binding (sempre o próprio motorista). O
+  /// alerta em si NUNCA some da lista nem é alterado por isto , pedido
+  /// explícito: "ela sempre deve permanecer" , é só um carimbo de
+  /// leitura, igual ao `motoristaCienciaEm` do TratamentoPonto.
+  motoristaVisualizadoEm DateTime?
+
+  /// Tratamento (Rodada 25): distinto de "visualizado" , exige uma
+  /// observação de quem apurou (mesmo padrão de motivo obrigatório do
+  /// TratamentoPonto), registrando o que foi de fato encontrado/decidido
+  /// sobre este alerta específico. Nunca apaga/altera o alerta em si nem
+  /// nenhum RegistroJornada (WORM continua intocado) , é só metadado de
+  /// apuração, anexado permanentemente ao alerta.
+  tratadoEm             DateTime?
+  tratadoPorUsuarioId   String?
+  tratamentoObservacao  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([motoristaId, tipo, createdAt])
+  @@map("alertas_jornada")
+}
+
+// ==========================================
+// TROCA DE APARELHO (fluxo solicitação → aprovação do gestor)
+//  - O motorista (ou quem estiver com ele) PEDE a troca informando o
+//    deviceUuid do aparelho novo , isso não vincula nada, só entra numa
+//    fila. Faz sentido ser de baixo privilégio (endpoint público,
+//    rate-limited na borda) porque é exatamente o caso em que o
+//    motorista NÃO tem mais credencial de dispositivo válida (celular
+//    perdido/roubado/quebrado) pra se autenticar de outro jeito.
+//  - Só um usuário da empresa (ADMIN/GESTOR) aprova ou rejeita. Aprovar
+//    substitui o DispositivoVinculado atual na hora (aparelho antigo
+//    perde acesso imediatamente, mesmo com a device key antiga em mãos).
+//  - Nunca existe auto-aprovação: a solicitação em si não dá acesso a
+//    nada, só o clique do gestor.
+// ==========================================
+
+enum StatusSolicitacaoDispositivo {
+  PENDENTE
+  APROVADA
+  REJEITADA
+}
+
+model SolicitacaoTrocaDispositivo {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  deviceUuidSolicitado String
+  modeloAparelho       String?
+  sistemaOperacional   String?
+
+  /// Contexto pro gestor decidir com informação , não é autenticação,
+  /// é só apoio à decisão. A autoridade real é o clique do gestor.
+  observacaoMotorista String?
+
+  status StatusSolicitacaoDispositivo @default(PENDENTE)
+
+  revisadoPorUsuarioId String?
+  revisadoPorUsuario   UsuarioEmpresa? @relation(fields: [revisadoPorUsuarioId], references: [id])
+  revisadoEm           DateTime?
+  motivoRejeicao       String?
+
+  criadoEm DateTime @default(now())
+
+  @@index([motoristaId, status])
+  @@map("solicitacoes_troca_dispositivo")
+}
+
+// ==========================================
+// AUTORRELATO DE FOLGA + "DIA SEM INTERAÇÃO"
+//  - O próprio motorista avisa, pelo app, que um dia foi de folga (não
+//    é ponto , não entra no ledger/hash chain, é só um aviso pro
+//    gestor não estranhar a ausência de registros naquele dia).
+//  - "Dia sem interação" (calculado, não persistido: ver
+//    MotoristasService.diasSemInteracao) é o alerta oposto: um dia sem
+//    NENHUM RegistroJornada e SEM autorrelato de folga , motorista
+//    pode estar em campo sem conseguir bater ponto (sem sinal de rede
+//    E sem sincronizar por muitos dias) ou algo mais grave.
+// ==========================================
+
+model AutorrelatoFolga {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  /// Dia calendário (sem horário) a que a folga se refere.
+  data DateTime @db.Date
+
+  observacao String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([motoristaId, data])
+  @@map("autorrelatos_folga")
+}
+
+/// Folga concedida pelo RH/gestor a um motorista , diferente de
+/// AutorrelatoFolga (o motorista se autorreporta, sem aprovação de
+/// ninguém). Esta é lançada pela empresa (ADMIN/GESTOR) e pode cobrir:
+///   - um dia FUTURO: o motorista simplesmente não precisa bater ponto
+///     naquele dia (some do radar de "dias sem interação");
+///   - um dia PASSADO que já tem RegistroJornada lançado: o(s)
+///     registro(s) existente(s) NUNCA são apagados/alterados (impossível
+///     pelo trigger WORM e pela ausência de rota de update/delete) , a
+///     folga entra como um status novo e paralelo, e o serviço levanta
+///     um AlertaJornada (PONTO_REGISTRADO_EM_DIA_DE_FOLGA) pra alguém
+///     conferir o conflito manualmente.
+// ==========================================
+// BANCO DE HORAS (Rodada 37)
+//  - Só existe ledger (AjusteBancoHoras) pros DÉBITOS (compensação em
+//    folga, pagamento fora da plataforma, correção manual) e CRÉDITOS
+//    manuais de correção , o crédito "normal" (hora extra apurada no
+//    período) nunca é duplicado numa tabela própria, é sempre derivado
+//    em tempo real do mesmo HoleriteService/IndicadoresService que já
+//    calcula hora extra pro resto do sistema, pra nunca divergir do
+//    holerite individual de cada motorista.
+//  - Cálculo de saldo (ver BancoHorasService): soma da hora extra
+//    apurada no período consultado (crédito) menos a soma dos ajustes
+//    de débito (COMPENSACAO/PAGAMENTO/CORRECAO_DEBITO) mais os ajustes
+//    de CORRECAO_CREDITO registrados no mesmo período. É um saldo POR
+//    PERÍODO CONSULTADO, não um saldo perpétuo desde a admissão , o
+//    gestor escolhe o período no painel de Indicadores, igual já fazia
+//    pra todo o resto (limitação documentada de propósito, mesmo
+//    espírito de simplicidade do restante do projeto).
+// ==========================================
+
+enum TipoAjusteBancoHoras {
+  /// Débito: motorista tirou horas de folga compensatória (abateu do banco).
+  COMPENSACAO
+  /// Débito: o banco foi pago em dinheiro fora da plataforma (decisão
+  /// do RH) , só o registro de QUE foi pago (e quanto) fica aqui, o
+  /// valor em R$ não entra no sistema (mesma restrição de todo o
+  /// módulo de Indicadores).
+  PAGAMENTO
+  /// Crédito manual (ex.: correção de um saldo que ficou errado antes
+  /// deste sistema existir, ou um acordo pontual).
+  CORRECAO_CREDITO
+  /// Débito manual (mesma ideia, no sentido contrário).
+  CORRECAO_DEBITO
+}
+
+/// Ledger de ajustes do banco de horas , só os DÉBITOS/créditos
+/// manuais (ver comentário acima). Um ajuste nunca é editado ou
+/// apagado depois de criado (mesmo princípio WORM do resto do
+/// sistema) , uma correção de um ajuste errado é um novo ajuste
+/// (CORRECAO_CREDITO/CORRECAO_DEBITO) por cima, nunca um UPDATE.
+model AjusteBancoHoras {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  tipo    TipoAjusteBancoHoras
+  minutos Int // sempre positivo , o `tipo` é que diz se é crédito ou débito
+
+  /// Dia calendário de referência do ajuste (data da folga tirada, da
+  /// competência do pagamento, etc.) , não precisa ser hoje.
+  data DateTime @db.Date
+
+  observacao String?
+
+  registradoPorUsuarioId String
+  registradoPorUsuario   UsuarioEmpresa @relation(fields: [registradoPorUsuarioId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([motoristaId])
+  @@map("ajustes_banco_horas")
+}
+
+/// Pedido do usuário: "se quebrou uma vez achando um problema ele fica
+/// ali pra sempre, não tem como ignorar ele pra regularizar" , registro
+/// de que o RH/gestor já viu uma divergência apontada por
+/// `verificarIntegridade` (ex.: falso positivo conhecido, evento antigo
+/// com GPS) e decidiu aceitar/regularizar aquele evento específico, com
+/// motivo e autoria carimbados (nunca apaga nem recalcula o hash , só
+/// documenta que aquela divergência já foi revisada e não precisa
+/// continuar aparecendo como problema aberto). Um aceite vale só para o
+/// `sequencial` exato aceito; se a cadeia quebrar em outro evento depois,
+/// aquele novo evento continua aparecendo como problema até ser aceito
+/// também.
+model IntegridadeAceite {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  /// `RegistroJornada.sequencial` do evento aceito (não é FK , o
+  /// RegistroJornada pode, em tese, não existir mais isoladamente, mas na
+  /// prática sempre existe; evita acoplar ao `id` do registro, que não é
+  /// exposto nas telas, só o número sequencial).
+  sequencial Int
+
+  motivo String
+
+  aceitoPorUsuarioId String
+  aceitoPorUsuario   UsuarioEmpresa @relation(fields: [aceitoPorUsuarioId], references: [id])
+  aceitoEm           DateTime       @default(now())
+
+  @@unique([motoristaId, sequencial])
+  @@index([motoristaId])
+  @@map("integridade_aceites")
+}
+
+model FolgaConcedida {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  /// Dia calendário (sem horário) coberto pela folga.
+  data DateTime @db.Date
+
+  motivo String?
+
+  concedidaPorUsuarioId String
+  concedidaPorUsuario   UsuarioEmpresa @relation(fields: [concedidaPorUsuarioId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([motoristaId, data])
+  @@map("folgas_concedidas")
+}
+
+// ==========================================
+// DOCUMENTOS DE CARGA (CT-e/MDF-e) , UPLOAD MANUAL
+//  - Decisão do usuário: a empresa ainda não tem certificado A1 próprio
+//    nem integração com a SEFAZ, então a primeira via de ingestão é
+//    upload manual do XML pelo painel (gestor sobe o arquivo e informa
+//    tipo/número/motorista/status). Fica pronta a base (modelo de dados
+//    + tela) pra depois plugar e-mail dedicado ou SEFAZ Direct sem
+//    precisar redesenhar nada.
+//  - Extração automática de número/chave de acesso do XML é best-effort
+//    (regex simples nos padrões mais comuns do layout CT-e/MDF-e) , NÃO
+//    é um validador de schema oficial. Se não conseguir extrair, o
+//    gestor preenche manualmente; o upload nunca é bloqueado por isso.
+// ==========================================
+
+enum TipoDocumentoCarga {
+  CTE
+  MDFE
+}
+
+enum StatusCargaViagem {
+  CARREGADO
+  VAZIO
+}
+
+model DocumentoCarga {
+  id String @id @default(uuid())
+
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+
+  /// Motorista/viagem a que este documento se refere. Opcional porque o
+  /// gestor pode subir o XML antes de saber qual motorista vai fazer o
+  /// frete (ex.: carga ainda não despachada).
+  motoristaId String?
+  motorista   Motorista? @relation(fields: [motoristaId], references: [id])
+
+  tipo TipoDocumentoCarga
+
+  /// Número do CT-e/MDF-e , extraído do XML quando possível, senão
+  /// informado manualmente pelo gestor no upload.
+  numero String?
+
+  /// Chave de acesso (44 dígitos) , mesma lógica de extração/fallback manual.
+  chaveAcesso String?
+
+  statusCarga StatusCargaViagem @default(CARREGADO)
+
+  /// Quando o vínculo com o motorista foi "desfeito" (entrega
+  /// concluída) , preenchido automaticamente quando o motorista bate
+  /// "Fim de descarregamento" e este é o CT-e mais antigo ainda
+  /// CARREGADO vinculado a ele (FIFO: cada CT-e é uma entrega). O
+  /// motoristaId é MANTIDO (histórico de quem entregou), só o
+  /// statusCarga vira VAZIO , "vínculo ativo" = motoristaId setado E
+  /// statusCarga CARREGADO.
+  entregueEm DateTime?
+
+  /// Endereço do destinatário (CT-e), best-effort a partir do XML
+  /// (tag <enderDest> , logradouro, número, bairro, município, UF,
+  /// CEP concatenados). Nunca bloqueia o upload se não conseguir
+  /// extrair; fica null e a cerca virtual simplesmente não é avaliada
+  /// pra este documento.
+  enderecoDestinatario String?
+
+  /// Coordenadas do destinatário, resolvidas automaticamente a partir
+  /// de `enderecoDestinatario` por um serviço de geocodificação
+  /// externo (ver GeocodingService) , nunca informadas manualmente
+  /// pelo gestor. Null se a extração do endereço falhou, se a
+  /// geocodificação não achou resultado, ou se o serviço estava
+  /// indisponível (fail-open: o upload nunca é bloqueado por causa
+  /// disso).
+  destinatarioLatitude  Decimal? @db.Decimal(10, 7)
+  destinatarioLongitude Decimal? @db.Decimal(10, 7)
+
+  /// Quando a geocodificação foi tentada (com ou sem sucesso) , usado
+  /// só pra diagnóstico/auditoria, não afeta nenhuma regra.
+  geocodificadoEm DateTime?
+
+  /// XML original, guardado como veio (nunca reescrito) , é o
+  /// documento fiscal em si, a fonte da verdade se algum dado extraído
+  /// estiver errado.
+  ///
+  /// Opcional porque, quando o armazenamento em object storage (Cloudflare
+  /// R2) está configurado, o XML vai pra lá e este campo fica nulo , ver
+  /// `xmlStorageKey`. Sem R2 configurado (dev, ou enquanto o upload pro R2
+  /// não foi confirmado), o XML fica aqui no Postgres como sempre foi.
+  xmlOriginal Bytes?
+
+  /// Chave do objeto no bucket R2 (ex.: "documentos-carga/<empresaId>/<id>.xml").
+  /// Preenchida só depois que o upload pro R2 foi confirmado com sucesso ,
+  /// nunca ao mesmo tempo que xmlOriginal aponta pro dado "vivo" (um dos
+  /// dois é a fonte da verdade, nunca os dois por engano).
+  xmlStorageKey String?
+
+  observacao String?
+
+  uploadedPorUsuarioId String
+  uploadedPorUsuario   UsuarioEmpresa @relation(fields: [uploadedPorUsuarioId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([empresaId, createdAt])
+  @@index([motoristaId])
+  @@map("documentos_carga")
+}
+
+/// Contador global e permanente de NSR (Número Sequencial de Registro)
+/// do AFD (Portaria 671/2021). O NSR não pode "reiniciar" nem mudar
+/// entre gerações do arquivo pro mesmo evento , é exatamente o
+/// mecanismo que permite a fiscalização detectar remoção/reordenação
+/// de registros. Por isso a atribuição é idempotente por chaveOrigem:
+/// a primeira vez que um evento (um RegistroJornada, uma inclusão de
+/// Motorista etc.) é exportado ele recebe um nsr novo (autoincrement,
+/// portanto global e monotônico); toda exportação seguinte do mesmo
+/// evento reencontra o mesmo nsr já atribuído.
+model AfdNsr {
+  nsr          Int      @id @default(autoincrement())
+  chaveOrigem  String   @unique
+  tipoRegistro Int
+  criadoEm     DateTime @default(now())
+
+  @@map("afd_nsr")
+}
+
+// ==========================================
+// AJUDANTE (Rodada 66)
+//
+// Pedido do usuário: "vamos criar um recurso para ajudante, mas essa
+// vai ser mais simples, o ajudante baixa o app mas para ele vai ter os
+// mesmos recursos que o motorista normal entretanto vai ter apenas
+// início de jornada, descanso, fim de descanso e fim de jornada."
+//
+// Decisão de modelagem (perguntada e confirmada com o usuário): cadastro
+// SEPARADO do Motorista, sem CNH e sem vínculo de veículo (o ajudante não
+// dirige) , nunca um campo "tipo" dentro de Motorista. Mantém a mesma
+// integridade legal do motorista (cadeia de hash + assinatura digital
+// não-repúdio + WORM + device binding + soft-delete "Excluir cadastro" ,
+// Rodada 65), reaproveitando os mesmos serviços genéricos do backend
+// (HashChainService, SignatureService, CertificateService,
+// EnvelopeEncryptionService , nenhum deles é específico de Motorista).
+//
+// Fora de escopo nesta rodada, DE PROPÓSITO (o usuário pediu "mais
+// simples"): o motor de limites legais de jornada de DIREÇÃO
+// (JornadaLegalService/AlertaJornada), o motor de antifraude de
+// deslocamento (AntifraudeService) e TratamentoPonto/SolicitacaoAjustePonto
+// , todos pensados para quem dirige, não para o conjunto restrito de 4
+// eventos do ajudante. Um alerta/tratamento equivalente para ajudante,
+// se algum dia for pedido, é aditivo (não exige mexer no que já existe
+// aqui).
+// ==========================================
+
+model Ajudante {
+  id String @id @default(uuid())
+
+  nome String
+  cpf  String @unique
+
+  status StatusMotorista @default(ATIVO)
+
+  /// Formato E.164, opcional , mesmo padrão do telefone do Motorista.
+  telefone String?
+
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+
+  /// Âncora da cadeia de hash deste ajudante , ver HashChainService.
+  /// Mesmo mecanismo do Motorista, cadeia inteiramente independente
+  /// (nunca se mistura com a cadeia de nenhum motorista).
+  hashGenesis String @unique
+
+  /// Certificado (PFX) para assinatura digital dos eventos deste
+  /// ajudante , mesmo mecanismo do Motorista (envelope encryption, ver
+  /// EnvelopeEncryptionService/CertificateService). Nullable até o
+  /// primeiro vínculo de dispositivo, quando o certificado é emitido.
+  certificadoPfxEnc      Bytes?
+  certificadoIv          String?
+  certificadoAuthTag     String?
+  certificadoFingerprint String?
+  certificadoValidoAte   DateTime?
+
+  /// "Excluir cadastro" (mesmo padrão da Rodada 65 para Motorista) ,
+  /// soft-delete: a linha nunca é removida (os registros de jornada do
+  /// ajudante continuam intactos e pesquisáveis), só some da listagem
+  /// padrão do painel.
+  excluidoEm           DateTime?
+  excluidoPorUsuarioId String?
+  motivoExclusao       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  dispositivoVinculado DispositivoVinculadoAjudante?
+  registros            RegistroJornadaAjudante[]
+
+  @@index([empresaId])
+  @@map("ajudantes")
+}
+
+model DispositivoVinculadoAjudante {
+  id String @id @default(uuid())
+
+  ajudanteId String   @unique
+  ajudante   Ajudante @relation(fields: [ajudanteId], references: [id])
+
+  deviceUuid       String @unique
+  deviceApiKeyHash String
+
+  /// Expo push token , mesmo uso do campo equivalente em
+  /// DispositivoVinculado (Motorista), hoje sem motor de alertas
+  /// próprio para ajudante (ver comentário no topo da seção).
+  pushToken String?
+
+  vinculadoPorUsuarioId String
+  vinculadoPorUsuario   UsuarioEmpresa @relation(fields: [vinculadoPorUsuarioId], references: [id])
+
+  vinculadoEm  DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("dispositivos_vinculados_ajudante")
+}
+
+model RegistroJornadaAjudante {
+  id String @id @default(uuid())
+
+  ajudanteId String
+  ajudante   Ajudante @relation(fields: [ajudanteId], references: [id])
+
+  /// Mesmo enum TipoEvento do Motorista (reaproveitado, não duplicado)
+  /// , a APLICAÇÃO restringe a criação a só estes 4 valores para
+  /// ajudante (ver CreateRegistroJornadaAjudanteDto): INICIO_JORNADA,
+  /// INICIO_DESCANSO, FIM_DESCANSO, FIM_JORNADA.
+  tipoEvento      TipoEvento
+  timestampEvento DateTime
+  latitude        Decimal? @db.Decimal(10, 7)
+  longitude       Decimal? @db.Decimal(10, 7)
+  precisaoGpsM    Float?
+  observacao      String?
+
+  sequencial   Int
+  hashAnterior String
+  hashAtual    String @unique
+
+  assinaturaDigital   String?
+  algoritmoAssinatura String @default("RSA-SHA256")
+
+  deviceUuidUsado String
+
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+
+  @@unique([ajudanteId, sequencial])
+  @@index([ajudanteId, timestampEvento])
+  @@map("registros_jornada_ajudante")
+}

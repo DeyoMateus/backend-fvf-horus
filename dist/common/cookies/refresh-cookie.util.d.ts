@@ -1,0 +1,10 @@
+import type { Request, Response } from 'express';
+declare const HEADER_ANTI_CSRF = "x-fvf-horus-client";
+export declare function definirCookieRefresh(res: Response, refreshTokenPlano: string, maxAgeMs: number): void;
+export declare function limparCookieRefresh(res: Response): void;
+export declare function lerCookieRefresh(req: Request): string | undefined;
+export declare function definirCookieRefreshSuperAdmin(res: Response, refreshTokenPlano: string, maxAgeMs: number): void;
+export declare function limparCookieRefreshSuperAdmin(res: Response): void;
+export declare function lerCookieRefreshSuperAdmin(req: Request): string | undefined;
+export declare function exigirRequisicaoDoFrontend(req: Request): boolean;
+export { HEADER_ANTI_CSRF };
