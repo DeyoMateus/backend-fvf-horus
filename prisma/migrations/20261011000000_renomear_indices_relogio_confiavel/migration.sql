@@ -1,8 +1,6 @@
--- RenameIndex
--- IF EXISTS: em um banco novo (ex.: produção) estes índices ainda não existem
--- nesta altura da ordem das migrations (são criados só em 20261008000000).
--- Os renames de fato para banco novo ficam em 20261011000000.
+-- Renomeia os índices criados em 20261008000000 para os nomes que o Prisma
+-- espera. IF EXISTS deixa a migration segura tanto em banco novo (índices com
+-- nome antigo) quanto em banco de desenvolvimento (já renomeados).
 ALTER INDEX IF EXISTS "amostras_hora_confiavel_motoristaId_deviceUuidUsado_elapse_idx" RENAME TO "amostras_hora_confiavel_motoristaId_deviceUuidUsado_elapsed_idx";
 
--- RenameIndex
 ALTER INDEX IF EXISTS "verificacoes_relogio_pendentes_motoristaId_deviceUuidUsad_idx" RENAME TO "verificacoes_relogio_pendentes_motoristaId_deviceUuidUsado__idx";
