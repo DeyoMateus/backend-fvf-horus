@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantContext } from '../tenant/tenant-context';
 
 /**
  * Limpeza periódica das tabelas de token (Rodada 80, pedido do
@@ -62,20 +63,24 @@ export class LimpezaTokensService implements OnModuleInit, OnModuleDestroy {
       const limite = new Date(Date.now() - diasRetencao * 24 * 60 * 60 * 1000);
 
       const [refresh, resetSenha, superAdminRefresh, superAdminResetSenha] =
-        await Promise.all([
-          this.prisma.refreshToken.deleteMany({
-            where: { expiresAt: { lt: limite } },
-          }),
-          this.prisma.passwordResetToken.deleteMany({
-            where: { expiresAt: { lt: limite } },
-          }),
-          this.prisma.superAdminRefreshToken.deleteMany({
-            where: { expiresAt: { lt: limite } },
-          }),
-          this.prisma.superAdminPasswordResetToken.deleteMany({
-            where: { expiresAt: { lt: limite } },
-          }),
-        ]);
+        // Job interno (sem requisição HTTP): precisa de contexto de
+        // sistema para passar pelas tabelas com Row-Level Security.
+        await TenantContext.paraSistema(() =>
+          Promise.all([
+            this.prisma.refreshToken.deleteMany({
+              where: { expiresAt: { lt: limite } },
+            }),
+            this.prisma.passwordResetToken.deleteMany({
+              where: { expiresAt: { lt: limite } },
+            }),
+            this.prisma.superAdminRefreshToken.deleteMany({
+              where: { expiresAt: { lt: limite } },
+            }),
+            this.prisma.superAdminPasswordResetToken.deleteMany({
+              where: { expiresAt: { lt: limite } },
+            }),
+          ]),
+        );
 
       const total =
         refresh.count +
