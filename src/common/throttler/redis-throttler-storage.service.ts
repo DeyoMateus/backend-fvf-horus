@@ -105,6 +105,7 @@ export class RedisThrottlerStorageService
     this.redis = new Redis({
       host: process.env.REDIS_HOST ?? 'localhost',
       port: Number(process.env.REDIS_PORT ?? 6379),
+      password: process.env.REDIS_PASSWORD || undefined,
       // Mesma conexão lógica do Redis usada pelas filas BullMQ, mas em
       // cliente próprio (evita competir com o BullMQ por comandos
       // bloqueantes e mantém este módulo desacoplado).

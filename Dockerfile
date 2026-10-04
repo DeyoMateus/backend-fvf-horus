@@ -6,7 +6,9 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY prisma ./prisma
 COPY prisma.config.ts tsconfig.json tsconfig.build.json nest-cli.json ./
-RUN npx prisma generate
+# prisma generate só lê o schema; a URL abaixo é fictícia (não conecta em nada)
+# e existe apenas porque o prisma.config.ts exige a variável definida.
+RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" npx prisma generate
 COPY src ./src
 RUN npm run build
 
