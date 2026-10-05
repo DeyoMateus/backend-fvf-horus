@@ -75,7 +75,7 @@ export class DossieCobrancaService {
     const linhaPorMotorista = await this.linhasDeFuso(alertas);
 
     return alertas
-      .map((alerta) => {
+      .map((alerta): ItemDossieCobranca | null => {
         const dossie = (alerta.detalhes as Record<string, unknown> | null)
           ?.dossieDeCobranca as
           | {
@@ -110,7 +110,7 @@ export class DossieCobrancaService {
           registroGeradorId: dossie.registroGeradorId,
           observacao: dossie.observacao,
           criadoEm: alerta.createdAt,
-        } satisfies ItemDossieCobranca;
+        };
       })
       .filter((item): item is ItemDossieCobranca => item !== null);
   }
