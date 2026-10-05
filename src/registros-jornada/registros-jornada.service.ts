@@ -40,6 +40,13 @@ import {
   JobLoteRegistroJornada,
   ResultadoItemLote,
 } from './lote-registros-jornada.constants';
+import {
+  chaveDiaBrt,
+  fimDePeriodoBrt,
+  inicioDePeriodoBrt,
+  marcarHorario,
+  resolverFusoDoRegistro,
+} from '../common/fuso/fuso-brasil.util';
 
 export type JornadaResumo = ReturnType<
   RegistrosJornadaService['resumirJornadaDiaria']
@@ -458,11 +465,23 @@ export class RegistrosJornadaService {
         const latitude = this.arredondarCoordenada(dto.latitude);
         const longitude = this.arredondarCoordenada(dto.longitude);
 
+        // Rodada 146: fuso em que o ponto foi batido. O do aparelho vale,
+        // exceto se contradiz o GPS por 2h+ (aí o GPS manda e o desvio
+        // vai para a auditoria). App antigo (sem fuso) => null => vale o
+        // fuso da empresa, como sempre foi.
+        const fusoResolvido = resolverFusoDoRegistro(
+          dto.fusoOffsetMin,
+          dto.latitude,
+          dto.longitude,
+        );
+        const fusoOffsetMin = fusoResolvido.offsetMin;
+
         const hashAtual = this.hashChain.calcularHash(
           hashAnterior,
           sequencial,
           {
             motoristaId,
+            fusoOffsetMin,
             tipoEvento: dto.tipoEvento,
             timestampEvento: dto.timestampEvento,
             latitude: latitude ?? null,
@@ -505,6 +524,7 @@ export class RegistrosJornadaService {
             deviceUuidUsado,
             idempotencyKey: dto.idempotencyKey,
             elapsedRealtimeMs: dto.elapsedRealtimeMs ?? null,
+            fusoOffsetMin,
           },
         });
 
@@ -533,10 +553,32 @@ export class RegistrosJornadaService {
           acao: 'REGISTRO_JORNADA_CRIADO',
           entidade: 'RegistroJornada',
           entidadeId: registro.id,
-          detalhes: { sequencial, tipoEvento: dto.tipoEvento },
+          detalhes: { sequencial, tipoEvento: dto.tipoEvento, fusoOffsetMin },
           ip,
           userAgent,
         });
+
+        // Rodada 146: o fuso informado pelo aparelho contradisse o GPS por
+        // 2h ou mais. O GPS valeu (impede ganhar hora noturna só mudando o
+        // fuso do celular); fica registrado pra conferência do gestor.
+        if (fusoResolvido.divergenteDoGps) {
+          await this.audit.registrar({
+            actorType: ActorType.MOTORISTA,
+            actorId: motoristaId,
+            acao: 'FUSO_APARELHO_INCOMPATIVEL_GPS',
+            entidade: 'RegistroJornada',
+            entidadeId: registro.id,
+            detalhes: {
+              fusoInformadoPeloAparelhoMin: fusoResolvido.informadoPeloAparelho,
+              fusoAplicadoMin: fusoOffsetMin,
+              latitude,
+              longitude,
+              deviceUuidUsado,
+            },
+            ip,
+            userAgent,
+          });
+        }
 
         // Sinal de possível fraude (GPS falsificado/aparelho comprometido)
         // detectado pelo próprio app , nunca bloqueia o registro (o
@@ -995,10 +1037,11 @@ export class RegistrosJornadaService {
         // mais recente) , um ajuste sobre uma jornada anterior nunca
         // mais silencia a que está aberta agora.
         if (ajusteFimJornadaMaisRecente) {
-          const inicioJornadaAtual = await this.prisma.registroJornada.findFirst({
-            where: { motoristaId, tipoEvento: TipoEvento.INICIO_JORNADA },
-            orderBy: { sequencial: 'desc' },
-          });
+          const inicioJornadaAtual =
+            await this.prisma.registroJornada.findFirst({
+              where: { motoristaId, tipoEvento: TipoEvento.INICIO_JORNADA },
+              orderBy: { sequencial: 'desc' },
+            });
           const ajusteEncerraJornadaAtual =
             ajusteFimJornadaMaisRecente.createdAt > ultimoRegistro.createdAt &&
             (!inicioJornadaAtual ||
@@ -1195,12 +1238,13 @@ export class RegistrosJornadaService {
     registroRecemCriado: RegistroJornada,
   ): Promise<{ tipo: string; severidade: string; mensagem: string }[]> {
     try {
+      // Rodada 144: o dia da folga é o dia civil de Brasília do ponto
+      // (antes era o dia UTC, errado entre 21h e 24h BRT). `data` da
+      // folga continua sendo meia-noite UTC do dia civil.
+      // Rodada 147: dia civil no fuso do motorista no toque.
+      const offsetDoPonto = registroRecemCriado.fusoOffsetMin ?? -180;
       const dia = new Date(
-        Date.UTC(
-          registroRecemCriado.timestampEvento.getUTCFullYear(),
-          registroRecemCriado.timestampEvento.getUTCMonth(),
-          registroRecemCriado.timestampEvento.getUTCDate(),
-        ),
+        `${chaveDiaBrt(registroRecemCriado.timestampEvento, offsetDoPonto)}T00:00:00.000Z`,
       );
 
       const folgaDoDia = await tx.folgaConcedida.findUnique({
@@ -1217,8 +1261,10 @@ export class RegistrosJornadaService {
           tipo: TipoAlertaJornada.PONTO_REGISTRADO_EM_DIA_DE_FOLGA,
           severidade: SeveridadeAlerta.ATENCAO,
           mensagem,
-          janelaInicio: dia,
-          janelaFim: new Date(dia.getTime() + 24 * 60 * 60 * 1000),
+          janelaInicio: new Date(dia.getTime() - offsetDoPonto * 60_000),
+          janelaFim: new Date(
+            dia.getTime() - offsetDoPonto * 60_000 + 24 * 60 * 60 * 1000,
+          ),
           minutosAcumulados: 0,
           registroGeradorId: registroRecemCriado.id,
           detalhes: {
@@ -1334,7 +1380,7 @@ export class RegistrosJornadaService {
       const mensagem =
         `Motorista iniciou direção sem nenhum CT-e vinculado/emitido nas últimas ` +
         `${Math.round(this.JANELA_CTE_RECENTE_MS / 60000)} minutos, mas ainda existe um CT-e em aberto` +
-        `${cteAberto.numero ? ` (nº ${cteAberto.numero})` : ''}, vinculado desde ${cteAberto.createdAt.toLocaleString('pt-BR')} ` +
+        `${cteAberto.numero ? ` (nº ${cteAberto.numero})` : ''}, vinculado desde ${marcarHorario(cteAberto.createdAt)} ` +
         `e ainda sem "Fim de descarregamento" registrado. Confira se essa entrega já foi feita e só não foi baixada no ` +
         `sistema, ou se o motorista está rodando vazio por outro motivo.`;
 
@@ -1808,6 +1854,36 @@ export class RegistrosJornadaService {
   }
 
   /**
+   * Rodada 141 , o app do motorista (aparelho novo, ou consulta de uma
+   * data específica no Histórico) busca os registros que o servidor já
+   * tem dele. Só os campos que o app guarda localmente; `idLocal` é o
+   * idempotencyKey que o próprio app gerou no toque. Padrão: últimos 30
+   * dias (mesma retenção do histórico local).
+   */
+  async listarParaDispositivo(motoristaId: string, inicio?: Date, fim?: Date) {
+    const desde = inicio ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const registros = await this.prisma.registroJornada.findMany({
+      where: {
+        motoristaId,
+        timestampEvento: { gte: desde, ...(fim ? { lte: fim } : {}) },
+      },
+      orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
+      take: 1000,
+    });
+    return registros.map((r) => ({
+      idLocal: r.idempotencyKey ?? r.id,
+      tipoEvento: r.tipoEvento,
+      timestampEvento: r.timestampEvento.toISOString(),
+      latitude: r.latitude != null ? Number(r.latitude) : null,
+      longitude: r.longitude != null ? Number(r.longitude) : null,
+      precisaoGpsM: r.precisaoGpsM ?? null,
+      observacao: r.observacao ?? null,
+      fusoOffsetMin: r.fusoOffsetMin ?? null,
+      criadoEm: r.createdAt.toISOString(),
+    }));
+  }
+
+  /**
    * Um único registro pelo idempotencyKey que o app gerou no momento do
    * toque (é o mesmo identificador guardado localmente no SQLite do
    * celular, então o app não precisa saber o id interno do backend pra
@@ -1829,15 +1905,26 @@ export class RegistrosJornadaService {
   }
 
   /** Usado pela geração de comprovante (painel e app) , período opcional, senão pega tudo. */
-  listByMotoristaNoPeriodo(motoristaId: string, inicio?: Date, fim?: Date) {
+  listByMotoristaNoPeriodo(
+    motoristaId: string,
+    inicio?: Date,
+    fim?: Date,
+    /** Rodada 146: fuso da empresa (min) que define o dia civil do período "só data". */
+    offsetEmpresaMin?: number,
+  ) {
     return this.prisma.registroJornada.findMany({
       where: {
         motoristaId,
         ...(inicio || fim
           ? {
               timestampEvento: {
-                ...(inicio ? { gte: inicio } : {}),
-                ...(fim ? { lte: fim } : {}),
+                // Rodada 144: "só data" (meia-noite UTC) = dia civil BRT.
+                ...(inicio
+                  ? { gte: inicioDePeriodoBrt(inicio, offsetEmpresaMin) }
+                  : {}),
+                ...(fim
+                  ? { lte: fimDePeriodoBrt(fim, offsetEmpresaMin) }
+                  : {}),
               },
             }
           : {}),
@@ -1862,10 +1949,7 @@ export class RegistrosJornadaService {
    * método só traduz pra uma explicação que faz sentido pra quem não
    * programou o sistema.
    */
-  private explicarDivergencia(
-    motivo: string,
-    temGps: boolean,
-  ): string {
+  private explicarDivergencia(motivo: string, temGps: boolean): string {
     if (motivo.includes('hashAtual')) {
       if (temGps) {
         return (
@@ -1948,13 +2032,12 @@ export class RegistrosJornadaService {
       where: { motoristaId },
       include: { aceitoPorUsuario: { select: { nome: true } } },
     });
-    const aceitePorSequencial = new Map(
-      aceites.map((a) => [a.sequencial, a]),
-    );
+    const aceitePorSequencial = new Map(aceites.map((a) => [a.sequencial, a]));
 
     const divergencias = resultadoCadeia.quebras.map((quebra) => {
       const evento = registros.find((r) => r.sequencial === quebra.sequencial);
-      const temGps = !!evento && evento.latitude !== null && evento.longitude !== null;
+      const temGps =
+        !!evento && evento.latitude !== null && evento.longitude !== null;
       const aceite = aceitePorSequencial.get(quebra.sequencial);
       return {
         sequencial: quebra.sequencial,
@@ -2061,7 +2144,12 @@ export class RegistrosJornadaService {
     let aceite;
     try {
       aceite = await this.prisma.integridadeAceite.create({
-        data: { motoristaId, sequencial, motivo: motivo.trim(), aceitoPorUsuarioId: usuarioId },
+        data: {
+          motoristaId,
+          sequencial,
+          motivo: motivo.trim(),
+          aceitoPorUsuarioId: usuarioId,
+        },
         include: { aceitoPorUsuario: { select: { nome: true } } },
       });
     } catch (err) {

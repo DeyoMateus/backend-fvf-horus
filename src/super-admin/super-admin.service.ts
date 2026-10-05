@@ -198,6 +198,7 @@ export class SuperAdminService {
         cnpj: e.cnpj,
         ativo: e.ativo,
         registroInpiAfd: e.registroInpiAfd,
+        fusoHorario: e.fusoHorario,
         totalMotoristas: e._count.motoristas,
       })),
       usuarios: grupo.usuarios,
@@ -267,6 +268,7 @@ export class SuperAdminService {
         razaoSocial: dto.razaoSocial ?? undefined,
         cnpj: dto.cnpj ?? undefined,
         registroInpiAfd: dto.registroInpiAfd ?? undefined,
+        fusoHorario: dto.fusoHorario ?? undefined,
       },
     });
 

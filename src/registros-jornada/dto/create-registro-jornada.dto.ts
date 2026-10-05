@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsEnum,
+  IsInt,
   IsISO8601,
   IsLatitude,
   IsLongitude,
@@ -11,6 +12,8 @@ import {
   IsString,
   IsUUID,
   Length,
+  Max,
+  Min,
 } from 'class-validator';
 import { Sanitizar } from '../../common/sanitizacao/sanitizar.decorator';
 import { TipoEvento } from '@prisma/client';
@@ -80,4 +83,19 @@ export class CreateRegistroJornadaDto {
   @Type(() => Number)
   @IsNumber()
   elapsedRealtimeMs?: number;
+
+  /**
+   * Rodada 146 , deslocamento de fuso do aparelho no momento do toque
+   * (minutos a leste do UTC, ex.: -240 em Cuiabá), gravado pelo app no
+   * toque (funciona offline). Opcional: app antigo não envia. Aceita uma
+   * faixa ampla de propósito , um valor fora do que o Brasil usa NÃO
+   * rejeita o ponto (nunca travar o motorista nem derrubar um lote
+   * inteiro); `resolverFusoDoRegistro` simplesmente o descarta.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(-720)
+  @Max(840)
+  fusoOffsetMin?: number;
 }

@@ -100,7 +100,15 @@ describe('DispositivosService , isolamento entre grupos', () => {
       const auditMock = {
         registrar: jest.fn().mockResolvedValue(undefined),
       } as any;
-      const service = new DispositivosService(prismaMock, auditMock, {} as any);
+      // Rodada 123: aprovarTroca confere se o motorista está ativo (escrita).
+      const tenantMock = {
+        verificarMotoristaAtivo: jest.fn().mockResolvedValue(undefined),
+      } as any;
+      const service = new DispositivosService(
+        prismaMock,
+        auditMock,
+        tenantMock,
+      );
       return { service, prismaMock };
     }
 

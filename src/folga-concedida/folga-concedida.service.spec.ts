@@ -27,7 +27,15 @@ describe('FolgaConcedidaService', () => {
       opts.motorista === undefined
         ? { empresaId: 'empresa-A', empresa: { grupoId: 'grupo-A' } }
         : opts.motorista;
-    const motoristaCompleto = motorista && { id: 'motorista-1', ...motorista };
+    // `nome/status/excluidoEm` existem porque `conceder` agora bloqueia
+    // escrita para motorista inativo/excluído (`verificarMotoristaAtivo`).
+    const motoristaCompleto = motorista && {
+      id: 'motorista-1',
+      nome: 'Motorista Teste',
+      status: 'ATIVO',
+      excluidoEm: null,
+      ...motorista,
+    };
 
     const folgaCriada = {
       id: 'folga-1',

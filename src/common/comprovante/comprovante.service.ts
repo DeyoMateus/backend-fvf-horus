@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { agoraDoCliente, instanteDoEvento } from '../fuso/fuso-contexto';
 import PDFDocument from 'pdfkit';
 import type { Motorista, RegistroJornada } from '@prisma/client';
 
@@ -48,11 +49,9 @@ export class ComprovanteService {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
     });
 
-    doc
-      .fontSize(16)
-      .text('FVF Hórus , Comprovante de registro de jornada', {
-        align: 'center',
-      });
+    doc.fontSize(16).text('FVF Hórus , Comprovante de registro de jornada', {
+      align: 'center',
+    });
     doc.moveDown();
 
     doc.fontSize(10).fillColor('#374151');
@@ -72,7 +71,9 @@ export class ComprovanteService {
       // America/Sao_Paulo (UTC-3).
       `Período: ${periodoInicio.toLocaleString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleString('pt-BR', { timeZone: 'UTC' })}`,
     );
-    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`);
+    doc.text(
+      `Gerado em: ${agoraDoCliente()}`,
+    );
     doc.text(`Hash gênesis da cadeia: ${motorista.hashGenesis}`);
     doc.moveDown();
 
@@ -87,7 +88,7 @@ export class ComprovanteService {
         .fontSize(9)
         .fillColor('#111827')
         .text(
-          `#${registro.sequencial}  ${registro.tipoEvento}  ,  ${new Date(registro.timestampEvento).toLocaleString('pt-BR')}` +
+          `#${registro.sequencial}  ${registro.tipoEvento}  ,  ${instanteDoEvento(new Date(registro.timestampEvento), registro.fusoOffsetMin)}` +
             (registro.observacao ? `  (${registro.observacao})` : ''),
         );
       doc

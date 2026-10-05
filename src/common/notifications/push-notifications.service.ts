@@ -2,6 +2,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
+import { renderizarHorarios } from '../fuso/fuso-brasil.util';
 import { FILA_NOTIFICACOES_PUSH } from './push-notifications.constants';
 
 export interface JobNotificacaoPush {
@@ -45,7 +46,16 @@ export class PushNotificationsService {
 
       await this.fila.add(
         'enviar',
-        { pushToken: vinculo.pushToken, titulo, corpo, dados },
+        {
+          pushToken: vinculo.pushToken,
+          titulo,
+          // Rodada 148: hora no fuso em que o motorista está (último ponto).
+          corpo: renderizarHorarios(
+            corpo,
+            await this.offsetAtualDoMotorista(motoristaId),
+          ),
+          dados,
+        },
         {
           attempts: 3,
           backoff: { type: 'exponential', delay: 5_000 },
@@ -58,6 +68,20 @@ export class PushNotificationsService {
         `Falha ao enfileirar notificação push para motorista ${motoristaId}`,
         err as Error,
       );
+    }
+  }
+
+  /** Fuso do último ponto do motorista; sem ele (ou se falhar), Brasília. */
+  private async offsetAtualDoMotorista(motoristaId: string): Promise<number> {
+    try {
+      const ultimo = await this.prisma.registroJornada.findFirst({
+        where: { motoristaId, fusoOffsetMin: { not: null } },
+        orderBy: { timestampEvento: 'desc' },
+        select: { fusoOffsetMin: true },
+      });
+      return ultimo?.fusoOffsetMin ?? -180;
+    } catch {
+      return -180;
     }
   }
 }

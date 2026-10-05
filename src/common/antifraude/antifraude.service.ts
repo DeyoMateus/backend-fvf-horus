@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { marcarHorario } from '../fuso/fuso-brasil.util';
 import {
   RegistroJornada,
   SeveridadeAlerta,
@@ -210,7 +211,7 @@ export class AntifraudeService {
       tipo: TipoAlertaJornada.RELOGIO_DISPOSITIVO_SUSPEITO,
       severidade: SeveridadeAlerta.CRITICO,
       mensagem:
-        `O horário informado pelo aparelho (${atual.timestampEvento.toLocaleString('pt-BR')}) está ` +
+        `O horário informado pelo aparelho (${marcarHorario(atual.timestampEvento)}) está ` +
         `${this.formatarHoras(minutosNoFuturo)} no futuro em relação ao horário em que o servidor recebeu o registro , ` +
         `só é possível com o relógio do aparelho adiantado de propósito.`,
       janelaInicio: horaRecebimentoServidor,
@@ -259,7 +260,7 @@ export class AntifraudeService {
       tipo: TipoAlertaJornada.SINCRONIZACAO_TARDIA_SUSPEITA,
       severidade: critico ? SeveridadeAlerta.CRITICO : SeveridadeAlerta.ATENCAO,
       mensagem:
-        `Este evento (${atual.timestampEvento.toLocaleString('pt-BR')}) só chegou ao servidor ` +
+        `Este evento (${marcarHorario(atual.timestampEvento)}) só chegou ao servidor ` +
         `${this.formatarHoras(minutosDeAtraso)} depois do horário que alega , bem mais do que uma sincronização ` +
         `normal após período sem sinal. Pode ser legítimo (motorista ficou horas sem cobertura), mas é também o ` +
         `mesmo padrão de atrasar o relógio do aparelho antes de bater o ponto.` +

@@ -5,13 +5,16 @@ import { BancoHorasService } from '../banco-horas/banco-horas.service';
 import { HoleriteService } from '../holerite/holerite.service';
 import { AtualizarPerfilMotoristaDto } from './dto/atualizar-perfil-motorista.dto';
 import { MotoristasService } from './motoristas.service';
+import { paraParedeBrt } from '../common/fuso/fuso-brasil.util';
 
 type RequisicaoMotorista = { motorista: Motorista; grupoId: string };
 
+// Rodada 144: "mês atual" é o mês civil de Brasília (às 22h BRT do último
+// dia do mês o servidor já está em UTC no mês seguinte). O valor devolvido
+// é "só data" (meia-noite UTC do dia 1), que o holerite converte em 00:00 BRT.
 function inicioDoMes(agora: Date): Date {
-  return new Date(
-    Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), 1, 0, 0, 0),
-  );
+  const p = paraParedeBrt(agora);
+  return new Date(Date.UTC(p.getUTCFullYear(), p.getUTCMonth(), 1, 0, 0, 0));
 }
 
 /**
@@ -29,8 +32,9 @@ function resolverInicioMesSolicitado(
   const inicioMesAtual = inicioDoMes(agora);
   if (!anoQuery && !mesQuery) return inicioMesAtual;
 
-  const ano = anoQuery ? Number(anoQuery) : agora.getUTCFullYear();
-  const mes = mesQuery ? Number(mesQuery) : agora.getUTCMonth() + 1; // 1-12
+  const agoraBrt = paraParedeBrt(agora);
+  const ano = anoQuery ? Number(anoQuery) : agoraBrt.getUTCFullYear();
+  const mes = mesQuery ? Number(mesQuery) : agoraBrt.getUTCMonth() + 1; // 1-12
   if (
     !Number.isFinite(ano) ||
     !Number.isFinite(mes) ||
@@ -46,17 +50,13 @@ function resolverInicioMesSolicitado(
     : inicioSolicitado;
 }
 
-/** Último instante do mês que começa em `inicioMes` (23:59:59.999 do último dia). */
+/**
+ * Último DIA do mês que começa em `inicioMes`, como "só data" (meia-noite
+ * UTC); o holerite estende para 23:59:59.999 BRT desse dia.
+ */
 function fimDoMes(inicioMes: Date): Date {
   return new Date(
-    Date.UTC(
-      inicioMes.getUTCFullYear(),
-      inicioMes.getUTCMonth() + 1,
-      1,
-      0,
-      0,
-      0,
-    ) - 1,
+    Date.UTC(inicioMes.getUTCFullYear(), inicioMes.getUTCMonth() + 1, 0, 0, 0, 0),
   );
 }
 

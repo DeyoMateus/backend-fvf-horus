@@ -8,6 +8,17 @@ import type {
 import type { EmpresaDoComprovante } from '../common/comprovante/comprovante.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { TenantService } from '../common/tenant/tenant.service';
+import {
+  type PontoFuso,
+  chaveDiaBrt,
+  construirLinhaDoTempoFuso,
+  dividirPorDiaCivil,
+  fimDePeriodoBrt,
+  inicioDePeriodoBrt,
+  minutosNoturnosEntre,
+  offsetNoInstante,
+  offsetPadraoDaEmpresa,
+} from '../common/fuso/fuso-brasil.util';
 
 // Mesmo limiar de "jornada de direção diária" já usado no motor de
 // alertas (LIMITE_JORNADA_DIRECAO_ATENCAO_MIN em jornada-legal.service.ts)
@@ -62,6 +73,10 @@ export interface EventoDetalhadoHolerite {
   /// tem coordenada própria , fica null, impresso como "," no PDF.
   latitude: number | null;
   longitude: number | null;
+  /// Rodada 146 , fuso (minutos a leste do UTC) em que o ponto aconteceu:
+  /// o do registro do motorista; o ajuste do gestor herda o fuso em que o
+  /// motorista estava naquele instante. O PDF imprime a hora nesse fuso.
+  fusoOffsetMin: number;
 }
 
 export interface DiaHolerite {
@@ -93,6 +108,9 @@ export interface ResultadoHolerite {
   opcoes: OpcoesHolerite;
   dias: DiaHolerite[];
   eventos: EventoDetalhadoHolerite[];
+  /// Rodada 146 , fuso da empresa (minutos a leste do UTC), só para decidir
+  /// quando mostrar o selo "UTC-x" nos eventos de outro fuso.
+  fusoEmpresaOffsetMin: number;
   totais: {
     direcaoMin: number;
     esperaMin: number;
@@ -127,8 +145,10 @@ export interface ResultadoHolerite {
  *
  * Limitação conhecida, documentada de propósito (mesmo nível de
  * simplicidade do resto do projeto , ver resumirJornadaDiaria em
- * RegistrosJornadaService): dia-calendário é sempre UTC, sem conversão
- * de fuso horário; um intervalo que começa fora do período informado
+ * RegistrosJornadaService): dia-calendário é o dia civil de Brasília
+ * (America/Sao_Paulo, UTC-3 fixo, ver common/fuso/fuso-brasil.util.ts;
+ * até a Rodada 144 era UTC, o que fechava o dia às 21h BRT e deslocava
+ * a janela do adicional noturno em 3h); um intervalo que começa fora do período informado
  * mas termina dentro dele não é contado (fica só o que abre e fecha, ou
  * fica em aberto, dentro da janela pedida).
  */
@@ -164,13 +184,26 @@ export class HoleriteService {
     // valor recebido é uma meia-noite exata (a assinatura de "só mandaram
     // um dia, sem hora"); um horário de corte específico passado por
     // outro chamador continua intocado.
-    const dataFimEfetiva = this.estenderParaFimDoDiaSeMeiaNoite(dataFim);
-
+    // Rodada 144: período "só data" (meia-noite UTC) = dia civil BRT,
+    // convertido para instantes reais (00:00 BRT / 23:59:59.999 BRT).
+    // A janela do período "só data" usa o fuso da EMPRESA (é o dia civil
+    // que o gestor escolheu no painel); a hora de parede de cada ponto usa
+    // o fuso do motorista naquele momento (linha do tempo abaixo).
     const motoristaComRegra = await this.prisma.motorista.findUnique({
       where: { id: motoristaId },
-      select: { empresa: { select: { regraSindical: true } } },
+      select: {
+        empresa: { select: { regraSindical: true, fusoHorario: true } },
+      },
     });
     const regra = motoristaComRegra?.empresa.regraSindical ?? null;
+    const fusoEmpresaOffsetMin = offsetPadraoDaEmpresa(
+      motoristaComRegra?.empresa.fusoHorario,
+    );
+    const dataInicioEfetiva = inicioDePeriodoBrt(
+      dataInicio,
+      fusoEmpresaOffsetMin,
+    );
+    const dataFimEfetiva = fimDePeriodoBrt(dataFim, fusoEmpresaOffsetMin);
     // Sem CCT/ACT cadastrada pro CNPJ deste motorista, cai no padrão
     // legal geral (CLT/Lei 13.103: 8h de jornada normal) , ver
     // RegraSindicalService/model no schema sobre por que isto não pode
@@ -182,23 +215,30 @@ export class HoleriteService {
       this.prisma.registroJornada.findMany({
         where: {
           motoristaId,
-          timestampEvento: { gte: dataInicio, lte: dataFimEfetiva },
+          timestampEvento: { gte: dataInicioEfetiva, lte: dataFimEfetiva },
         },
         orderBy: { timestampEvento: 'asc' },
       }),
       this.prisma.tratamentoPonto.findMany({
         where: {
           motoristaId,
-          timestampEvento: { gte: dataInicio, lte: dataFimEfetiva },
+          timestampEvento: { gte: dataInicioEfetiva, lte: dataFimEfetiva },
         },
         orderBy: { timestampEvento: 'asc' },
       }),
     ]);
 
+    const linhaFuso = await this.montarLinhaDoTempoFuso(
+      motoristaId,
+      registros,
+      fusoEmpresaOffsetMin,
+    );
     const eventos = this.unificarEventos(registros, tratamentos);
     const eventosDetalhados = this.construirEventosDetalhados(
       registros,
       tratamentos,
+      linhaFuso,
+      fusoEmpresaOffsetMin,
     );
     const intervalos = [
       ...this.calcularIntervalos(eventos, dataFimEfetiva),
@@ -209,7 +249,12 @@ export class HoleriteService {
       // mesmo formato, pra `agruparPorDia` somar junto.
       ...this.calcularIntervalosIndefinido(eventos, dataFimEfetiva),
     ];
-    const dias = this.agruparPorDia(intervalos, limiteJornadaNormalMin);
+    const dias = this.agruparPorDia(
+      intervalos,
+      limiteJornadaNormalMin,
+      linhaFuso,
+      fusoEmpresaOffsetMin,
+    );
 
     const totais = dias.reduce(
       (acc, d) => ({
@@ -237,24 +282,10 @@ export class HoleriteService {
       opcoes,
       dias,
       eventos: eventosDetalhados,
+      fusoEmpresaOffsetMin,
       totais,
       regraSindicalAplicada: regra ? { id: regra.id, nome: regra.nome } : null,
     };
-  }
-
-  /**
-   * Ver comentário em `calcular()` sobre por que isto existe: uma data
-   * de calendário pura (meia-noite UTC exata) vira o FIM daquele dia
-   * (23:59:59.999); qualquer outro horário passa direto.
-   */
-  private estenderParaFimDoDiaSeMeiaNoite(data: Date): Date {
-    const eMeiaNoiteExata =
-      data.getUTCHours() === 0 &&
-      data.getUTCMinutes() === 0 &&
-      data.getUTCSeconds() === 0 &&
-      data.getUTCMilliseconds() === 0;
-    if (!eMeiaNoiteExata) return data;
-    return new Date(data.getTime() + 24 * 60 * 60 * 1000 - 1);
   }
 
   /**
@@ -322,6 +353,44 @@ export class HoleriteService {
     return itens;
   }
 
+  /**
+   * Rodada 146 , "em que fuso o motorista estava em cada instante". Só vai
+   * ao banco buscar amostras de localização (que localizam o momento exato
+   * da troca de fuso) quando há mesmo uma mudança de fuso entre os pontos
+   * do período; o caso comum (um fuso só) não custa nenhuma consulta.
+   */
+  private async montarLinhaDoTempoFuso(
+    motoristaId: string,
+    registros: RegistroJornada[],
+    padraoMin: number,
+  ): Promise<PontoFuso[]> {
+    const pontos = registros.map((r) => ({
+      t: r.timestampEvento.getTime(),
+      offsetMin: r.fusoOffsetMin ?? null,
+    }));
+    const distintos = new Set(pontos.map((p) => p.offsetMin ?? padraoMin));
+    let amostras: Array<{ t: number; longitude: number }> = [];
+    if (distintos.size > 1) {
+      const tempos = pontos.map((p) => p.t);
+      const linhas = await this.prisma.amostraLocalizacao.findMany({
+        where: {
+          motoristaId,
+          capturadoEm: {
+            gte: new Date(Math.min(...tempos)),
+            lte: new Date(Math.max(...tempos)),
+          },
+        },
+        select: { capturadoEm: true, longitude: true },
+        orderBy: { capturadoEm: 'asc' },
+      });
+      amostras = linhas.map((a) => ({
+        t: a.capturadoEm.getTime(),
+        longitude: Number(a.longitude),
+      }));
+    }
+    return construirLinhaDoTempoFuso(pontos, amostras, padraoMin);
+  }
+
   private unificarEventos(
     registros: RegistroJornada[],
     tratamentos: TratamentoPonto[],
@@ -350,6 +419,8 @@ export class HoleriteService {
   private construirEventosDetalhados(
     registros: RegistroJornada[],
     tratamentos: TratamentoPonto[],
+    linhaFuso: PontoFuso[],
+    padraoMin: number,
   ): EventoDetalhadoHolerite[] {
     const eventos: EventoDetalhadoHolerite[] = [
       ...registros.map((r) => ({
@@ -359,6 +430,7 @@ export class HoleriteService {
         detalhe: r.observacao ?? null,
         latitude: r.latitude != null ? Number(r.latitude) : null,
         longitude: r.longitude != null ? Number(r.longitude) : null,
+        fusoOffsetMin: r.fusoOffsetMin ?? padraoMin,
       })),
       ...tratamentos.map((t) => ({
         timestampEvento: t.timestampEvento,
@@ -367,6 +439,10 @@ export class HoleriteService {
         detalhe: t.motivo,
         latitude: null,
         longitude: null,
+        // Rodada 150: o ajuste guarda o fuso em que o motorista estava então.
+        fusoOffsetMin:
+          (t as { fusoOffsetMin?: number | null }).fusoOffsetMin ??
+          offsetNoInstante(linhaFuso, t.timestampEvento.getTime(), padraoMin),
       })),
     ];
     eventos.sort(
@@ -553,6 +629,8 @@ export class HoleriteService {
   private agruparPorDia(
     intervalos: IntervaloCalculado[],
     limiteJornadaNormalMin: number,
+    linhaFuso: PontoFuso[],
+    padraoMin: number,
   ): DiaHolerite[] {
     const porDia = new Map<string, DiaHolerite>();
     const obterDia = (chave: string): DiaHolerite => {
@@ -590,11 +668,17 @@ export class HoleriteService {
       // fechado, por qualquer um dos dois jeitos.
       if (intervalo.emAberto) continue;
 
-      for (const pedaco of this.dividirPorDiaCalendario(
+      // Rodada 146: cada pedaço não cruza a meia-noite NEM uma troca de
+      // fuso do motorista, e carrega o fuso em que aconteceu. O dia e a
+      // janela 22h-5h seguem a parede desse fuso; a duração é sempre a
+      // diferença entre instantes.
+      for (const pedaco of dividirPorDiaCivil(
         intervalo.inicio,
         intervalo.fim,
+        linhaFuso,
+        padraoMin,
       )) {
-        const chave = pedaco.inicio.toISOString().slice(0, 10);
+        const chave = chaveDiaBrt(pedaco.inicio, pedaco.offsetMin);
         const dia = obterDia(chave);
         const minutos =
           (pedaco.fim.getTime() - pedaco.inicio.getTime()) / 60000;
@@ -604,9 +688,12 @@ export class HoleriteService {
         // Tempo indefinido nunca é noturno "trabalhado" , adicional
         // noturno só faz sentido sobre direção de verdade.
         if (intervalo.categoria !== 'INDEFINIDO') {
-          dia.noturnoMin += this.calcularMinutosNoturnos(
+          dia.noturnoMin += minutosNoturnosEntre(
             pedaco.inicio,
             pedaco.fim,
+            pedaco.offsetMin,
+            ADICIONAL_NOTURNO_INICIO_HORA,
+            ADICIONAL_NOTURNO_FIM_HORA,
           );
         }
         if (intervalo.origemGestor) dia.teveFechamentoGestor = true;
@@ -625,58 +712,5 @@ export class HoleriteService {
     return Array.from(porDia.values()).sort((a, b) =>
       a.dia.localeCompare(b.dia),
     );
-  }
-
-  /** Quebra um intervalo em pedaços que não cruzam meia-noite (UTC), pra poder somar minutos por dia-calendário. */
-  private dividirPorDiaCalendario(
-    inicio: Date,
-    fim: Date,
-  ): Array<{ inicio: Date; fim: Date }> {
-    const pedacos: Array<{ inicio: Date; fim: Date }> = [];
-    let cursor = inicio;
-    while (cursor < fim) {
-      const proximaMeiaNoite = new Date(
-        Date.UTC(
-          cursor.getUTCFullYear(),
-          cursor.getUTCMonth(),
-          cursor.getUTCDate() + 1,
-          0,
-          0,
-          0,
-          0,
-        ),
-      );
-      const fimDoPedaco = proximaMeiaNoite < fim ? proximaMeiaNoite : fim;
-      pedacos.push({ inicio: cursor, fim: fimDoPedaco });
-      cursor = fimDoPedaco;
-    }
-    return pedacos;
-  }
-
-  /** Minutos de um intervalo (já garantido dentro de um único dia-calendário) que caem na janela 22h–5h. */
-  private calcularMinutosNoturnos(inicio: Date, fim: Date): number {
-    const diaBase = Date.UTC(
-      inicio.getUTCFullYear(),
-      inicio.getUTCMonth(),
-      inicio.getUTCDate(),
-    );
-    const janela1Inicio = diaBase + ADICIONAL_NOTURNO_INICIO_HORA * 3600_000;
-    const janela1Fim = diaBase + 24 * 3600_000;
-    const janela2Inicio = diaBase;
-    const janela2Fim = diaBase + ADICIONAL_NOTURNO_FIM_HORA * 3600_000;
-
-    const sobreposicao = (
-      aIni: number,
-      aFim: number,
-      bIni: number,
-      bFim: number,
-    ) => Math.max(0, Math.min(aFim, bFim) - Math.max(aIni, bIni));
-
-    const ini = inicio.getTime();
-    const f = fim.getTime();
-    const minutosNoturnos =
-      sobreposicao(ini, f, janela1Inicio, janela1Fim) +
-      sobreposicao(ini, f, janela2Inicio, janela2Fim);
-    return minutosNoturnos / 60000;
   }
 }

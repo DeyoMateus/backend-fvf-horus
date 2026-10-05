@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { marcarHorario } from '../common/fuso/fuso-brasil.util';
 import { ActorType, StatusSolicitacaoAjuste } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuditService } from '../common/audit/audit.service';
@@ -293,7 +294,7 @@ export class SolicitacoesAjustePontoService {
     await this.push.notificarMotorista(
       solicitacao.motoristaId,
       'Pedido de ajuste aprovado',
-      `Seu pedido de correção (${solicitacao.tipoEvento} em ${solicitacao.timestampEvento.toLocaleString('pt-BR')}) foi aprovado pela empresa.`,
+      `Seu pedido de correção (${solicitacao.tipoEvento} em ${marcarHorario(solicitacao.timestampEvento)}) foi aprovado pela empresa.`,
       { tipo: 'SOLICITACAO_AJUSTE_APROVADA', solicitacaoId },
     );
 
@@ -339,7 +340,7 @@ export class SolicitacoesAjustePontoService {
     await this.push.notificarMotorista(
       solicitacao.motoristaId,
       'Pedido de ajuste não aprovado',
-      `Seu pedido de correção (${solicitacao.tipoEvento} em ${solicitacao.timestampEvento.toLocaleString('pt-BR')}) não foi aprovado. Motivo: ${motivoDecisao}`,
+      `Seu pedido de correção (${solicitacao.tipoEvento} em ${marcarHorario(solicitacao.timestampEvento)}) não foi aprovado. Motivo: ${motivoDecisao}`,
       { tipo: 'SOLICITACAO_AJUSTE_REJEITADA', solicitacaoId },
     );
 

@@ -3,6 +3,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import {
+  marcarHorario,
+  offsetValido,
+} from '../common/fuso/fuso-brasil.util';
 import { ActorType } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuditService } from '../common/audit/audit.service';
@@ -13,6 +17,10 @@ import { StorageService } from '../common/storage/storage.service';
 import { TenantService } from '../common/tenant/tenant.service';
 import { RegistrosJornadaService } from '../registros-jornada/registros-jornada.service';
 import { CreateTratamentoPontoDto } from './dto/create-tratamento-ponto.dto';
+import {
+  EventoLinhaDoTempo,
+  validarSequenciaAjuste,
+} from './validacao-sequencia-ajuste';
 
 // Rodada 73 , pedido do usuário: até 4 imagens de até 25MB cada por
 // tratamento, e elas NUNCA podem ser gravadas no Postgres , sempre
@@ -83,6 +91,7 @@ export class TratamentosPontoService {
       dto.motivo,
       usuarioId,
       dto.registroReferenciaId,
+      dto.fusoOffsetMin,
     );
 
     await this.audit.registrar({
@@ -100,11 +109,127 @@ export class TratamentosPontoService {
     await this.push.notificarMotorista(
       motoristaId,
       'Ajuste no seu ponto',
-      `A empresa registrou um ajuste (${dto.tipoEvento}) referente a ${new Date(dto.timestampEvento).toLocaleString('pt-BR')}. Toque para ver o motivo e os comprovantes.`,
+      `A empresa registrou um ajuste (${dto.tipoEvento}) referente a ${marcarHorario(new Date(dto.timestampEvento))}. Toque para ver o motivo e os comprovantes.`,
       { tipo: 'TRATAMENTO_PONTO', tratamentoId: tratamento.id },
     );
 
     return tratamento;
+  }
+
+  /**
+   * Rodada 150 , em que fuso o motorista estava no instante do ajuste: o que
+   * o painel mandou (o gestor digitou a hora no fuso dele) ou, se não veio,
+   * o do último ponto dele ANTES daquele instante (senão o primeiro depois).
+   * Nunca o de onde o motorista está hoje nem o do computador do gestor.
+   */
+  private async fusoDoMotoristaNoInstante(
+    motoristaId: string,
+    instante: Date,
+    informado?: number | null,
+  ): Promise<number | null> {
+    if (offsetValido(informado)) return informado;
+    try {
+      const antes = await this.prisma.registroJornada.findFirst({
+        where: {
+          motoristaId,
+          timestampEvento: { lte: instante },
+          fusoOffsetMin: { not: null },
+        },
+        orderBy: { timestampEvento: 'desc' },
+        select: { fusoOffsetMin: true },
+      });
+      if (antes?.fusoOffsetMin != null) return antes.fusoOffsetMin;
+      const depois = await this.prisma.registroJornada.findFirst({
+        where: {
+          motoristaId,
+          timestampEvento: { gt: instante },
+          fusoOffsetMin: { not: null },
+        },
+        orderBy: { timestampEvento: 'asc' },
+        select: { fusoOffsetMin: true },
+      });
+      return depois?.fusoOffsetMin ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Rodada 139 , monta a linha do tempo UNIFICADA do motorista (registros
+   * reais + ajustes já lançados, mesma fonte que o holerite usa pra
+   * calcular as horas) em volta do horário do ajuste e confere se o
+   * tipo escolhido encaixa na jornada.
+   */
+  private async validarEncaixeNaJornada(
+    motoristaId: string,
+    tipoEvento: CreateTratamentoPontoDto['tipoEvento'],
+    timestampEvento: Date,
+  ) {
+    const [regAnt, tratAnt, regPost, tratPost] = await Promise.all([
+      this.prisma.registroJornada.findMany({
+        where: { motoristaId, timestampEvento: { lte: timestampEvento } },
+        orderBy: [{ timestampEvento: 'desc' }, { sequencial: 'desc' }],
+        take: 100,
+        select: { tipoEvento: true, timestampEvento: true },
+      }),
+      this.prisma.tratamentoPonto.findMany({
+        where: { motoristaId, timestampEvento: { lte: timestampEvento } },
+        orderBy: [{ timestampEvento: 'desc' }, { createdAt: 'desc' }],
+        take: 100,
+        select: { tipoEvento: true, timestampEvento: true },
+      }),
+      this.prisma.registroJornada.findMany({
+        where: { motoristaId, timestampEvento: { gt: timestampEvento } },
+        orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
+        take: 20,
+        select: { tipoEvento: true, timestampEvento: true },
+      }),
+      this.prisma.tratamentoPonto.findMany({
+        where: { motoristaId, timestampEvento: { gt: timestampEvento } },
+        orderBy: [{ timestampEvento: 'asc' }, { createdAt: 'asc' }],
+        take: 20,
+        select: { tipoEvento: true, timestampEvento: true },
+      }),
+    ]);
+    const porHorario = (a: EventoLinhaDoTempo, b: EventoLinhaDoTempo) =>
+      a.timestampEvento.getTime() - b.timestampEvento.getTime();
+    const anteriores = [...regAnt, ...tratAnt].sort(porHorario);
+    const posteriores = [...regPost, ...tratPost].sort(porHorario);
+    return validarSequenciaAjuste(tipoEvento, anteriores, posteriores);
+  }
+
+  /** Rodada 139 , pra o painel saber o que pode ser lançado num horário. */
+  async contextoDoAjuste(
+    motoristaId: string,
+    timestampEvento: Date,
+    grupoIdSolicitante: string,
+  ) {
+    await this.tenant.verificarMotoristaNoGrupo(
+      motoristaId,
+      grupoIdSolicitante,
+    );
+    const todos = [
+      'INICIO_JORNADA',
+      'INICIO_DESCANSO',
+      'FIM_DESCANSO',
+      'INICIO_DIRECAO',
+      'FIM_DIRECAO',
+      'ESPERA_CARGA_DESCARGA',
+      'FIM_ESPERA_CARGA_DESCARGA',
+      'FIM_DESCARREGAMENTO',
+      'FIM_JORNADA',
+      'OUTRO',
+    ] as const;
+    const permitidos: string[] = [];
+    for (const t of todos) {
+      const r = await this.validarEncaixeNaJornada(
+        motoristaId,
+        t,
+        timestampEvento,
+      );
+      if (r.ok) permitidos.push(t);
+    }
+    return { permitidos };
   }
 
   /**
@@ -124,6 +249,7 @@ export class TratamentosPontoService {
     motivo: string,
     usuarioId: string,
     registroReferenciaId?: string,
+    fusoOffsetMin?: number | null,
   ) {
     const motorista = await this.prisma.motorista.findUnique({
       where: { id: motoristaId },
@@ -146,11 +272,25 @@ export class TratamentosPontoService {
       }
     }
 
+    // Rodada 139 , o ajuste precisa se encaixar numa jornada (ver
+    // validacao-sequencia-ajuste.ts).
+    const validacao = await this.validarEncaixeNaJornada(
+      motoristaId,
+      tipoEvento,
+      timestampEvento,
+    );
+    if (!validacao.ok) throw new BadRequestException(validacao.mensagem);
+
     const ultimoRegistro = await this.prisma.registroJornada.findFirst({
       where: { motoristaId },
       orderBy: { sequencial: 'desc' },
     });
     const hashReferencia = ultimoRegistro?.hashAtual ?? motorista.hashGenesis;
+    const fusoDoAjuste = await this.fusoDoMotoristaNoInstante(
+      motoristaId,
+      timestampEvento,
+      fusoOffsetMin,
+    );
 
     const canonico = JSON.stringify({
       motivo,
@@ -170,6 +310,7 @@ export class TratamentosPontoService {
         timestampEvento,
         motivo,
         registroReferenciaId,
+        fusoOffsetMin: fusoDoAjuste,
         hashReferencia,
         hashRegistro,
       },

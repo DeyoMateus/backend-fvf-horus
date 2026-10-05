@@ -31,6 +31,11 @@ import { TenantService } from '../common/tenant/tenant.service';
 import { CreateRegistroJornadaDto } from './dto/create-registro-jornada.dto';
 import { LoteRegistroJornadaDto } from './dto/lote-registro-jornada.dto';
 import { RegistrosJornadaService } from './registros-jornada.service';
+import {
+  fimDePeriodoBrt,
+  inicioDePeriodoBrt,
+  offsetPadraoDaEmpresa,
+} from '../common/fuso/fuso-brasil.util';
 
 // Sempre junto do motorista em qualquer consulta que vá parar num
 // documento (comprovante, AEJ) , é o CNPJ do vínculo empregatício real
@@ -38,7 +43,7 @@ import { RegistrosJornadaService } from './registros-jornada.service';
 // ComprovanteService sobre por que isso importa quando o grupo tem mais
 // de uma Empresa.
 const INCLUDE_EMPRESA_DOCUMENTO = {
-  empresa: { select: { razaoSocial: true, cnpj: true } },
+  empresa: { select: { razaoSocial: true, cnpj: true, fusoHorario: true } },
 } as const;
 
 // Mesma inclusão acima, mas trazendo também a CCT/ACT vinculada ao CNPJ
@@ -49,6 +54,7 @@ const INCLUDE_EMPRESA_COM_REGRA_SINDICAL = {
     select: {
       razaoSocial: true,
       cnpj: true,
+      fusoHorario: true,
       regraSindical: true,
       grupoId: true,
     },
@@ -106,6 +112,30 @@ export class RegistrosJornadaController {
       dto.eventos,
       ip,
       userAgent,
+    );
+  }
+
+  // Rodada 141 , aparelho novo / consulta de data no Histórico: devolve
+  // os registros que o servidor já tem deste motorista.
+  @Get('meus-registros')
+  @UseGuards(MotoristaDeviceGuard)
+  async meusRegistros(
+    @Req() req: { motorista: { id: string } },
+    @Query('inicio') inicio?: string,
+    @Query('fim') fim?: string,
+  ) {
+    const dataInicio = inicio ? new Date(inicio) : undefined;
+    const dataFim = fim ? new Date(fim) : undefined;
+    if (
+      (dataInicio && Number.isNaN(dataInicio.getTime())) ||
+      (dataFim && Number.isNaN(dataFim.getTime()))
+    ) {
+      throw new BadRequestException('Datas inválidas (use ISO 8601)');
+    }
+    return this.registrosService.listarParaDispositivo(
+      req.motorista.id,
+      dataInicio,
+      dataFim,
     );
   }
 
@@ -244,6 +274,7 @@ export class RegistrosJornadaController {
       motoristaId,
       inicio ? new Date(inicio) : undefined,
       fim ? new Date(fim) : undefined,
+      offsetPadraoDaEmpresa(motorista.empresa.fusoHorario),
     );
     const csv = this.aejService.gerarCsv(
       motorista,
@@ -346,11 +377,22 @@ export class RegistrosJornadaController {
         motoristaId,
         dataInicio,
         dataFim,
+        offsetPadraoDaEmpresa(motorista.empresa.fusoHorario),
       ),
       this.prisma.tratamentoPonto.findMany({
         where: {
           motoristaId,
-          timestampEvento: { gte: periodoInicio, lte: periodoFim },
+          // Rodada 146: período "só data" = dia civil no fuso da empresa.
+          timestampEvento: {
+            gte: inicioDePeriodoBrt(
+              periodoInicio,
+              offsetPadraoDaEmpresa(motorista.empresa.fusoHorario),
+            ),
+            lte: fimDePeriodoBrt(
+              periodoFim,
+              offsetPadraoDaEmpresa(motorista.empresa.fusoHorario),
+            ),
+          },
         },
         orderBy: { timestampEvento: 'asc' },
         include: { usuario: { select: { nome: true } } },
@@ -423,6 +465,7 @@ export class RegistrosJornadaController {
       motoristaId,
       dataInicio,
       dataFim,
+      offsetPadraoDaEmpresa(motorista.empresa.fusoHorario),
     );
 
     const pdf = await this.comprovanteService.gerarPdfRegistros(

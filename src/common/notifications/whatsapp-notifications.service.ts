@@ -1,6 +1,11 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
+import {
+  offsetPadraoDaEmpresa,
+  offsetValido,
+  renderizarHorarios,
+} from '../fuso/fuso-brasil.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { FILA_NOTIFICACOES_WHATSAPP } from './whatsapp-notifications.constants';
 
@@ -52,7 +57,7 @@ export class WhatsappNotificationsService {
     try {
       const empresa = await this.prisma.empresa.findUnique({
         where: { id: empresaId },
-        select: { grupoId: true },
+        select: { grupoId: true, fusoHorario: true },
       });
       if (!empresa) return;
 
@@ -62,14 +67,25 @@ export class WhatsappNotificationsService {
           ativo: true,
           telefoneWhatsapp: { not: null },
         },
-        select: { telefoneWhatsapp: true },
+        select: { telefoneWhatsapp: true, fusoOffsetMin: true },
       });
+      const offsetEmpresaMin = offsetPadraoDaEmpresa(empresa.fusoHorario);
 
       for (const gestor of gestores) {
         if (!gestor.telefoneWhatsapp) continue;
         await this.fila.add(
           'enviar',
-          { telefone: gestor.telefoneWhatsapp, mensagem },
+          {
+            telefone: gestor.telefoneWhatsapp,
+            // Rodada 148: a hora vai no fuso de QUEM recebe (07h em Brasília
+            // é 06h em Cuiabá); sem fuso aprendido, o da transportadora.
+            mensagem: renderizarHorarios(
+              mensagem,
+              offsetValido(gestor.fusoOffsetMin)
+                ? gestor.fusoOffsetMin
+                : offsetEmpresaMin,
+            ),
+          },
           {
             attempts: 3,
             backoff: { type: 'exponential', delay: 5_000 },

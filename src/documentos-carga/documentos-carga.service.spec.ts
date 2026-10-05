@@ -19,7 +19,17 @@ describe('DocumentosCargaService , isolamento entre grupos', () => {
   }) {
     const prismaMock = {
       motorista: {
-        findUnique: jest.fn().mockResolvedValue(opts.motorista ?? null),
+        // Rodada 123: motorista precisa estar ATIVO e não excluído (escrita).
+        findUnique: jest.fn().mockResolvedValue(
+          opts.motorista
+            ? {
+                nome: 'Motorista Teste',
+                status: 'ATIVO',
+                excluidoEm: null,
+                ...opts.motorista,
+              }
+            : null,
+        ),
       },
       empresa: {
         findUnique: jest.fn().mockResolvedValue(opts.empresa ?? null),

@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { TipoAlertaJornada } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
+import {
+  construirLinhaDoTempoFuso,
+  offsetNoInstante,
+} from '../common/fuso/fuso-brasil.util';
 
 /**
  * "Dossiê de Cobrança" , Lei 13.103/2015 (Lei do Motorista), Art. 235-A
@@ -21,10 +25,20 @@ export interface ItemDossieCobranca {
   periodoInicio: string;
   periodoFim: string;
   minutosTotais: number;
-  intervalos: { inicio: string; fim: string }[];
+  intervalos: {
+    inicio: string;
+    fim: string;
+    /** Fuso do motorista (min a leste do UTC) no início/fim da espera: onde ele estava. */
+    fusoInicioMin?: number;
+    fusoFimMin?: number;
+  }[];
   registroGeradorId: string;
   observacao: string;
   criadoEm: Date;
+  /** Fuso do motorista no início/fim da janela e na detecção. */
+  fusoPeriodoInicioMin?: number;
+  fusoPeriodoFimMin?: number;
+  fusoCriadoEmMin?: number;
 }
 
 @Injectable()
@@ -55,6 +69,11 @@ export class DossieCobrancaService {
       orderBy: { createdAt: 'asc' },
     });
 
+    // Rodada 150: cada horário sai no fuso em que o MOTORISTA estava naquele
+    // instante (linha do tempo dos fusos gravados nos pontos dele), nunca no
+    // de quem gera o documento.
+    const linhaPorMotorista = await this.linhasDeFuso(alertas);
+
     return alertas
       .map((alerta) => {
         const dossie = (alerta.detalhes as Record<string, unknown> | null)
@@ -69,6 +88,9 @@ export class DossieCobrancaService {
             }
           | undefined;
         if (!dossie) return null;
+        const linha = linhaPorMotorista.get(alerta.motorista.id) ?? [];
+        const offEm = (iso: string | Date) =>
+          offsetNoInstante(linha, new Date(iso).getTime());
         return {
           alertaId: alerta.id,
           motoristaId: alerta.motorista.id,
@@ -77,12 +99,59 @@ export class DossieCobrancaService {
           periodoInicio: dossie.periodoInicio,
           periodoFim: dossie.periodoFim,
           minutosTotais: dossie.minutosTotais,
-          intervalos: dossie.intervalos,
+          intervalos: dossie.intervalos.map((i) => ({
+            ...i,
+            fusoInicioMin: offEm(i.inicio),
+            fusoFimMin: offEm(i.fim),
+          })),
+          fusoPeriodoInicioMin: offEm(dossie.periodoInicio),
+          fusoPeriodoFimMin: offEm(dossie.periodoFim),
+          fusoCriadoEmMin: offEm(alerta.createdAt),
           registroGeradorId: dossie.registroGeradorId,
           observacao: dossie.observacao,
           criadoEm: alerta.createdAt,
         } satisfies ItemDossieCobranca;
       })
       .filter((item): item is ItemDossieCobranca => item !== null);
+  }
+
+  /** Linha do tempo de fuso de cada motorista dos alertas (a partir dos pontos batidos). */
+  private async linhasDeFuso(
+    alertas: { motorista: { id: string }; createdAt: Date; detalhes: unknown }[],
+  ) {
+    const resultado = new Map<string, ReturnType<typeof construirLinhaDoTempoFuso>>();
+    if (alertas.length === 0) return resultado;
+    const ids = [...new Set(alertas.map((a) => a.motorista.id))];
+    const instantes = alertas.flatMap((a) => {
+      const d = (a.detalhes as { dossieDeCobranca?: { periodoInicio?: string; periodoFim?: string } } | null)
+        ?.dossieDeCobranca;
+      return [a.createdAt.getTime(), d?.periodoInicio ? new Date(d.periodoInicio).getTime() : NaN, d?.periodoFim ? new Date(d.periodoFim).getTime() : NaN].filter((n) => !Number.isNaN(n));
+    });
+    const margem = 7 * 24 * 3_600_000;
+    const registros = await this.prisma.registroJornada.findMany({
+      where: {
+        motoristaId: { in: ids },
+        timestampEvento: {
+          gte: new Date(Math.min(...instantes) - margem),
+          lte: new Date(Math.max(...instantes) + margem),
+        },
+      },
+      select: { motoristaId: true, timestampEvento: true, fusoOffsetMin: true },
+    });
+    for (const id of ids) {
+      resultado.set(
+        id,
+        construirLinhaDoTempoFuso(
+          registros
+            .filter((r) => r.motoristaId === id)
+            .map((r) => ({
+              t: r.timestampEvento.getTime(),
+              offsetMin: r.fusoOffsetMin ?? null,
+            })),
+          [],
+        ),
+      );
+    }
+    return resultado;
   }
 }

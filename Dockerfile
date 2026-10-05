@@ -16,6 +16,9 @@ RUN npm run build
 FROM node:22-slim
 WORKDIR /app
 ENV NODE_ENV=production
+# Horário de Brasília: o container roda em UTC por padrão, e textos gerados
+# no servidor (comprovantes, mensagens, painel) saíam 3h adiantados.
+ENV TZ=America/Sao_Paulo
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 # node_modules completo de propósito: o Prisma CLI (devDependency) é
 # necessário no start para rodar `prisma migrate deploy`.

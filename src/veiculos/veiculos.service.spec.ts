@@ -28,6 +28,8 @@ describe('VeiculosService', () => {
       motorista: { findUnique: jest.fn().mockResolvedValue(motoristaCompleto) },
       veiculoVinculado: {
         findUnique: jest.fn().mockResolvedValue(opts.veiculoAtual ?? null),
+        // Rodada 105: conflito de placa com outro motorista ativo (nenhum nos testes).
+        findFirst: jest.fn().mockResolvedValue(null),
         upsert: jest
           .fn()
           .mockImplementation(({ update, create }: any) =>

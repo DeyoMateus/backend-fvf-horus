@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { agoraDoCliente, instanteDoEvento } from '../common/fuso/fuso-contexto';
 import type { ItemDossieCobranca } from './dossie-cobranca.service';
 
 function formatarHoras(minutos: number): string {
@@ -41,8 +42,8 @@ export async function gerarPdfDossieCobranca(
     .text(
       // Rodada 97 , periodoInicio/periodoFim do filtro (calendário, meia-noite
       // UTC) precisam de timeZone: 'UTC' pra não voltar 1 dia; "Gerado em"
-      // continua local (America/Sao_Paulo) de propósito , é um instante real.
-      `${empresaNome}   |   Período: ${periodoInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}   |   Gerado em: ${new Date().toLocaleString('pt-BR')}`,
+      // vai na hora de quem gerou o documento (fuso do computador).
+      `${empresaNome}   |   Período: ${periodoInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}   |   Gerado em: ${agoraDoCliente()}`,
       { align: 'center' },
     );
   doc.moveDown();
@@ -81,10 +82,10 @@ export async function gerarPdfDossieCobranca(
       .font('Helvetica')
       .fillColor('#374151')
       .text(
-        `CPF: ${item.motoristaCpf}   |   Ocorrência detectada em: ${item.criadoEm.toLocaleString('pt-BR')}`,
+        `CPF: ${item.motoristaCpf}   |   Ocorrência detectada em: ${instanteDoEvento(item.criadoEm, item.fusoCriadoEmMin)}`,
       );
     doc.text(
-      `Janela avaliada: ${new Date(item.periodoInicio).toLocaleString('pt-BR')} até ${new Date(item.periodoFim).toLocaleString('pt-BR')}`,
+      `Janela avaliada: ${instanteDoEvento(new Date(item.periodoInicio), item.fusoPeriodoInicioMin)} até ${instanteDoEvento(new Date(item.periodoFim), item.fusoPeriodoFimMin)}`,
     );
     doc
       .font('Helvetica-Bold')
@@ -97,7 +98,7 @@ export async function gerarPdfDossieCobranca(
       const fim = new Date(intervalo.fim);
       const duracaoMin = Math.round((fim.getTime() - inicio.getTime()) / 60000);
       doc.text(
-        `  • ${inicio.toLocaleString('pt-BR')} → ${fim.toLocaleString('pt-BR')} (${formatarHoras(duracaoMin)})`,
+        `  • ${instanteDoEvento(inicio, intervalo.fusoInicioMin)} → ${instanteDoEvento(fim, intervalo.fusoFimMin)} (${formatarHoras(duracaoMin)})`,
       );
     }
     doc.fontSize(8).fillColor('#6b7280').text(item.observacao);

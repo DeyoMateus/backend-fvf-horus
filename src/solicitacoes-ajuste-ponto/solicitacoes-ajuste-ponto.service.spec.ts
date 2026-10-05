@@ -24,7 +24,17 @@ describe('SolicitacoesAjustePontoService', () => {
     };
 
     const prismaMock = {
-      motorista: { findUnique: jest.fn().mockResolvedValue(motorista) },
+      // Rodada 123: motorista precisa estar ATIVO e não excluído (escrita).
+      motorista: {
+        findUnique: jest.fn().mockResolvedValue(
+          motorista && {
+            nome: 'Motorista Teste',
+            status: 'ATIVO',
+            excluidoEm: null,
+            ...motorista,
+          },
+        ),
+      },
       registroJornada: { findUnique: jest.fn().mockResolvedValue(null) },
       solicitacaoAjustePonto: {
         findUnique: jest.fn().mockResolvedValue(solicitacaoBase),

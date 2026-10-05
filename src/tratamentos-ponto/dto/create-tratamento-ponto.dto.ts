@@ -1,4 +1,4 @@
-import { IsEnum, IsISO8601, IsOptional, IsString, IsUUID, Length } from 'class-validator';
+import { IsEnum, IsInt, IsISO8601, IsOptional, Max, Min, IsString, IsUUID, Length } from 'class-validator';
 import { Sanitizar } from '../../common/sanitizacao/sanitizar.decorator';
 import { TipoEvento } from '@prisma/client';
 
@@ -17,4 +17,12 @@ export class CreateTratamentoPontoDto {
   @IsOptional()
   @IsUUID()
   registroReferenciaId?: string;
+
+  /// Fuso do motorista no instante do ajuste (min a leste do UTC). Sem ele, o
+  /// servidor deduz pelos pontos dele.
+  @IsOptional()
+  @IsInt()
+  @Min(-720)
+  @Max(840)
+  fusoOffsetMin?: number;
 }

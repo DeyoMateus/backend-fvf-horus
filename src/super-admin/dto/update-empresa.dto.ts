@@ -1,4 +1,5 @@
-import { IsOptional, IsString, Length, Matches } from 'class-validator';
+import { IsIn, IsOptional, IsString, Length, Matches } from 'class-validator';
+import { FUSOS_EMPRESA_PERMITIDOS } from '../../common/fuso/fuso-brasil.util';
 import {
   Sanitizar,
   SomenteDigitos,
@@ -29,4 +30,13 @@ export class UpdateEmpresaDto {
   @IsString()
   @Length(3, 200)
   registroInpiAfd?: string;
+
+  /**
+   * Rodada 146 , fuso da transportadora (exibição do painel/PDFs e janela
+   * dos períodos "só data"). A hora de parede da jornada do motorista segue
+   * o fuso onde ele está, não este.
+   */
+  @IsOptional()
+  @IsIn(FUSOS_EMPRESA_PERMITIDOS, { message: 'fusoHorario inválido' })
+  fusoHorario?: string;
 }

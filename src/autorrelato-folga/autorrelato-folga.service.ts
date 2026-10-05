@@ -5,6 +5,11 @@ import { WhatsappNotificationsService } from '../common/notifications/whatsapp-n
 import { PrismaService } from '../common/prisma/prisma.service';
 import { TenantService } from '../common/tenant/tenant.service';
 import { CreateAutorrelatoFolgaDto } from './dto/create-autorrelato-folga.dto';
+import {
+  chaveDiaBrt,
+  offsetPadraoDaEmpresa,
+  paraParedeBrt,
+} from '../common/fuso/fuso-brasil.util';
 
 function paraDiaUtc(data: string | Date): Date {
   const d = typeof data === 'string' ? new Date(data) : data;
@@ -148,7 +153,8 @@ export class AutorrelatoFolgaService {
    * a janela vai até ontem.
    */
   async diasSemInteracao(grupoId: string, dias = 7) {
-    const hojeUtc = paraDiaUtc(new Date());
+    // Rodada 144: "hoje" é o dia civil de Brasília.
+    const hojeUtc = paraDiaUtc(paraParedeBrt(new Date()));
     const inicioUtc = new Date(hojeUtc);
     inicioUtc.setUTCDate(
       inicioUtc.getUTCDate() - Math.min(Math.max(dias, 1), 90),
@@ -156,17 +162,37 @@ export class AutorrelatoFolgaService {
 
     const motoristas = await this.prisma.motorista.findMany({
       where: { empresa: { grupoId }, status: 'ATIVO' },
-      select: { id: true, nome: true, createdAt: true },
+      select: {
+        id: true,
+        nome: true,
+        createdAt: true,
+        empresa: { select: { fusoHorario: true } },
+      },
     });
     if (motoristas.length === 0) return [];
+    const offsetEmpresaDe = new Map(
+      motoristas.map((m) => [
+        m.id,
+        offsetPadraoDaEmpresa(m.empresa?.fusoHorario),
+      ]),
+    );
 
     const [registros, autorrelatos, folgasConcedidas] = await Promise.all([
       this.prisma.registroJornada.findMany({
         where: {
           motorista: { empresa: { grupoId } },
-          timestampEvento: { gte: inicioUtc, lt: hojeUtc },
+          // Rodada 147: faixa cobre todos os fusos do Brasil; o corte
+          // exato do dia é pelo fuso de cada ponto (fusoOffsetMin).
+          timestampEvento: {
+            gte: new Date(inicioUtc.getTime() + 2 * 3_600_000),
+            lt: new Date(hojeUtc.getTime() + 5 * 3_600_000),
+          },
         },
-        select: { motoristaId: true, timestampEvento: true },
+        select: {
+          motoristaId: true,
+          timestampEvento: true,
+          fusoOffsetMin: true,
+        },
       }),
       this.prisma.autorrelatoFolga.findMany({
         where: {
@@ -190,7 +216,12 @@ export class AutorrelatoFolgaService {
     const diasComRegistro = new Map<string, Set<string>>();
     for (const r of registros) {
       const set = diasComRegistro.get(r.motoristaId) ?? new Set<string>();
-      set.add(chaveDia(r.timestampEvento));
+      set.add(
+        chaveDiaBrt(
+          r.timestampEvento,
+          r.fusoOffsetMin ?? offsetEmpresaDe.get(r.motoristaId),
+        ),
+      );
       diasComRegistro.set(r.motoristaId, set);
     }
     const diasComFolga = new Map<string, Set<string>>();
@@ -214,7 +245,7 @@ export class AutorrelatoFolgaService {
       const inicioMotorista = new Date(
         Math.max(
           inicioUtc.getTime(),
-          paraDiaUtc(motorista.createdAt).getTime(),
+          paraDiaUtc(paraParedeBrt(motorista.createdAt)).getTime(),
         ),
       );
       const diasFaltando: string[] = [];

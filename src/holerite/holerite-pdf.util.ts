@@ -1,10 +1,16 @@
 import PDFDocument from 'pdfkit';
+import { agoraDoCliente } from '../common/fuso/fuso-contexto';
 import type { Motorista } from '@prisma/client';
 import type { EmpresaDoComprovante } from '../common/comprovante/comprovante.service';
 import type {
   EventoDetalhadoHolerite,
   ResultadoHolerite,
 } from './holerite.service';
+import {
+  OFFSET_PADRAO_MIN,
+  formatarDataHoraBrt,
+  rotuloFuso,
+} from '../common/fuso/fuso-brasil.util';
 
 /** `d.dia` vem como "AAAA-MM-DD" (chave interna, usada pra ordenar , ver
  * `holerite.service.ts`); exibir isso direto pro usuário sai em ordem
@@ -41,13 +47,18 @@ const ROTULO_EVENTO_DETALHADO: Record<string, string> = {
   OUTRO: 'Evento diverso',
 };
 
-function formatarDataHoraBr(data: Date): string {
-  const dia = String(data.getUTCDate()).padStart(2, '0');
-  const mes = String(data.getUTCMonth() + 1).padStart(2, '0');
-  const ano = data.getUTCFullYear();
-  const hora = String(data.getUTCHours()).padStart(2, '0');
-  const minuto = String(data.getUTCMinutes()).padStart(2, '0');
-  return `${dia}/${mes}/${ano} ${hora}:${minuto}`;
+// Rodada 144/146: log de eventos na hora de parede do fuso em que o ponto
+// aconteceu. Quando difere do fuso da empresa, ganha o selo "(UTC-4)" para
+// o gestor não estranhar a diferença para o relógio dele.
+function horaDoEvento(
+  evento: { timestampEvento: Date; fusoOffsetMin?: number },
+  fusoEmpresaOffsetMin: number,
+): string {
+  const offset = evento.fusoOffsetMin ?? fusoEmpresaOffsetMin;
+  const texto = formatarDataHoraBrt(evento.timestampEvento, offset);
+  return offset === fusoEmpresaOffsetMin
+    ? texto
+    : `${texto} (${rotuloFuso(offset)})`;
 }
 
 /**
@@ -80,7 +91,9 @@ function desenharSecaoMotorista(
     // timeZone: 'UTC' aqui imprime exatamente o dia que foi pedido.
     `Período: ${resultado.periodoInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${resultado.periodoFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`,
   );
-  doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`);
+  doc.text(
+    `Gerado em: ${agoraDoCliente()}`,
+  );
   if (resultado.regraSindicalAplicada) {
     doc.text(
       `Convenção coletiva aplicada: ${resultado.regraSindicalAplicada.nome}`,
@@ -385,6 +398,9 @@ function desenharSecaoMotorista(
       );
   }
 
+  const fusoEmpresaOffsetMin =
+    resultado.fusoEmpresaOffsetMin ?? OFFSET_PADRAO_MIN;
+
   interface BlocoJornada {
     titulo: string;
     eventos: EventoDetalhadoHolerite[];
@@ -413,12 +429,12 @@ function desenharSecaoMotorista(
         )
       : null;
     const tituloFim = fimJornada
-      ? formatarDataHoraBr(fimJornada.timestampEvento)
+      ? horaDoEvento(fimJornada, fusoEmpresaOffsetMin)
       : 'em aberto no fim do período';
     const sufixoDuracao =
       duracaoMin !== null ? `  •  duração ${formatarHoras(duracaoMin)}` : '';
     blocos.push({
-      titulo: `${formatarDataHoraBr(inicio.timestampEvento)} até ${tituloFim}${sufixoDuracao}`,
+      titulo: `${horaDoEvento(inicio, fusoEmpresaOffsetMin)} até ${tituloFim}${sufixoDuracao}`,
       eventos: atual,
     });
     atual = null;
@@ -460,7 +476,7 @@ function desenharSecaoMotorista(
         evento.latitude != null && evento.longitude != null;
       desenharLinhaDetalhe(
         [
-          formatarDataHoraBr(evento.timestampEvento),
+          horaDoEvento(evento, fusoEmpresaOffsetMin),
           ROTULO_EVENTO_DETALHADO[evento.tipoEvento] ?? evento.tipoEvento,
           evento.origemGestor ? 'RH' : 'Motorista',
           temLocalizacao
@@ -595,11 +611,9 @@ export async function gerarPdfHolerite(
     doc.on('end', () => resolve(Buffer.concat(chunks)));
   });
 
-  doc
-    .fontSize(16)
-    .text('FVF Hórus , Apuração de jornada (espelho de ponto)', {
-      align: 'center',
-    });
+  doc.fontSize(16).text('FVF Hórus , Apuração de jornada (espelho de ponto)', {
+    align: 'center',
+  });
   doc.moveDown(0.2);
   doc
     .fontSize(8)
@@ -654,7 +668,7 @@ export async function gerarPdfFechamentoLote(
     .text(
       // Rodada 97 , mesmo bug/correção de desenharSecaoMotorista acima: ver comentário lá.
       `Período: ${periodoInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}   |   ` +
-        `${itens.length} motorista(s)   |   Gerado em: ${new Date().toLocaleString('pt-BR')}`,
+        `${itens.length} motorista(s)   |   Gerado em: ${agoraDoCliente()}`,
       { align: 'center' },
     );
   doc.moveDown();

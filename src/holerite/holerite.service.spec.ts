@@ -12,12 +12,17 @@ import { TenantService } from '../common/tenant/tenant.service';
  */
 describe('HoleriteService', () => {
   function criarService(
-    motorista: { empresaId: string; empresa: { grupoId: string } } | null,
+    motorista: {
+      empresaId: string;
+      empresa: { grupoId: string; fusoHorario?: string };
+    } | null,
   ) {
     const prismaMock = {
       motorista: { findUnique: jest.fn().mockResolvedValue(motorista) },
       registroJornada: { findMany: jest.fn().mockResolvedValue([]) },
       tratamentoPonto: { findMany: jest.fn().mockResolvedValue([]) },
+      // Rodada 146: só é consultada quando há troca de fuso entre os pontos.
+      amostraLocalizacao: { findMany: jest.fn().mockResolvedValue([]) },
     } as any;
     const tenant = new TenantService(prismaMock);
     const service = new HoleriteService(prismaMock, tenant);
@@ -106,19 +111,21 @@ describe('HoleriteService', () => {
     expect(resultado.dias[0].extraMin).toBe(120);
   });
 
-  it('calcula adicional noturno só na parte do intervalo dentro de 22h-5h', async () => {
+  // Rodada 144: dia de trabalho e janela noturna em horário de Brasília
+  // (UTC-3 fixo). 21h BRT = 00:00Z do dia seguinte.
+  it('calcula adicional noturno só na parte do intervalo dentro de 22h-5h (horário de Brasília)', async () => {
     const { service, prismaMock } = criarService({
       empresaId: 'empresa-A',
       empresa: { grupoId: 'grupo-A' },
     });
-    // Dirige das 21h às 23h (1h fora da janela noturna + 1h dentro).
+    // Dirige das 21h às 23h BRT (1h fora da janela noturna + 1h dentro).
     prismaMock.registroJornada.findMany.mockResolvedValue([
       {
-        timestampEvento: new Date('2026-09-10T21:00:00Z'),
+        timestampEvento: new Date('2026-09-11T00:00:00Z'), // 21:00 BRT de 10/09
         tipoEvento: 'INICIO_DIRECAO',
       },
       {
-        timestampEvento: new Date('2026-09-10T23:00:00Z'),
+        timestampEvento: new Date('2026-09-11T02:00:00Z'), // 23:00 BRT de 10/09
         tipoEvento: 'FIM_DIRECAO',
       },
     ]);
@@ -126,13 +133,234 @@ describe('HoleriteService', () => {
     const resultado = await service.calcular(
       'motorista-1',
       new Date('2026-09-10T00:00:00Z'),
-      new Date('2026-09-10T23:59:59Z'),
+      new Date('2026-09-10T00:00:00Z'), // "só data" = dia 10 inteiro em BRT
+      opcoesTudo,
+      'grupo-A',
+    );
+
+    expect(resultado.dias).toHaveLength(1);
+    expect(resultado.dias[0].dia).toBe('2026-09-10');
+    expect(resultado.dias[0].direcaoMin).toBe(120);
+    expect(resultado.dias[0].noturnoMin).toBe(60);
+  });
+
+  it('não conta como noturno um trecho das 18h às 20h BRT (que seria 22h-24h em UTC)', async () => {
+    const { service, prismaMock } = criarService({
+      empresaId: 'empresa-A',
+      empresa: { grupoId: 'grupo-A' },
+    });
+    prismaMock.registroJornada.findMany.mockResolvedValue([
+      {
+        timestampEvento: new Date('2026-09-10T21:00:00Z'), // 18:00 BRT
+        tipoEvento: 'INICIO_DIRECAO',
+      },
+      {
+        timestampEvento: new Date('2026-09-10T23:00:00Z'), // 20:00 BRT
+        tipoEvento: 'FIM_DIRECAO',
+      },
+    ]);
+
+    const resultado = await service.calcular(
+      'motorista-1',
+      new Date('2026-09-10T00:00:00Z'),
+      new Date('2026-09-10T00:00:00Z'),
       opcoesTudo,
       'grupo-A',
     );
 
     expect(resultado.dias[0].direcaoMin).toBe(120);
+    expect(resultado.dias[0].noturnoMin).toBe(0);
+  });
+
+  it('divide um trecho que cruza a meia-noite de Brasília (23h BRT às 02h BRT) em dois dias civis', async () => {
+    const { service, prismaMock } = criarService({
+      empresaId: 'empresa-A',
+      empresa: { grupoId: 'grupo-A' },
+    });
+    prismaMock.registroJornada.findMany.mockResolvedValue([
+      {
+        timestampEvento: new Date('2026-09-11T02:00:00Z'), // 23:00 BRT de 10/09
+        tipoEvento: 'INICIO_DIRECAO',
+      },
+      {
+        timestampEvento: new Date('2026-09-11T05:00:00Z'), // 02:00 BRT de 11/09
+        tipoEvento: 'FIM_DIRECAO',
+      },
+    ]);
+
+    const resultado = await service.calcular(
+      'motorista-1',
+      new Date('2026-09-10T00:00:00Z'),
+      new Date('2026-09-11T00:00:00Z'),
+      opcoesTudo,
+      'grupo-A',
+    );
+
+    expect(resultado.dias.map((d) => d.dia)).toEqual([
+      '2026-09-10',
+      '2026-09-11',
+    ]);
+    expect(resultado.dias[0].direcaoMin).toBe(60); // 23h-24h BRT
+    expect(resultado.dias[1].direcaoMin).toBe(120); // 00h-02h BRT
     expect(resultado.dias[0].noturnoMin).toBe(60);
+    expect(resultado.dias[1].noturnoMin).toBe(120);
+  });
+
+  // Rodada 146: a hora noturna e o dia seguem o fuso em que o motorista
+  // ESTÁ; a duração é sempre a diferença entre instantes.
+  it('motorista em Cuiabá (UTC-4): 21h-23h locais = 60 min noturnos (em Brasília seriam 120)', async () => {
+    const { service, prismaMock } = criarService({
+      empresaId: 'empresa-A',
+      empresa: { grupoId: 'grupo-A' },
+    });
+    prismaMock.registroJornada.findMany.mockResolvedValue([
+      {
+        timestampEvento: new Date('2026-09-11T01:00:00Z'), // 21:00 em Cuiabá
+        tipoEvento: 'INICIO_DIRECAO',
+        fusoOffsetMin: -240,
+      },
+      {
+        timestampEvento: new Date('2026-09-11T03:00:00Z'), // 23:00 em Cuiabá
+        tipoEvento: 'FIM_DIRECAO',
+        fusoOffsetMin: -240,
+      },
+    ]);
+
+    const resultado = await service.calcular(
+      'motorista-1',
+      new Date('2026-09-10T00:00:00Z'),
+      new Date('2026-09-11T00:00:00Z'),
+      opcoesTudo,
+      'grupo-A',
+    );
+
+    expect(resultado.dias).toHaveLength(1);
+    expect(resultado.dias[0].dia).toBe('2026-09-10');
+    expect(resultado.dias[0].direcaoMin).toBe(120);
+    expect(resultado.dias[0].noturnoMin).toBe(60);
+    expect(prismaMock.amostraLocalizacao.findMany).not.toHaveBeenCalled();
+  });
+
+  it('viagem MT -> SP: 11h reais, sem hora fantasma nem hora faltando', async () => {
+    const { service, prismaMock } = criarService({
+      empresaId: 'empresa-A',
+      empresa: { grupoId: 'grupo-A' },
+    });
+    prismaMock.registroJornada.findMany.mockResolvedValue([
+      {
+        timestampEvento: new Date('2026-09-10T12:00:00Z'), // 08:00 em Cuiabá
+        tipoEvento: 'INICIO_DIRECAO',
+        fusoOffsetMin: -240,
+      },
+      {
+        timestampEvento: new Date('2026-09-10T23:00:00Z'), // 20:00 em São Paulo
+        tipoEvento: 'FIM_DIRECAO',
+        fusoOffsetMin: -180,
+      },
+    ]);
+    prismaMock.amostraLocalizacao.findMany.mockResolvedValue([
+      { capturadoEm: new Date('2026-09-10T15:00:00Z'), longitude: -55.0 },
+      { capturadoEm: new Date('2026-09-10T18:00:00Z'), longitude: -50.0 },
+    ]);
+
+    const resultado = await service.calcular(
+      'motorista-1',
+      new Date('2026-09-10T00:00:00Z'),
+      new Date('2026-09-10T00:00:00Z'),
+      opcoesTudo,
+      'grupo-A',
+    );
+
+    expect(resultado.dias).toHaveLength(1);
+    expect(resultado.dias[0].direcaoMin).toBe(11 * 60);
+    expect(resultado.dias[0].noturnoMin).toBe(0);
+  });
+
+  it('viagem MT -> SP de madrugada: noturno pela parede de cada fuso e dia certo (8h reais)', async () => {
+    const { service, prismaMock } = criarService({
+      empresaId: 'empresa-A',
+      empresa: { grupoId: 'grupo-A' },
+    });
+    prismaMock.registroJornada.findMany.mockResolvedValue([
+      {
+        timestampEvento: new Date('2026-09-10T22:00:00Z'), // 18:00 em Cuiabá
+        tipoEvento: 'INICIO_DIRECAO',
+        fusoOffsetMin: -240,
+      },
+      {
+        timestampEvento: new Date('2026-09-11T06:00:00Z'), // 03:00 em São Paulo
+        tipoEvento: 'FIM_DIRECAO',
+        fusoOffsetMin: -180,
+      },
+    ]);
+    // O fuso muda às 01:00Z (cruzou a divisa)
+    prismaMock.amostraLocalizacao.findMany.mockResolvedValue([
+      { capturadoEm: new Date('2026-09-11T01:00:00Z'), longitude: -50.0 },
+    ]);
+
+    const resultado = await service.calcular(
+      'motorista-1',
+      new Date('2026-09-10T00:00:00Z'),
+      new Date('2026-09-11T00:00:00Z'),
+      opcoesTudo,
+      'grupo-A',
+    );
+
+    expect(resultado.totais.direcaoMin).toBe(8 * 60);
+    expect(resultado.totais.noturnoMin).toBe(5 * 60);
+    expect(resultado.dias.map((d) => [d.dia, d.direcaoMin, d.noturnoMin])).toEqual([
+      ['2026-09-10', 300, 120], // 18-21h em MT (0 noturno) + 22h-24h em SP (120)
+      ['2026-09-11', 180, 180], // 00h-03h em SP
+    ]);
+  });
+
+  it('registros sem fuso (app antigo) se comportam exatamente como antes: Brasília', async () => {
+    const { service, prismaMock } = criarService({
+      empresaId: 'empresa-A',
+      empresa: { grupoId: 'grupo-A' },
+    });
+    prismaMock.registroJornada.findMany.mockResolvedValue([
+      {
+        timestampEvento: new Date('2026-09-11T01:00:00Z'), // 22:00 BRT
+        tipoEvento: 'INICIO_DIRECAO',
+      },
+      {
+        timestampEvento: new Date('2026-09-11T03:00:00Z'), // 00:00 BRT
+        tipoEvento: 'FIM_DIRECAO',
+      },
+    ]);
+
+    const resultado = await service.calcular(
+      'motorista-1',
+      new Date('2026-09-10T00:00:00Z'),
+      new Date('2026-09-11T00:00:00Z'),
+      opcoesTudo,
+      'grupo-A',
+    );
+
+    expect(resultado.dias[0].dia).toBe('2026-09-10');
+    expect(resultado.dias[0].direcaoMin).toBe(120);
+    expect(resultado.dias[0].noturnoMin).toBe(120);
+  });
+
+  it('período "só data" cobre o dia BRT inteiro: evento às 22h BRT do último dia entra', async () => {
+    const { service, prismaMock } = criarService({
+      empresaId: 'empresa-A',
+      empresa: { grupoId: 'grupo-A' },
+    });
+    prismaMock.registroJornada.findMany.mockResolvedValue([]);
+
+    await service.calcular(
+      'motorista-1',
+      new Date('2026-09-01T00:00:00Z'),
+      new Date('2026-09-30T00:00:00Z'),
+      opcoesTudo,
+      'grupo-A',
+    );
+
+    const where = prismaMock.registroJornada.findMany.mock.calls[0][0].where;
+    expect(where.timestampEvento.gte).toEqual(new Date('2026-09-01T03:00:00.000Z'));
+    expect(where.timestampEvento.lte).toEqual(new Date('2026-10-01T02:59:59.999Z'));
   });
 
   it('inclui um fechamento de ponto do gestor (TratamentoPonto) nas horas do dia e marca a flag', async () => {

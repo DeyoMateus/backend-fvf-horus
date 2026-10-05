@@ -6,6 +6,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Res,
   UploadedFile,
   UseGuards,
@@ -41,6 +42,24 @@ export class TratamentosPontoController {
       motoristaId,
       dto,
       user.sub,
+      user.grupoId,
+    );
+  }
+
+  // Rodada 139 , quais tipos de evento cabem na jornada do motorista
+  // num horário (o painel usa pra só oferecer opções válidas).
+  @Get('contexto')
+  contexto(
+    @Param('motoristaId') motoristaId: string,
+    @Query('timestamp') timestamp: string,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
+    const data = new Date(timestamp);
+    if (!timestamp || Number.isNaN(data.getTime()))
+      throw new BadRequestException('Informe "timestamp" em ISO 8601');
+    return this.tratamentosService.contextoDoAjuste(
+      motoristaId,
+      data,
       user.grupoId,
     );
   }

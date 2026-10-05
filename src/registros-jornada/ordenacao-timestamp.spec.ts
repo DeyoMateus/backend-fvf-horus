@@ -93,13 +93,15 @@ describe('RegistrosJornadaService , ordenação por timestampEvento, não por ch
         }),
       },
       registroJornada: { findMany: jest.fn().mockResolvedValue([]) },
+      // Rodada 125: divergências já aceitas saem da lista.
+      integridadeAceite: { findMany: jest.fn().mockResolvedValue([]) },
     } as any;
 
     const tenant = new TenantService(prismaMock);
     const hashChainMock = {
       verificarCadeia: jest
         .fn()
-        .mockReturnValue({ valido: true, totalRegistros: 0 }),
+        .mockReturnValue({ valido: true, totalRegistros: 0, quebras: [] }),
     } as any;
     const cryptoMock = {
       decrypt: jest.fn().mockReturnValue(Buffer.from('pfx-decifrado')),

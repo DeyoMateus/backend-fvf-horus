@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
+import { agoraDoCliente } from '../common/fuso/fuso-contexto';
 import PDFDocument from 'pdfkit';
 import { PDFDocument as PdfLibDocument } from 'pdf-lib';
 import { StatusMotorista } from '@prisma/client';
@@ -6,6 +7,11 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { RegistrosJornadaService } from '../registros-jornada/registros-jornada.service';
 import { RepPService } from '../common/rep-p/rep-p.service';
 import { FeriadosService } from '../feriados/feriados.service';
+import {
+  fimDePeriodoBrt,
+  inicioDePeriodoBrt,
+  offsetPadraoDaEmpresa,
+} from '../common/fuso/fuso-brasil.util';
 
 const INCLUDE_EMPRESA_COM_REGRA_SINDICAL = {
   empresa: {
@@ -14,6 +20,7 @@ const INCLUDE_EMPRESA_COM_REGRA_SINDICAL = {
       cnpj: true,
       regraSindical: true,
       grupoId: true,
+      fusoHorario: true,
     },
   },
   dispositivoVinculado: { select: { deviceUuid: true } },
@@ -86,16 +93,23 @@ export class FechamentoFiscalService {
     ];
 
     for (const motorista of motoristas) {
+      const offsetEmpresaMin = offsetPadraoDaEmpresa(
+        motorista.empresa.fusoHorario,
+      );
       const [registros, tratamentos, feriadosRaw] = await Promise.all([
         this.registrosJornada.listByMotoristaNoPeriodo(
           motorista.id,
           dataInicio,
           dataFim,
+          offsetEmpresaMin,
         ),
         this.prisma.tratamentoPonto.findMany({
           where: {
             motoristaId: motorista.id,
-            timestampEvento: { gte: dataInicio, lte: dataFim },
+            timestampEvento: {
+              gte: inicioDePeriodoBrt(dataInicio, offsetEmpresaMin),
+              lte: fimDePeriodoBrt(dataFim, offsetEmpresaMin),
+            },
           },
           orderBy: { timestampEvento: 'asc' },
           include: { usuario: { select: { nome: true } } },
@@ -154,7 +168,7 @@ export class FechamentoFiscalService {
       .text(
         // Rodada 97 , mesmo bug/correção do holerite/comprovante: ver comentário completo em holerite-pdf.util.ts.
         `Período: ${dataInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${dataFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}   |   ` +
-          `${nomesMotoristas.length} motorista(s)   |   Gerado em: ${new Date().toLocaleString('pt-BR')}`,
+          `${nomesMotoristas.length} motorista(s)   |   Gerado em: ${agoraDoCliente()}`,
         { align: 'center' },
       );
     doc.moveDown();

@@ -19,7 +19,10 @@ describe('BancoHorasService', () => {
         create: jest.fn(async ({ data }: any) => ({ id: 'ajuste-1', ...data, createdAt: new Date() })),
       },
     } as any;
-    const tenantMock = { verificarMotoristaNoGrupo: jest.fn().mockResolvedValue(undefined) } as any;
+    const tenantMock = {
+      verificarMotoristaNoGrupo: jest.fn().mockResolvedValue(undefined),
+      verificarMotoristaAtivo: jest.fn().mockResolvedValue(undefined),
+    } as any;
     const holeriteMock = {
       calcular: jest.fn().mockResolvedValue(
         overrides.resultadoHolerite ?? { totais: { direcaoMin: 600, esperaMin: 0, normalMin: 480, extraMin: 120, noturnoMin: 0 } },

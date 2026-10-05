@@ -62,11 +62,15 @@ export class DashboardController {
     // sobre `dias`.
     @Query('desde') desde?: string,
     @Query('ate') ate?: string,
+    // Fuso do computador de quem vê (min a leste do UTC).
+    @Query('fusoOffsetMin') fusoOffsetMin?: string,
   ) {
     return this.dashboardService.tendencia(user.grupoId, {
       dias: dias ? Number(dias) : 30,
       desde,
       ate,
+      fusoOffsetMin:
+        fusoOffsetMin !== undefined ? Number(fusoOffsetMin) : undefined,
     });
   }
 
@@ -101,6 +105,7 @@ export class DashboardController {
     @CurrentUser() user: UsuarioAutenticado,
     @Query('dia') dia: string,
     @Query('indicador') indicador: string,
+    @Query('fusoOffsetMin') fusoOffsetMin?: string,
   ) {
     const diaValido = REGEX_DIA.test(dia ?? '') ? dia : '1970-01-01';
     const indicadorValido = INDICADORES_TENDENCIA_VALIDOS.includes(
@@ -112,6 +117,7 @@ export class DashboardController {
       user.grupoId,
       diaValido,
       indicadorValido,
+      fusoOffsetMin !== undefined ? Number(fusoOffsetMin) : undefined,
     );
   }
 }

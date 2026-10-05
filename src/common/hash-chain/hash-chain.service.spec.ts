@@ -272,4 +272,25 @@ describe('HashChainService', () => {
     expect(resultado.valido).toBe(false);
     expect(resultado.motivo).toMatch(/hashAnterior/i);
   });
+  /** Rodada 146: fusoOffsetMin só entra no hash quando existe, para não quebrar a cadeia de registros antigos. */
+  it('fusoOffsetMin nulo/ausente não altera o hash; presente altera', () => {
+    const base = {
+      motoristaId: 'm1',
+      tipoEvento: 'INICIO_JORNADA',
+      timestampEvento: '2026-09-18T08:00:00.000Z',
+      sequencial: 1,
+      deviceUuidUsado: 'device-1',
+    };
+    const semCampo = service.calcularHash('GENESIS', 1, base);
+    const nulo = service.calcularHash('GENESIS', 1, {
+      ...base,
+      fusoOffsetMin: null,
+    });
+    const comCampo = service.calcularHash('GENESIS', 1, {
+      ...base,
+      fusoOffsetMin: -240,
+    });
+    expect(nulo).toBe(semCampo);
+    expect(comCampo).not.toBe(semCampo);
+  });
 });

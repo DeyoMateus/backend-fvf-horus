@@ -38,7 +38,9 @@ async function bootstrap() {
   app.enableCors({
     origin: origensPermitidas.length > 0 ? origensPermitidas : false,
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-fvf-horus-client'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-fvf-horus-client',
+      'x-fuso-offset-min',
+    ],
   });
 
   // Validação estrita de entrada: rejeita qualquer campo não declarado no DTO

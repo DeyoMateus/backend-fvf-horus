@@ -5,6 +5,10 @@ import { TenantService } from '../common/tenant/tenant.service';
 import { HoleriteService } from '../holerite/holerite.service';
 import { BancoHorasService } from '../banco-horas/banco-horas.service';
 import { TIPOS_ALERTA_RISCO_FRAUDE } from '../dashboard/dashboard.service';
+import {
+  chaveDiaBrt,
+  offsetPadraoDaEmpresa,
+} from '../common/fuso/fuso-brasil.util';
 
 /**
  * "Indicadores" , dashboard analítico do gestor (Rodada 36), pensado
@@ -237,6 +241,7 @@ export class IndicadoresService {
         severidade: true,
         tipo: true,
         createdAt: true,
+        motorista: { select: { empresa: { select: { fusoHorario: true } } } },
       },
     });
 
@@ -258,7 +263,11 @@ export class IndicadoresService {
       if (TIPOS_ALERTA_RISCO_FRAUDE.includes(a.tipo)) bucket.riscoFraude++;
       alertasPorMotorista.set(a.motoristaId, bucket);
 
-      const chaveDia = a.createdAt.toISOString().slice(0, 10);
+      // Rodada 147: dia do alerta na hora da transportadora (só visualização).
+      const chaveDia = chaveDiaBrt(
+        a.createdAt,
+        offsetPadraoDaEmpresa(a.motorista?.empresa?.fusoHorario),
+      );
       alertasPorDia.set(chaveDia, (alertasPorDia.get(chaveDia) ?? 0) + 1);
     }
 

@@ -50,6 +50,10 @@ describe('RegistrosJornadaService.create , bloqueio de relógio de aparelho susp
         create: jest.fn(),
       },
       motorista: { findUnique: jest.fn().mockResolvedValue(MOTORISTA_MOCK) },
+      // Rodada 137: amostra de hora confiável do servidor (nenhuma nos testes).
+      amostraHoraConfiavel: { findFirst: jest.fn().mockResolvedValue(null) },
+      // Rodada 92: evento sem amostra do mesmo boot fica pendente de reavaliação.
+      verificacaoRelogioPendente: { create: jest.fn().mockResolvedValue({}) },
     };
 
     const prismaMock = {

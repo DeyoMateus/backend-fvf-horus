@@ -14,6 +14,10 @@ import { WhatsappNotificationsService } from '../common/notifications/whatsapp-n
 import { PrismaService } from '../common/prisma/prisma.service';
 import { TenantService } from '../common/tenant/tenant.service';
 import { CreateFolgaConcedidaDto } from './dto/create-folga-concedida.dto';
+import {
+  chaveDiaBrt,
+  offsetPadraoDaEmpresa,
+} from '../common/fuso/fuso-brasil.util';
 
 function paraDiaUtc(data: string | Date): Date {
   const d = typeof data === 'string' ? new Date(data) : data;
@@ -69,8 +73,13 @@ export class FolgaConcedidaService {
     await this.tenant.verificarMotoristaAtivo(motoristaId);
     const motorista = await this.prisma.motorista.findUnique({
       where: { id: motoristaId },
+      include: { empresa: { select: { fusoHorario: true } } },
     });
     if (!motorista) throw new NotFoundException('Motorista não encontrado');
+    const offsetEmpresaMin = offsetPadraoDaEmpresa(
+      (motorista as { empresa?: { fusoHorario?: string } }).empresa
+        ?.fusoHorario,
+    );
 
     const dia = paraDiaUtc(dto.data);
     const inicioProximoDia = proximoDiaUtc(dia);
@@ -108,13 +117,28 @@ export class FolgaConcedidaService {
 
     // Não apaga nada , só confere se já existe ponto batido nesse dia
     // pra levantar o alerta de conferência. Ver o comentário da classe.
-    const registrosDoDia = await this.prisma.registroJornada.findMany({
+    // Rodada 147: o dia da folga é o dia civil NO FUSO DO MOTORISTA em cada
+    // ponto (fusoOffsetMin do registro; sem ele, fuso da empresa). A busca
+    // cobre a faixa de todos os fusos do Brasil e o filtro exato é por dia.
+    const diaChave = dia.toISOString().slice(0, 10);
+    const candidatos = await this.prisma.registroJornada.findMany({
       where: {
         motoristaId,
-        timestampEvento: { gte: dia, lt: inicioProximoDia },
+        timestampEvento: {
+          gte: new Date(dia.getTime() + 2 * 3_600_000),
+          lt: new Date(inicioProximoDia.getTime() + 5 * 3_600_000),
+        },
       },
       orderBy: { sequencial: 'asc' },
     });
+    const registrosDoDia = candidatos.filter(
+      (r) =>
+        chaveDiaBrt(
+          r.timestampEvento,
+          (r as { fusoOffsetMin?: number | null }).fusoOffsetMin ??
+            offsetEmpresaMin,
+        ) === diaChave,
+    );
 
     if (registrosDoDia.length > 0) {
       const diaFormatado = dia.toISOString().slice(0, 10);
@@ -124,8 +148,18 @@ export class FolgaConcedidaService {
           tipo: TipoAlertaJornada.PONTO_REGISTRADO_EM_DIA_DE_FOLGA,
           severidade: SeveridadeAlerta.ATENCAO,
           mensagem: `Folga concedida para ${diaFormatado}, mas já existem ${registrosDoDia.length} registro(s) de ponto nesse dia , confira o conflito.`,
-          janelaInicio: dia,
-          janelaFim: inicioProximoDia,
+          janelaInicio: new Date(
+            dia.getTime() -
+              ((registrosDoDia[0] as { fusoOffsetMin?: number | null })
+                .fusoOffsetMin ?? offsetEmpresaMin) *
+                60_000,
+          ),
+          janelaFim: new Date(
+            inicioProximoDia.getTime() -
+              ((registrosDoDia[0] as { fusoOffsetMin?: number | null })
+                .fusoOffsetMin ?? offsetEmpresaMin) *
+                60_000,
+          ),
           minutosAcumulados: 0,
           registroGeradorId: registrosDoDia[0].id,
           detalhes: {

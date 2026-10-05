@@ -44,6 +44,7 @@ import { FechamentoFiscalModule } from './fechamento-fiscal/fechamento-fiscal.mo
 import { LimpezaTokensModule } from './common/limpeza-tokens/limpeza-tokens.module';
 import { RedisThrottlerStorageService } from './common/throttler/redis-throttler-storage.service';
 import { TenantContextInterceptor } from './common/tenant/tenant-context.interceptor';
+import { FusoClienteInterceptor } from './common/fuso/fuso-cliente.interceptor';
 
 @Module({
   imports: [
@@ -119,6 +120,8 @@ import { TenantContextInterceptor } from './common/tenant/tenant-context.interce
     // toda requisição, antes de qualquer controller/service tocar o
     // Prisma , ver tenant-context.interceptor.ts.
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
+    // Rodada 148: aprende o fuso do computador do gestor (WhatsApp por fuso).
+    { provide: APP_INTERCEPTOR, useClass: FusoClienteInterceptor },
   ],
 })
 export class AppModule {}

@@ -268,6 +268,12 @@ model Empresa {
   /// número fictício , ver claude/bloqueios-dependentes-do-usuario.md.
   registroInpiAfd String?
 
+  /// Rodada 146 , fuso da transportadora (IANA, ver `FUSOS_EMPRESA_PERMITIDOS`
+  /// em common/fuso). Só manda na EXIBIÇÃO do painel/PDFs e na janela de
+  /// consulta dos períodos "só data"; a hora de parede da jornada do
+  /// motorista segue o fuso onde ele está (`RegistroJornada.fusoOffsetMin`).
+  fusoHorario String @default("America/Sao_Paulo")
+
   grupoId String
   grupo   Grupo  @relation(fields: [grupoId], references: [id])
 
@@ -303,6 +309,11 @@ model UsuarioEmpresa {
   /// gestor simplesmente não recebe alertas críticos via WhatsApp
   /// (continua recebendo tudo pelo painel normalmente).
   telefoneWhatsapp String?
+
+  /// Fuso do computador do gestor (min a leste do UTC), aprendido pelo
+  /// navegador (header x-fuso-offset-min). Só serve para escrever a hora
+  /// das mensagens de WhatsApp na hora local dele.
+  fusoOffsetMin Int?
 
   /// O tenant de verdade é o Grupo, não a Empresa (CNPJ) , um usuário
   /// enxerga TODAS as empresas/CNPJs do grupo dele, nunca de outro
@@ -583,6 +594,18 @@ model RegistroJornada {
   /// é um sinal auxiliar de antifraude, não conteúdo do ledger.
   elapsedRealtimeMs Float?
 
+  /// Rodada 146 , deslocamento de fuso (minutos a leste do UTC: Brasília
+  /// -180, Cuiabá/Manaus -240, Rio Branco -300) em que o motorista estava
+  /// no momento do toque. Define a "hora de parede" do ponto (corte do dia,
+  /// janela do adicional noturno 22h-5h, folga) , as DURAÇÕES continuam
+  /// sendo diferença entre instantes e nunca dependem dele. Validado no
+  /// servidor contra o GPS (`resolverFusoDoRegistro`). `null` em registros
+  /// antigos e de app antigo , nesse caso vale o fuso da empresa.
+  /// ENTRA no hash só quando não for null (ver `HashChainService`), então a
+  /// cadeia dos registros existentes não muda e o fuso dos novos fica
+  /// protegido contra adulteração.
+  fusoOffsetMin Int?
+
   idempotencyKey String? @unique
 
   createdAt DateTime @default(now())
@@ -697,6 +720,11 @@ model TratamentoPonto {
   tipoEvento      TipoEvento
   timestampEvento DateTime
   motivo          String
+
+  /// Fuso (min a leste do UTC) em que o motorista estava naquele instante
+  /// (ex.: -240 = Mato Grosso, mesmo que hoje ele já esteja em SP). Só
+  /// apresentação; o instante em si (timestampEvento) é o que vale.
+  fusoOffsetMin Int?
 
   /// Registro da jornada mais próximo ao qual este ajuste se refere
   /// (ex.: o INICIO_DESCANSO que ficou sem FIM_DESCANSO). Opcional porque

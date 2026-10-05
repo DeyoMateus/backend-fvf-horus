@@ -17,6 +17,9 @@ describe('TratamentosPontoService , isolamento entre grupos', () => {
   ) {
     const motoristaCompleto = motorista && {
       id: 'motorista-1',
+      nome: 'Motorista Teste',
+      status: 'ATIVO',
+      excluidoEm: null,
       hashGenesis: 'genesis-x',
       ...motorista,
     };
@@ -33,6 +36,8 @@ describe('TratamentosPontoService , isolamento entre grupos', () => {
       registroJornada: {
         findUnique: jest.fn().mockResolvedValue(null),
         findFirst: jest.fn().mockResolvedValue(null),
+        // Rodada 139: validarEncaixeNaJornada monta a linha do tempo.
+        findMany: jest.fn().mockResolvedValue([]),
       },
       tratamentoPonto: {
         create: jest.fn().mockResolvedValue({ id: 'trat-1' }),
@@ -73,7 +78,7 @@ describe('TratamentosPontoService , isolamento entre grupos', () => {
   }
 
   const dto = {
-    tipoEvento: 'AJUSTE',
+    tipoEvento: 'INICIO_JORNADA',
     timestampEvento: new Date().toISOString(),
     motivo: 'correção manual',
   } as any;

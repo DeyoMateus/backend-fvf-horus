@@ -12,6 +12,8 @@ export interface RegistroParaHash {
   observacao?: string | null;
   sequencial: number;
   deviceUuidUsado: string;
+  /** Rodada 146: só entra no hash quando não for null/undefined. */
+  fusoOffsetMin?: number | null;
 }
 
 /**
@@ -57,7 +59,7 @@ export class HashChainService {
 
   /** Serialização canônica (chaves ordenadas) para o payload entrar no hash sempre da mesma forma. */
   canonicalizar(payload: RegistroParaHash): string {
-    const ordenado = {
+    const ordenado: Record<string, unknown> = {
       latitude: this.paraNumero(payload.latitude),
       longitude: this.paraNumero(payload.longitude),
       motoristaId: payload.motoristaId,
@@ -80,6 +82,12 @@ export class HashChainService {
       timestampEvento: new Date(payload.timestampEvento).toISOString(),
       tipoEvento: payload.tipoEvento,
     };
+    // Rodada 146: o fuso só entra no payload canônico quando existe. Assim o
+    // JSON (e o hash) de todo registro anterior a esta rodada continua
+    // IDÊNTICO, e o fuso dos registros novos fica coberto pela assinatura.
+    if (payload.fusoOffsetMin !== null && payload.fusoOffsetMin !== undefined) {
+      ordenado.fusoOffsetMin = payload.fusoOffsetMin;
+    }
     return JSON.stringify(ordenado);
   }
 
@@ -117,6 +125,7 @@ export class HashChainService {
       odometro: number | null;
       observacao: string | null;
       deviceUuidUsado: string;
+      fusoOffsetMin?: number | null;
     }>,
   ): {
     valido: boolean;
@@ -167,6 +176,7 @@ export class HashChainService {
           observacao: registro.observacao,
           sequencial: registro.sequencial,
           deviceUuidUsado: registro.deviceUuidUsado,
+          fusoOffsetMin: registro.fusoOffsetMin ?? null,
         },
       );
 
