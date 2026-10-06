@@ -295,6 +295,16 @@ export class DashboardService {
           tiposAlvo.has(l.tipoEvento),
         );
         const agora = new Date();
+        // Rodada 159: em "Motoristas em direção" o detalhe traz há quanto
+        // tempo o motorista está em direção contínua e em que faixa está
+        // (normal / atenção 5h / crítico 5h30 = limite excedido).
+        const direcaoContinua =
+          card === 'em-direcao'
+            ? await this.direcaoContinuaPorMotorista(
+                filtrados.map((l) => l.motoristaId),
+                agora,
+              )
+            : new Map<string, number>();
         return {
           tipo: 'motoristas' as const,
           itens: filtrados
@@ -310,7 +320,9 @@ export class DashboardService {
               detalhe:
                 card === 'jornada-aberta-sem-sub-evento'
                   ? `Tempo indefinido há ${this.formatarHorasMinutos((agora.getTime() - l.timestampEvento.getTime()) / 60000)} (desde ${marcarHorario(l.timestampEvento)})`
-                  : `${l.tipoEvento} às ${marcarHorario(l.timestampEvento)}`,
+                  : card === 'em-direcao' && direcaoContinua.has(l.motoristaId)
+                    ? `${l.tipoEvento} às ${marcarHorario(l.timestampEvento)} · ${this.descreverDirecaoContinua(direcaoContinua.get(l.motoristaId)!)}`
+                    : `${l.tipoEvento} às ${marcarHorario(l.timestampEvento)}`,
             }))
             .sort((a, b) => a.nome.localeCompare(b.nome)),
         };
@@ -931,11 +943,85 @@ export class DashboardService {
     `);
   }
 
+  /**
+   * Rodada 159: minutos de direção contínua (desde a última pausa de
+   * descanso de 30min+ da jornada corrente) de cada motorista, mesma
+   * regra de `JornadaLegalService.calcularAcumuladosDirecao`.
+   */
+  private async direcaoContinuaPorMotorista(
+    motoristaIds: string[],
+    agora: Date,
+  ): Promise<Map<string, number>> {
+    const resultado = new Map<string, number>();
+    if (motoristaIds.length === 0) return resultado;
+
+    const eventos = await this.prisma.registroJornada.findMany({
+      where: { motoristaId: { in: motoristaIds } },
+      select: { motoristaId: true, tipoEvento: true, timestampEvento: true },
+      orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
+    });
+    const porMotorista = new Map<string, typeof eventos>();
+    for (const e of eventos) {
+      const lista = porMotorista.get(e.motoristaId) ?? [];
+      lista.push(e);
+      porMotorista.set(e.motoristaId, lista);
+    }
+
+    const PAUSA_QUALIFICADA_MS = 30 * 60000;
+    for (const [motoristaId, todos] of porMotorista) {
+      let idxInicio = 0;
+      for (let i = todos.length - 1; i >= 0; i--) {
+        if (todos[i].tipoEvento === 'INICIO_JORNADA') {
+          idxInicio = i;
+          break;
+        }
+      }
+      const jornada = todos.slice(idxInicio);
+      const intervalos = (tipoInicio: string, tipoFim: string) => {
+        const lista: Array<{ inicio: number; fim: number }> = [];
+        let aberto: number | null = null;
+        for (const r of jornada) {
+          if (r.tipoEvento === tipoInicio) aberto = r.timestampEvento.getTime();
+          else if (r.tipoEvento === tipoFim && aberto !== null) {
+            lista.push({ inicio: aberto, fim: r.timestampEvento.getTime() });
+            aberto = null;
+          }
+        }
+        if (aberto !== null) lista.push({ inicio: aberto, fim: agora.getTime() });
+        return lista;
+      };
+      const direcao = intervalos('INICIO_DIRECAO', 'FIM_DIRECAO');
+      const pausas = intervalos('INICIO_DESCANSO', 'FIM_DESCANSO')
+        .filter((p) => p.fim - p.inicio >= PAUSA_QUALIFICADA_MS)
+        .sort((a, b) => b.fim - a.fim);
+      const corte = pausas[0]?.fim ?? jornada[0].timestampEvento.getTime();
+      const ms = direcao
+        .filter((i) => i.fim > corte)
+        .reduce((acc, i) => acc + (i.fim - Math.max(i.inicio, corte)), 0);
+      resultado.set(motoristaId, ms / 60000);
+    }
+    return resultado;
+  }
+
+  /** Texto do indicador "Motoristas em direção": tempo contínuo + faixa (limites 5h atenção, 5h30 crítico/excedido). */
+  private descreverDirecaoContinua(minutos: number): string {
+    const tempo = this.formatarHorasMinutos(minutos);
+    if (minutos >= 330) {
+      return `Direção contínua há ${tempo} · CRÍTICO: limite de 05:30 excedido em ${this.formatarHorasMinutos(minutos - 330)}`;
+    }
+    if (minutos >= 300) {
+      return `Direção contínua há ${tempo} · ATENÇÃO: faltam ${this.formatarHorasMinutos(330 - minutos)} para o limite de 05:30`;
+    }
+    return `Direção contínua há ${tempo} · Normal (atenção a partir de 05:00)`;
+  }
+
   /** "70" -> "01:10". Mesmo padrão de formatação de duração já usado em JornadaLegalService.formatarHoras , nunca minutos crus nas mensagens exibidas. */
   private formatarHorasMinutos(minutos: number): string {
     const totalMin = Math.max(0, Math.round(minutos));
+    // Rodada 159: abaixo de 1h só o número de minutos ("55 m").
+    if (totalMin < 60) return `${totalMin} m`;
     const h = Math.floor(totalMin / 60);
     const m = totalMin % 60;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} h`;
   }
 }
