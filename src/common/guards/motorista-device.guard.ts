@@ -5,6 +5,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'crypto';
+import {
+  conferirChaveDispositivo,
+  hashChaveDispositivo,
+} from '../crypto/device-key-hash.util';
+import { DeviceAuthLimiterService } from '../throttler/device-auth-limiter.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../tenant/tenant-context';
 
@@ -25,10 +30,16 @@ import { TenantContext } from '../tenant/tenant-context';
  */
 @Injectable()
 export class MotoristaDeviceGuard implements CanActivate {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly limiter: DeviceAuthLimiterService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
+    const ip: string = request.ip ?? 'desconhecido';
+    // Rodada 165: IP já bloqueado por falhas anteriores nem chega a autenticar (429).
+    await this.limiter.exigirNaoBloqueado(ip);
     const motoristaId = request.headers['x-motorista-id'];
     const deviceKey = request.headers['x-device-key'];
     const deviceUuid = request.headers['x-device-uuid'];
@@ -41,6 +52,7 @@ export class MotoristaDeviceGuard implements CanActivate {
       typeof deviceKey !== 'string' ||
       typeof deviceUuid !== 'string'
     ) {
+      await this.limiter.registrarFalha(ip, 'sem-credenciais');
       throw new UnauthorizedException('Credenciais de dispositivo ausentes');
     }
 
@@ -67,6 +79,7 @@ export class MotoristaDeviceGuard implements CanActivate {
       motorista.status !== 'ATIVO' ||
       !motorista.dispositivoVinculado
     ) {
+      await this.limiter.registrarFalha(ip, motoristaId);
       throw new UnauthorizedException('Dispositivo não autorizado');
     }
 
@@ -80,15 +93,29 @@ export class MotoristaDeviceGuard implements CanActivate {
       .digest();
     const uuidOk = timingSafeEqual(uuidRecebido, uuidVinculado);
 
-    const chaveRecebida = createHash('sha256').update(deviceKey).digest();
-    const chaveArmazenada = Buffer.from(vinculo.deviceApiKeyHash, 'hex');
-    const chaveOk =
-      chaveRecebida.length === chaveArmazenada.length &&
-      timingSafeEqual(chaveRecebida, chaveArmazenada);
+    const { ok: chaveOk, precisaMigrar } = conferirChaveDispositivo(
+      deviceKey,
+      vinculo.deviceApiKeyHash,
+    );
 
     if (!uuidOk || !chaveOk) {
+      await this.limiter.registrarFalha(ip, motoristaId);
       throw new UnauthorizedException('Dispositivo não autorizado');
     }
+
+    // Rodada 165: hash antigo (SHA-256 simples) vira HMAC no primeiro acesso
+    // válido. Falha aqui nunca derruba a requisição (tenta de novo no próximo).
+    if (precisaMigrar) {
+      void TenantContext.paraSistema(() =>
+        this.prisma.dispositivoVinculado.update({
+          where: { id: vinculo.id },
+          data: { deviceApiKeyHash: hashChaveDispositivo(deviceKey) },
+        }),
+      ).catch(() => undefined);
+    }
+
+    // Teto de uso por aparelho/minuto (independente do IP), 429 se passar.
+    await this.limiter.limitarUso(motoristaId);
 
     request.motorista = motorista;
     request.deviceUuid = vinculo.deviceUuid;

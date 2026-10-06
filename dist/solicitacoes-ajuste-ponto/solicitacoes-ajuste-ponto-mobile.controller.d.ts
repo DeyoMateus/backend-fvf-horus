@@ -10,11 +10,11 @@ export declare class SolicitacoesAjustePontoMobileController {
         };
     }, dto: CreateSolicitacaoAjusteDto): Promise<{
         id: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         registroReferenciaId: string | null;
         justificativa: string;
         decididoPorUsuarioId: string | null;
@@ -46,11 +46,11 @@ export declare class SolicitacoesAjustePontoMobileController {
         } | null;
     } & {
         id: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         registroReferenciaId: string | null;
         justificativa: string;
         decididoPorUsuarioId: string | null;

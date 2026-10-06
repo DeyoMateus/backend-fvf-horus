@@ -21,6 +21,7 @@ const envelope_encryption_service_1 = require("../common/crypto/envelope-encrypt
 const hash_chain_service_1 = require("../common/hash-chain/hash-chain.service");
 const prisma_service_1 = require("../common/prisma/prisma.service");
 const pagination_util_1 = require("../common/pagination/pagination.util");
+const device_key_hash_util_1 = require("../common/crypto/device-key-hash.util");
 let AjudantesService = class AjudantesService {
     prisma;
     hashChain;
@@ -256,9 +257,7 @@ let AjudantesService = class AjudantesService {
             throw new common_1.ConflictException('Este aparelho já está vinculado a outro ajudante');
         }
         const deviceApiKeyPlano = (0, crypto_1.randomBytes)(32).toString('hex');
-        const deviceApiKeyHash = (0, crypto_1.createHash)('sha256')
-            .update(deviceApiKeyPlano)
-            .digest('hex');
+        const deviceApiKeyHash = (0, device_key_hash_util_1.hashChaveDispositivo)(deviceApiKeyPlano);
         const vinculo = await this.prisma.dispositivoVinculadoAjudante.upsert({
             where: { ajudanteId },
             update: {

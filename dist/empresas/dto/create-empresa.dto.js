@@ -11,10 +11,12 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateEmpresaDto = void 0;
 const class_validator_1 = require("class-validator");
+const fuso_brasil_util_1 = require("../../common/fuso/fuso-brasil.util");
 const sanitizar_decorator_1 = require("../../common/sanitizacao/sanitizar.decorator");
 class CreateEmpresaDto {
     razaoSocial;
     cnpj;
+    fusoHorario;
 }
 exports.CreateEmpresaDto = CreateEmpresaDto;
 __decorate([
@@ -29,4 +31,9 @@ __decorate([
     (0, class_validator_1.Matches)(/^\d{14}$/, { message: 'cnpj deve conter 14 dígitos numéricos' }),
     __metadata("design:type", String)
 ], CreateEmpresaDto.prototype, "cnpj", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(fuso_brasil_util_1.FUSOS_EMPRESA_PERMITIDOS, { message: 'fusoHorario inválido' }),
+    __metadata("design:type", String)
+], CreateEmpresaDto.prototype, "fusoHorario", void 0);
 //# sourceMappingURL=create-empresa.dto.js.map

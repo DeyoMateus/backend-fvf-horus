@@ -9,4 +9,5 @@ export declare class CreateRegistroJornadaDto {
     idempotencyKey?: string;
     flagsIntegridadeDispositivo?: string[];
     elapsedRealtimeMs?: number;
+    fusoOffsetMin?: number;
 }

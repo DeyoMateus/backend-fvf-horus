@@ -12,4 +12,5 @@ export declare class PushNotificationsService {
     private readonly logger;
     constructor(fila: Queue<JobNotificacaoPush>, prisma: PrismaService);
     notificarMotorista(motoristaId: string, titulo: string, corpo: string, dados?: Record<string, unknown>): Promise<void>;
+    private offsetAtualDoMotorista;
 }

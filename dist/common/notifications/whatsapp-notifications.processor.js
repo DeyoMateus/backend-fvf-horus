@@ -15,6 +15,32 @@ let WhatsappNotificationsProcessor = WhatsappNotificationsProcessor_1 = class Wh
     logger = new common_1.Logger(WhatsappNotificationsProcessor_1.name);
     async process(job) {
         const { telefone, mensagem } = job.data;
+        const evolutionUrl = process.env.EVOLUTION_API_URL;
+        const evolutionKey = process.env.EVOLUTION_API_KEY;
+        const evolutionInstancia = process.env.EVOLUTION_INSTANCE;
+        if (evolutionUrl && evolutionKey && evolutionInstancia) {
+            const resp = await fetch(`${evolutionUrl.replace(/\/+$/, '')}/message/sendText/${encodeURIComponent(evolutionInstancia)}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    apikey: evolutionKey,
+                },
+                body: JSON.stringify({
+                    number: telefone.replace(/\D/g, ''),
+                    text: mensagem,
+                }),
+            }).catch((err) => {
+                this.logger.error(`Evolution API inacessível (${evolutionUrl}): ${err.message}`);
+                throw err;
+            });
+            if (!resp.ok) {
+                const texto = await resp.text();
+                this.logger.error(`Evolution API respondeu ${resp.status}: ${texto}`);
+                throw new Error(`Evolution API respondeu ${resp.status}: ${texto}`);
+            }
+            this.logger.log(`WhatsApp enviado via Evolution para ***${telefone.slice(-4)}.`);
+            return;
+        }
         const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
         const token = process.env.WHATSAPP_TOKEN;
         if (!phoneNumberId || !token) {

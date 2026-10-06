@@ -1106,6 +1106,11 @@ enum TipoAlertaJornada {
   /// apagado (impossível pelo trigger WORM), só fica marcado aqui pra
   /// investigação do gestor. Ver RelogioConfiavelService.resolverPendencias.
   RELOGIO_DIVERGENTE_DETECTADO_RETROATIVAMENTE
+
+  /// Rodada 165: a varredura automática da cadeia de hashes (sem ninguém
+  /// clicar em "Verificar") achou divergência ainda não aceita: possível
+  /// alteração direta no banco. Só o gestor vê; nunca aparece pro motorista.
+  INTEGRIDADE_CADEIA_VIOLADA
 }
 
 enum SeveridadeAlerta {

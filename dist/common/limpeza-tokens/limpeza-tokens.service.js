@@ -13,6 +13,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LimpezaTokensService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
+const tenant_context_1 = require("../tenant/tenant-context");
 let LimpezaTokensService = LimpezaTokensService_1 = class LimpezaTokensService {
     prisma;
     logger = new common_1.Logger(LimpezaTokensService_1.name);
@@ -39,7 +40,7 @@ let LimpezaTokensService = LimpezaTokensService_1 = class LimpezaTokensService {
         try {
             const diasRetencao = Number(process.env.DIAS_RETENCAO_TOKENS_EXPIRADOS ?? 30);
             const limite = new Date(Date.now() - diasRetencao * 24 * 60 * 60 * 1000);
-            const [refresh, resetSenha, superAdminRefresh, superAdminResetSenha] = await Promise.all([
+            const [refresh, resetSenha, superAdminRefresh, superAdminResetSenha] = await tenant_context_1.TenantContext.paraSistema(() => Promise.all([
                 this.prisma.refreshToken.deleteMany({
                     where: { expiresAt: { lt: limite } },
                 }),
@@ -52,7 +53,7 @@ let LimpezaTokensService = LimpezaTokensService_1 = class LimpezaTokensService {
                 this.prisma.superAdminPasswordResetToken.deleteMany({
                     where: { expiresAt: { lt: limite } },
                 }),
-            ]);
+            ]));
             const total = refresh.count +
                 resetSenha.count +
                 superAdminRefresh.count +

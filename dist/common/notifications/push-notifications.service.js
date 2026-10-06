@@ -18,6 +18,7 @@ const bullmq_1 = require("@nestjs/bullmq");
 const common_1 = require("@nestjs/common");
 const bullmq_2 = require("bullmq");
 const prisma_service_1 = require("../prisma/prisma.service");
+const fuso_brasil_util_1 = require("../fuso/fuso-brasil.util");
 const push_notifications_constants_1 = require("./push-notifications.constants");
 let PushNotificationsService = PushNotificationsService_1 = class PushNotificationsService {
     fila;
@@ -35,7 +36,12 @@ let PushNotificationsService = PushNotificationsService_1 = class PushNotificati
             });
             if (!vinculo?.pushToken)
                 return;
-            await this.fila.add('enviar', { pushToken: vinculo.pushToken, titulo, corpo, dados }, {
+            await this.fila.add('enviar', {
+                pushToken: vinculo.pushToken,
+                titulo,
+                corpo: (0, fuso_brasil_util_1.renderizarHorarios)(corpo, await this.offsetAtualDoMotorista(motoristaId)),
+                dados,
+            }, {
                 attempts: 3,
                 backoff: { type: 'exponential', delay: 5_000 },
                 removeOnComplete: true,
@@ -44,6 +50,19 @@ let PushNotificationsService = PushNotificationsService_1 = class PushNotificati
         }
         catch (err) {
             this.logger.error(`Falha ao enfileirar notificação push para motorista ${motoristaId}`, err);
+        }
+    }
+    async offsetAtualDoMotorista(motoristaId) {
+        try {
+            const ultimo = await this.prisma.registroJornada.findFirst({
+                where: { motoristaId, fusoOffsetMin: { not: null } },
+                orderBy: { timestampEvento: 'desc' },
+                select: { fusoOffsetMin: true },
+            });
+            return ultimo?.fusoOffsetMin ?? -180;
+        }
+        catch {
+            return -180;
         }
     }
 };

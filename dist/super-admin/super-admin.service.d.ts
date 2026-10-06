@@ -4,6 +4,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateEmpresaMaeDto } from './dto/create-empresa-mae.dto';
 import { UpdateGrupoDto } from './dto/update-grupo.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
+import { DestinatariosWhatsappUsuarioDto } from './dto/destinatarios-whatsapp-usuario.dto';
 import { UpdateUsuarioSuperAdminDto } from './dto/update-usuario-super-admin.dto';
 import { CreateUsuarioGrupoDto } from './dto/create-usuario-grupo.dto';
 import { AtualizarStatusUsuarioEmpresaDto } from '../usuarios-empresa/dto/atualizar-status-usuario-empresa.dto';
@@ -50,6 +51,7 @@ export declare class SuperAdminService {
             cnpj: string;
             ativo: boolean;
             registroInpiAfd: string | null;
+            fusoHorario: string;
             totalMotoristas: number;
         }[];
         usuarios: {
@@ -59,6 +61,10 @@ export declare class SuperAdminService {
             email: string;
             papel: import("@prisma/client").$Enums.PapelUsuario;
             ativo: boolean;
+            telefoneWhatsapp: string | null;
+            telefoneGerenciamentoRisco: string | null;
+            recebeWhatsappAlertas: boolean;
+            recebeWhatsappEquipeGr: boolean;
         }[];
     }>;
     atualizarGrupo(grupoId: string, dto: UpdateGrupoDto, superAdminId: string): Promise<{
@@ -76,6 +82,7 @@ export declare class SuperAdminService {
         cnpj: string;
         razaoSocial: string;
         registroInpiAfd: string | null;
+        fusoHorario: string;
         regraSindicalId: string | null;
     }>;
     atualizarStatusEmpresa(empresaId: string, ativo: boolean, superAdminId: string): Promise<{
@@ -87,6 +94,7 @@ export declare class SuperAdminService {
         cnpj: string;
         razaoSocial: string;
         registroInpiAfd: string | null;
+        fusoHorario: string;
         regraSindicalId: string | null;
     }>;
     atualizarUsuario(usuarioId: string, dto: UpdateUsuarioSuperAdminDto, superAdminId: string): Promise<{
@@ -96,6 +104,11 @@ export declare class SuperAdminService {
         email: string;
         papel: import("@prisma/client").$Enums.PapelUsuario;
         ativo: boolean;
+    }>;
+    atualizarDestinatariosWhatsapp(usuarioId: string, dto: DestinatariosWhatsappUsuarioDto, superAdminId: string): Promise<{
+        id: string;
+        recebeWhatsappAlertas: boolean;
+        recebeWhatsappEquipeGr: boolean;
     }>;
     criarUsuarioParaGrupo(grupoId: string, dto: CreateUsuarioGrupoDto, superAdminId: string): Promise<{
         id: string;

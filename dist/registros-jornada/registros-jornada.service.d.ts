@@ -51,14 +51,16 @@ export declare class RegistrosJornadaService {
     private obterQueueEventsLote;
     create(motoristaId: string, deviceUuidUsado: string, dto: CreateRegistroJornadaDto, ip?: string, userAgent?: string): Promise<{
         id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
         motoristaId: string;
+        observacao: string | null;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
         latitude: Prisma.Decimal | null;
         longitude: Prisma.Decimal | null;
         precisaoGpsM: number | null;
         odometro: number | null;
-        observacao: string | null;
         sequencial: number;
         hashAnterior: string;
         hashAtual: string;
@@ -67,7 +69,6 @@ export declare class RegistrosJornadaService {
         deviceUuidUsado: string;
         elapsedRealtimeMs: number | null;
         idempotencyKey: string | null;
-        createdAt: Date;
     }>;
     processarLoteSequencial(motoristaId: string, deviceUuid: string, eventos: CreateRegistroJornadaDto[], ip?: string, userAgent?: string): Promise<ResultadoItemLote[]>;
     processarLote(motoristaId: string, deviceUuid: string, eventos: CreateRegistroJornadaDto[], ip?: string, userAgent?: string): Promise<ResultadoItemLote[]>;
@@ -88,14 +89,16 @@ export declare class RegistrosJornadaService {
     private somarIntervalosSimples;
     listByMotorista(motoristaId: string, grupoIdSolicitante: string): Promise<{
         id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
         motoristaId: string;
+        observacao: string | null;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
         latitude: Prisma.Decimal | null;
         longitude: Prisma.Decimal | null;
         precisaoGpsM: number | null;
         odometro: number | null;
-        observacao: string | null;
         sequencial: number;
         hashAnterior: string;
         hashAtual: string;
@@ -104,19 +107,31 @@ export declare class RegistrosJornadaService {
         deviceUuidUsado: string;
         elapsedRealtimeMs: number | null;
         idempotencyKey: string | null;
-        createdAt: Date;
+    }[]>;
+    listarParaDispositivo(motoristaId: string, inicio?: Date, fim?: Date): Promise<{
+        idLocal: string;
+        tipoEvento: import("@prisma/client").$Enums.TipoEvento;
+        timestampEvento: string;
+        latitude: number | null;
+        longitude: number | null;
+        precisaoGpsM: number | null;
+        observacao: string | null;
+        fusoOffsetMin: number | null;
+        criadoEm: string;
     }[]>;
     buscarPorIdempotencyKey(motoristaId: string, idempotencyKey: string): Promise<RegistroJornada>;
-    listByMotoristaNoPeriodo(motoristaId: string, inicio?: Date, fim?: Date): Prisma.PrismaPromise<{
+    listByMotoristaNoPeriodo(motoristaId: string, inicio?: Date, fim?: Date, offsetEmpresaMin?: number): Prisma.PrismaPromise<{
         id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
         motoristaId: string;
+        observacao: string | null;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
         latitude: Prisma.Decimal | null;
         longitude: Prisma.Decimal | null;
         precisaoGpsM: number | null;
         odometro: number | null;
-        observacao: string | null;
         sequencial: number;
         hashAnterior: string;
         hashAtual: string;
@@ -125,7 +140,6 @@ export declare class RegistrosJornadaService {
         deviceUuidUsado: string;
         elapsedRealtimeMs: number | null;
         idempotencyKey: string | null;
-        createdAt: Date;
     }[]>;
     private explicarDivergencia;
     verificarIntegridade(motoristaId: string, actorId: string | undefined, grupoIdSolicitante: string): Promise<{
@@ -152,6 +166,60 @@ export declare class RegistrosJornadaService {
         certificadoFingerprintOk: boolean;
         assinaturasInvalidas: number[];
         integro: boolean;
+    }>;
+    varrerIntegridadeCadeias(): Promise<{
+        verificados: number;
+        comViolacao: number;
+        alertasCriados: number;
+    }>;
+    analisarEventoIntegridade(motoristaId: string, sequencial: number, grupoIdSolicitante: string): Promise<{
+        motoristaId: string;
+        divergente: boolean;
+        explicacao: string;
+        evento: {
+            sequencial: number;
+            tipoEvento: import("@prisma/client").$Enums.TipoEvento;
+            timestampEvento: Date;
+            criadoEm: Date;
+            latitude: number | null;
+            longitude: number | null;
+            precisaoGpsM: number | null;
+            odometro: number | null;
+            observacao: string | null;
+            fusoOffsetMin: number | null;
+            deviceUuidUsado: string;
+        };
+        anterior: {
+            sequencial: number;
+            tipoEvento: import("@prisma/client").$Enums.TipoEvento;
+            timestampEvento: Date;
+            criadoEm: Date;
+        } | null;
+        proximo: {
+            sequencial: number;
+            tipoEvento: import("@prisma/client").$Enums.TipoEvento;
+            timestampEvento: Date;
+            criadoEm: Date;
+        } | null;
+        verificacao: {
+            hashAnteriorConfere: boolean;
+            hashAnteriorGravado: string;
+            hashAnteriorEsperado: string;
+            hashConfere: boolean;
+            hashGravado: string;
+            hashRecalculado: string;
+            payloadCanonico: string;
+            tentativas: {
+                descricao: string;
+                bate: boolean;
+            }[];
+            variacaoQueBate: string | null;
+        };
+        aceite: {
+            motivo: string;
+            aceitoPorNome: string;
+            aceitoEm: Date;
+        } | null;
     }>;
     aceitarDivergenciaIntegridade(motoristaId: string, sequencial: number, motivo: string, usuarioId: string, grupoIdSolicitante: string): Promise<{
         aceitoPorUsuario: {

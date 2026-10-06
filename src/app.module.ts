@@ -43,6 +43,7 @@ import { DossieCobrancaModule } from './dossie-cobranca/dossie-cobranca.module';
 import { FechamentoFiscalModule } from './fechamento-fiscal/fechamento-fiscal.module';
 import { LimpezaTokensModule } from './common/limpeza-tokens/limpeza-tokens.module';
 import { RedisThrottlerStorageService } from './common/throttler/redis-throttler-storage.service';
+import { AppThrottlerStorageModule } from './common/throttler/throttler.module';
 import { TenantContextInterceptor } from './common/tenant/tenant-context.interceptor';
 import { FusoClienteInterceptor } from './common/fuso/fuso-cliente.interceptor';
 
@@ -52,14 +53,15 @@ import { FusoClienteInterceptor } from './common/fuso/fuso-cliente.interceptor';
     // Rate limiting global (defesa contra brute force / DoS de aplicação).
     // Endpoints sensíveis (login) sobrescrevem com limites mais estritos via @Throttle.
     ThrottlerModule.forRootAsync({
-      imports: [],
-      useFactory: () => ({
+      imports: [AppThrottlerStorageModule],
+      inject: [RedisThrottlerStorageService],
+      useFactory: (storage: RedisThrottlerStorageService) => ({
         throttlers: [{ ttl: 60_000, limit: 60 }],
         // Storage no Redis (não o Map em memória padrão) , necessário pra
         // o limite valer de fato quando a API escalar pra mais de uma
         // instância atrás de um load balancer (meta de "milhares de
         // requisições simultâneas", item 4 do roadmap).
-        storage: new RedisThrottlerStorageService(),
+        storage,
       }),
     }),
     // Conexão única com o Redis para todas as filas BullMQ do app

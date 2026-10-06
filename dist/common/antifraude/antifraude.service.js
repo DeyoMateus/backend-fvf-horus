@@ -8,6 +8,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AntifraudeService = void 0;
 const common_1 = require("@nestjs/common");
+const fuso_brasil_util_1 = require("../fuso/fuso-brasil.util");
 const client_1 = require("@prisma/client");
 const ordenacao_temporal_util_1 = require("../ordenacao-temporal.util");
 const VELOCIDADE_MAXIMA_KMH = 150;
@@ -80,7 +81,7 @@ let AntifraudeService = class AntifraudeService {
         return {
             tipo: client_1.TipoAlertaJornada.RELOGIO_DISPOSITIVO_SUSPEITO,
             severidade: client_1.SeveridadeAlerta.CRITICO,
-            mensagem: `O horário informado pelo aparelho (${atual.timestampEvento.toLocaleString('pt-BR')}) está ` +
+            mensagem: `O horário informado pelo aparelho (${(0, fuso_brasil_util_1.marcarHorario)(atual.timestampEvento)}) está ` +
                 `${this.formatarHoras(minutosNoFuturo)} no futuro em relação ao horário em que o servidor recebeu o registro , ` +
                 `só é possível com o relógio do aparelho adiantado de propósito.`,
             janelaInicio: horaRecebimentoServidor,
@@ -101,7 +102,7 @@ let AntifraudeService = class AntifraudeService {
         return {
             tipo: client_1.TipoAlertaJornada.SINCRONIZACAO_TARDIA_SUSPEITA,
             severidade: critico ? client_1.SeveridadeAlerta.CRITICO : client_1.SeveridadeAlerta.ATENCAO,
-            mensagem: `Este evento (${atual.timestampEvento.toLocaleString('pt-BR')}) só chegou ao servidor ` +
+            mensagem: `Este evento (${(0, fuso_brasil_util_1.marcarHorario)(atual.timestampEvento)}) só chegou ao servidor ` +
                 `${this.formatarHoras(minutosDeAtraso)} depois do horário que alega , bem mais do que uma sincronização ` +
                 `normal após período sem sinal. Pode ser legítimo (motorista ficou horas sem cobertura), mas é também o ` +
                 `mesmo padrão de atrasar o relógio do aparelho antes de bater o ponto.` +

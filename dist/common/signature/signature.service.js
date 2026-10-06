@@ -41,6 +41,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SignatureService = void 0;
 const common_1 = require("@nestjs/common");
+const crypto_1 = require("crypto");
 const forge = __importStar(require("node-forge"));
 let SignatureService = class SignatureService {
     assinar(privateKey, conteudo) {
@@ -51,11 +52,9 @@ let SignatureService = class SignatureService {
     }
     verificar(certificadoPem, conteudo, assinaturaBase64) {
         try {
-            const cert = forge.pki.certificateFromPem(certificadoPem);
-            const md = forge.md.sha256.create();
-            md.update(conteudo, 'utf8');
-            const signature = forge.util.decode64(assinaturaBase64);
-            return cert.publicKey.verify(md.digest().bytes(), signature);
+            const verificador = (0, crypto_1.createVerify)('RSA-SHA256');
+            verificador.update(conteudo, 'utf8');
+            return verificador.verify(certificadoPem, assinaturaBase64, 'base64');
         }
         catch {
             return false;

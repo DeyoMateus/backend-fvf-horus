@@ -14,6 +14,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FechamentoFiscalService = void 0;
 const common_1 = require("@nestjs/common");
+const fuso_contexto_1 = require("../common/fuso/fuso-contexto");
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const pdf_lib_1 = require("pdf-lib");
 const client_1 = require("@prisma/client");
@@ -21,6 +22,7 @@ const prisma_service_1 = require("../common/prisma/prisma.service");
 const registros_jornada_service_1 = require("../registros-jornada/registros-jornada.service");
 const rep_p_service_1 = require("../common/rep-p/rep-p.service");
 const feriados_service_1 = require("../feriados/feriados.service");
+const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
 const INCLUDE_EMPRESA_COM_REGRA_SINDICAL = {
     empresa: {
         select: {
@@ -28,6 +30,7 @@ const INCLUDE_EMPRESA_COM_REGRA_SINDICAL = {
             cnpj: true,
             regraSindical: true,
             grupoId: true,
+            fusoHorario: true,
         },
     },
     dispositivoVinculado: { select: { deviceUuid: true } },
@@ -67,12 +70,16 @@ let FechamentoFiscalService = class FechamentoFiscalService {
             await this.gerarCapa(motoristas.map((m) => m.nome), dataInicio, dataFim),
         ];
         for (const motorista of motoristas) {
+            const offsetEmpresaMin = (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(motorista.empresa.fusoHorario);
             const [registros, tratamentos, feriadosRaw] = await Promise.all([
-                this.registrosJornada.listByMotoristaNoPeriodo(motorista.id, dataInicio, dataFim),
+                this.registrosJornada.listByMotoristaNoPeriodo(motorista.id, dataInicio, dataFim, offsetEmpresaMin),
                 this.prisma.tratamentoPonto.findMany({
                     where: {
                         motoristaId: motorista.id,
-                        timestampEvento: { gte: dataInicio, lte: dataFim },
+                        timestampEvento: {
+                            gte: (0, fuso_brasil_util_1.inicioDePeriodoBrt)(dataInicio, offsetEmpresaMin),
+                            lte: (0, fuso_brasil_util_1.fimDePeriodoBrt)(dataFim, offsetEmpresaMin),
+                        },
                     },
                     orderBy: { timestampEvento: 'asc' },
                     include: { usuario: { select: { nome: true } } },
@@ -104,7 +111,7 @@ let FechamentoFiscalService = class FechamentoFiscalService {
             .fontSize(9)
             .fillColor('#374151')
             .text(`Período: ${dataInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${dataFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}   |   ` +
-            `${nomesMotoristas.length} motorista(s)   |   Gerado em: ${new Date().toLocaleString('pt-BR')}`, { align: 'center' });
+            `${nomesMotoristas.length} motorista(s)   |   Gerado em: ${(0, fuso_contexto_1.agoraDoCliente)()}`, { align: 'center' });
         doc.moveDown();
         doc
             .fontSize(8)

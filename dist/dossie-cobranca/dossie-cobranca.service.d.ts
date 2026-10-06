@@ -10,13 +10,19 @@ export interface ItemDossieCobranca {
     intervalos: {
         inicio: string;
         fim: string;
+        fusoInicioMin?: number;
+        fusoFimMin?: number;
     }[];
     registroGeradorId: string;
     observacao: string;
     criadoEm: Date;
+    fusoPeriodoInicioMin?: number;
+    fusoPeriodoFimMin?: number;
+    fusoCriadoEmMin?: number;
 }
 export declare class DossieCobrancaService {
     private readonly prisma;
     constructor(prisma: PrismaService);
     listar(grupoId: string, inicio: Date, fim: Date, motoristaId?: string): Promise<ItemDossieCobranca[]>;
+    private linhasDeFuso;
 }

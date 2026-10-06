@@ -31,6 +31,12 @@ let TratamentosPontoController = class TratamentosPontoController {
     create(motoristaId, dto, user) {
         return this.tratamentosService.create(motoristaId, dto, user.sub, user.grupoId);
     }
+    contexto(motoristaId, timestamp, user) {
+        const data = new Date(timestamp);
+        if (!timestamp || Number.isNaN(data.getTime()))
+            throw new common_1.BadRequestException('Informe "timestamp" em ISO 8601');
+        return this.tratamentosService.contextoDoAjuste(motoristaId, data, user.grupoId);
+    }
     list(motoristaId, user) {
         return this.tratamentosService.listByMotorista(motoristaId, user.grupoId);
     }
@@ -63,6 +69,15 @@ __decorate([
     __metadata("design:paramtypes", [String, create_tratamento_ponto_dto_1.CreateTratamentoPontoDto, Object]),
     __metadata("design:returntype", void 0)
 ], TratamentosPontoController.prototype, "create", null);
+__decorate([
+    (0, common_1.Get)('contexto'),
+    __param(0, (0, common_1.Param)('motoristaId')),
+    __param(1, (0, common_1.Query)('timestamp')),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", void 0)
+], TratamentosPontoController.prototype, "contexto", null);
 __decorate([
     (0, common_1.Get)(),
     __param(0, (0, common_1.Param)('motoristaId')),

@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TratamentosPontoService = void 0;
 const common_1 = require("@nestjs/common");
+const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
 const client_1 = require("@prisma/client");
 const crypto_1 = require("crypto");
 const audit_service_1 = require("../common/audit/audit.service");
@@ -20,6 +21,7 @@ const prisma_service_1 = require("../common/prisma/prisma.service");
 const storage_service_1 = require("../common/storage/storage.service");
 const tenant_service_1 = require("../common/tenant/tenant.service");
 const registros_jornada_service_1 = require("../registros-jornada/registros-jornada.service");
+const validacao_sequencia_ajuste_1 = require("./validacao-sequencia-ajuste");
 const TAMANHO_MAXIMO_EVIDENCIA_BYTES = 25 * 1024 * 1024;
 const MAXIMO_EVIDENCIAS_POR_TRATAMENTO = 4;
 let TratamentosPontoService = class TratamentosPontoService {
@@ -42,7 +44,7 @@ let TratamentosPontoService = class TratamentosPontoService {
     async create(motoristaId, dto, usuarioId, grupoIdSolicitante) {
         await this.tenant.verificarMotoristaNoGrupo(motoristaId, grupoIdSolicitante);
         await this.tenant.verificarMotoristaAtivo(motoristaId);
-        const tratamento = await this.criarRegistroAncorado(motoristaId, dto.tipoEvento, new Date(dto.timestampEvento), dto.motivo, usuarioId, dto.registroReferenciaId);
+        const tratamento = await this.criarRegistroAncorado(motoristaId, dto.tipoEvento, new Date(dto.timestampEvento), dto.motivo, usuarioId, dto.registroReferenciaId, dto.fusoOffsetMin);
         await this.audit.registrar({
             actorType: client_1.ActorType.USUARIO_EMPRESA,
             actorId: usuarioId,
@@ -51,10 +53,94 @@ let TratamentosPontoService = class TratamentosPontoService {
             entidadeId: tratamento.id,
             detalhes: { motoristaId, tipoEvento: dto.tipoEvento, motivo: dto.motivo },
         });
-        await this.push.notificarMotorista(motoristaId, 'Ajuste no seu ponto', `A empresa registrou um ajuste (${dto.tipoEvento}) referente a ${new Date(dto.timestampEvento).toLocaleString('pt-BR')}. Toque para ver o motivo e os comprovantes.`, { tipo: 'TRATAMENTO_PONTO', tratamentoId: tratamento.id });
+        await this.push.notificarMotorista(motoristaId, 'Ajuste no seu ponto', `A empresa registrou um ajuste (${dto.tipoEvento}) referente a ${(0, fuso_brasil_util_1.marcarHorario)(new Date(dto.timestampEvento))}. Toque para ver o motivo e os comprovantes.`, { tipo: 'TRATAMENTO_PONTO', tratamentoId: tratamento.id });
         return tratamento;
     }
-    async criarRegistroAncorado(motoristaId, tipoEvento, timestampEvento, motivo, usuarioId, registroReferenciaId) {
+    async fusoDoMotoristaNoInstante(motoristaId, instante, informado) {
+        if ((0, fuso_brasil_util_1.offsetValido)(informado))
+            return informado;
+        try {
+            const antes = await this.prisma.registroJornada.findFirst({
+                where: {
+                    motoristaId,
+                    timestampEvento: { lte: instante },
+                    fusoOffsetMin: { not: null },
+                },
+                orderBy: { timestampEvento: 'desc' },
+                select: { fusoOffsetMin: true },
+            });
+            if (antes?.fusoOffsetMin != null)
+                return antes.fusoOffsetMin;
+            const depois = await this.prisma.registroJornada.findFirst({
+                where: {
+                    motoristaId,
+                    timestampEvento: { gt: instante },
+                    fusoOffsetMin: { not: null },
+                },
+                orderBy: { timestampEvento: 'asc' },
+                select: { fusoOffsetMin: true },
+            });
+            return depois?.fusoOffsetMin ?? null;
+        }
+        catch {
+            return null;
+        }
+    }
+    async validarEncaixeNaJornada(motoristaId, tipoEvento, timestampEvento) {
+        const [regAnt, tratAnt, regPost, tratPost] = await Promise.all([
+            this.prisma.registroJornada.findMany({
+                where: { motoristaId, timestampEvento: { lte: timestampEvento } },
+                orderBy: [{ timestampEvento: 'desc' }, { sequencial: 'desc' }],
+                take: 100,
+                select: { tipoEvento: true, timestampEvento: true },
+            }),
+            this.prisma.tratamentoPonto.findMany({
+                where: { motoristaId, timestampEvento: { lte: timestampEvento } },
+                orderBy: [{ timestampEvento: 'desc' }, { createdAt: 'desc' }],
+                take: 100,
+                select: { tipoEvento: true, timestampEvento: true },
+            }),
+            this.prisma.registroJornada.findMany({
+                where: { motoristaId, timestampEvento: { gt: timestampEvento } },
+                orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
+                take: 20,
+                select: { tipoEvento: true, timestampEvento: true },
+            }),
+            this.prisma.tratamentoPonto.findMany({
+                where: { motoristaId, timestampEvento: { gt: timestampEvento } },
+                orderBy: [{ timestampEvento: 'asc' }, { createdAt: 'asc' }],
+                take: 20,
+                select: { tipoEvento: true, timestampEvento: true },
+            }),
+        ]);
+        const porHorario = (a, b) => a.timestampEvento.getTime() - b.timestampEvento.getTime();
+        const anteriores = [...regAnt, ...tratAnt].sort(porHorario);
+        const posteriores = [...regPost, ...tratPost].sort(porHorario);
+        return (0, validacao_sequencia_ajuste_1.validarSequenciaAjuste)(tipoEvento, anteriores, posteriores);
+    }
+    async contextoDoAjuste(motoristaId, timestampEvento, grupoIdSolicitante) {
+        await this.tenant.verificarMotoristaNoGrupo(motoristaId, grupoIdSolicitante);
+        const todos = [
+            'INICIO_JORNADA',
+            'INICIO_DESCANSO',
+            'FIM_DESCANSO',
+            'INICIO_DIRECAO',
+            'FIM_DIRECAO',
+            'ESPERA_CARGA_DESCARGA',
+            'FIM_ESPERA_CARGA_DESCARGA',
+            'FIM_DESCARREGAMENTO',
+            'FIM_JORNADA',
+            'OUTRO',
+        ];
+        const permitidos = [];
+        for (const t of todos) {
+            const r = await this.validarEncaixeNaJornada(motoristaId, t, timestampEvento);
+            if (r.ok)
+                permitidos.push(t);
+        }
+        return { permitidos };
+    }
+    async criarRegistroAncorado(motoristaId, tipoEvento, timestampEvento, motivo, usuarioId, registroReferenciaId, fusoOffsetMin) {
         const motorista = await this.prisma.motorista.findUnique({
             where: { id: motoristaId },
         });
@@ -73,11 +159,15 @@ let TratamentosPontoService = class TratamentosPontoService {
                 throw new common_1.BadRequestException('registroReferenciaId não pertence a este motorista');
             }
         }
+        const validacao = await this.validarEncaixeNaJornada(motoristaId, tipoEvento, timestampEvento);
+        if (!validacao.ok)
+            throw new common_1.BadRequestException(validacao.mensagem);
         const ultimoRegistro = await this.prisma.registroJornada.findFirst({
             where: { motoristaId },
             orderBy: { sequencial: 'desc' },
         });
         const hashReferencia = ultimoRegistro?.hashAtual ?? motorista.hashGenesis;
+        const fusoDoAjuste = await this.fusoDoMotoristaNoInstante(motoristaId, timestampEvento, fusoOffsetMin);
         const canonico = JSON.stringify({
             motivo,
             motoristaId,
@@ -95,6 +185,7 @@ let TratamentosPontoService = class TratamentosPontoService {
                 timestampEvento,
                 motivo,
                 registroReferenciaId,
+                fusoOffsetMin: fusoDoAjuste,
                 hashReferencia,
                 hashRegistro,
             },

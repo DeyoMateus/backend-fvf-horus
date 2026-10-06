@@ -25,6 +25,7 @@ let AccountLockoutService = class AccountLockoutService {
         this.redis = new ioredis_1.Redis({
             host: process.env.REDIS_HOST ?? 'localhost',
             port: Number(process.env.REDIS_PORT ?? 6379),
+            password: process.env.REDIS_PASSWORD || undefined,
             maxRetriesPerRequest: 1,
             retryStrategy: (times) => Math.min(times * 200, 2000),
             lazyConnect: false,

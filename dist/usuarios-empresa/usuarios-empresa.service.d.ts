@@ -15,6 +15,7 @@ export declare class UsuariosEmpresaService {
         papel: import("@prisma/client").$Enums.PapelUsuario;
         ativo: boolean;
         telefoneWhatsapp: string | null;
+        telefoneGerenciamentoRisco: string | null;
     }>;
     list(grupoIdSolicitante: string): import("@prisma/client").Prisma.PrismaPromise<{
         id: string;
@@ -24,6 +25,7 @@ export declare class UsuariosEmpresaService {
         papel: import("@prisma/client").$Enums.PapelUsuario;
         ativo: boolean;
         telefoneWhatsapp: string | null;
+        telefoneGerenciamentoRisco: string | null;
     }[]>;
     atualizarStatus(id: string, dto: AtualizarStatusUsuarioEmpresaDto, grupoIdSolicitante: string, actorId: string): Promise<{
         id: string;
@@ -33,6 +35,7 @@ export declare class UsuariosEmpresaService {
         papel: import("@prisma/client").$Enums.PapelUsuario;
         ativo: boolean;
         telefoneWhatsapp: string | null;
+        telefoneGerenciamentoRisco: string | null;
     }>;
     obterMeuPerfil(usuarioId: string): Promise<{
         id: string;
@@ -42,6 +45,7 @@ export declare class UsuariosEmpresaService {
         papel: import("@prisma/client").$Enums.PapelUsuario;
         ativo: boolean;
         telefoneWhatsapp: string | null;
+        telefoneGerenciamentoRisco: string | null;
     }>;
     atualizarMeuPerfil(usuarioId: string, dto: UpdatePerfilProprioDto): Promise<{
         id: string;
@@ -51,5 +55,6 @@ export declare class UsuariosEmpresaService {
         papel: import("@prisma/client").$Enums.PapelUsuario;
         ativo: boolean;
         telefoneWhatsapp: string | null;
+        telefoneGerenciamentoRisco: string | null;
     }>;
 }

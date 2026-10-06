@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { createVerify } from 'crypto';
 import * as forge from 'node-forge';
 
 /**
@@ -25,14 +26,14 @@ export class SignatureService {
     assinaturaBase64: string,
   ): boolean {
     try {
-      const cert = forge.pki.certificateFromPem(certificadoPem);
-      const md = forge.md.sha256.create();
-      md.update(conteudo, 'utf8');
-      const signature = forge.util.decode64(assinaturaBase64);
-      return (cert.publicKey as forge.pki.rsa.PublicKey).verify(
-        md.digest().bytes(),
-        signature,
-      );
+      // Rodada 165: verificação com o `crypto` nativo do Node (OpenSSL), não
+      // com o node-forge, cuja checagem de assinatura RSA PKCS#1 v1.5 tem
+      // advisory sem correção (GHSA-86w9-cpqp-85rv). A assinatura (forge)
+      // é o mesmo RSA-SHA256 PKCS#1 v1.5, então as já gravadas continuam
+      // válidas; o node aceita o certificado X.509 em PEM como chave pública.
+      const verificador = createVerify('RSA-SHA256');
+      verificador.update(conteudo, 'utf8');
+      return verificador.verify(certificadoPem, assinaturaBase64, 'base64');
     } catch {
       return false;
     }

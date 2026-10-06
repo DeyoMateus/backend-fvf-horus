@@ -5,6 +5,7 @@ export declare class DashboardController {
     constructor(dashboardService: DashboardService);
     resumo(user: UsuarioAutenticado): Promise<{
         atualizadoEm: string;
+        fusoHorario: string;
         motoristas: {
             totalAtivos: number;
             semNenhumRegistro: number;
@@ -35,7 +36,7 @@ export declare class DashboardController {
             }[];
         };
     }>;
-    tendencia(user: UsuarioAutenticado, dias?: string, desde?: string, ate?: string): Promise<{
+    tendencia(user: UsuarioAutenticado, dias?: string, desde?: string, ate?: string, fusoOffsetMin?: string): Promise<{
         dia: string;
         registros: number;
         alertasCritico: number;
@@ -71,7 +72,7 @@ export declare class DashboardController {
             createdAt: Date;
         }[];
     }>;
-    tendenciaDetalhe(user: UsuarioAutenticado, dia: string, indicador: string): Promise<{
+    tendenciaDetalhe(user: UsuarioAutenticado, dia: string, indicador: string, fusoOffsetMin?: string): Promise<{
         tipo: "registros";
         itens: {
             registroId: string;

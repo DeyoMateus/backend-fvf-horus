@@ -17,6 +17,7 @@ const tenant_service_1 = require("../common/tenant/tenant.service");
 const holerite_service_1 = require("../holerite/holerite.service");
 const banco_horas_service_1 = require("../banco-horas/banco-horas.service");
 const dashboard_service_1 = require("../dashboard/dashboard.service");
+const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
 function bancoHorasVazio() {
     return {
         ativo: false,
@@ -93,6 +94,7 @@ let IndicadoresService = class IndicadoresService {
                 severidade: true,
                 tipo: true,
                 createdAt: true,
+                motorista: { select: { empresa: { select: { fusoHorario: true } } } },
             },
         });
         const alertasVazios = () => ({
@@ -116,7 +118,7 @@ let IndicadoresService = class IndicadoresService {
             if (dashboard_service_1.TIPOS_ALERTA_RISCO_FRAUDE.includes(a.tipo))
                 bucket.riscoFraude++;
             alertasPorMotorista.set(a.motoristaId, bucket);
-            const chaveDia = a.createdAt.toISOString().slice(0, 10);
+            const chaveDia = (0, fuso_brasil_util_1.chaveDiaBrt)(a.createdAt, (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(a.motorista?.empresa?.fusoHorario));
             alertasPorDia.set(chaveDia, (alertasPorDia.get(chaveDia) ?? 0) + 1);
         }
         const motoristasIndicadores = resultados.map((r, i) => {

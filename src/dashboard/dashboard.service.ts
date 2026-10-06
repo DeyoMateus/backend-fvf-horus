@@ -29,6 +29,7 @@ export const TIPOS_ALERTA_RISCO_FRAUDE: TipoAlertaJornada[] = [
   TipoAlertaJornada.SEQUENCIA_JORNADA_MUITO_RAPIDA,
   TipoAlertaJornada.ODOMETRO_REGRESSIVO,
   TipoAlertaJornada.INTEGRIDADE_DISPOSITIVO_SUSPEITA,
+  TipoAlertaJornada.INTEGRIDADE_CADEIA_VIOLADA,
 ];
 
 // Jornada aberta (INICIO_JORNADA sem FIM_JORNADA correspondente) por

@@ -13,6 +13,7 @@ exports.DossieCobrancaService = void 0;
 const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../common/prisma/prisma.service");
+const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
 let DossieCobrancaService = class DossieCobrancaService {
     prisma;
     constructor(prisma) {
@@ -31,12 +32,15 @@ let DossieCobrancaService = class DossieCobrancaService {
             include: { motorista: { select: { id: true, nome: true, cpf: true } } },
             orderBy: { createdAt: 'asc' },
         });
+        const linhaPorMotorista = await this.linhasDeFuso(alertas);
         return alertas
             .map((alerta) => {
             const dossie = alerta.detalhes
                 ?.dossieDeCobranca;
             if (!dossie)
                 return null;
+            const linha = linhaPorMotorista.get(alerta.motorista.id) ?? [];
+            const offEm = (iso) => (0, fuso_brasil_util_1.offsetNoInstante)(linha, new Date(iso).getTime());
             return {
                 alertaId: alerta.id,
                 motoristaId: alerta.motorista.id,
@@ -45,13 +49,51 @@ let DossieCobrancaService = class DossieCobrancaService {
                 periodoInicio: dossie.periodoInicio,
                 periodoFim: dossie.periodoFim,
                 minutosTotais: dossie.minutosTotais,
-                intervalos: dossie.intervalos,
+                intervalos: dossie.intervalos.map((i) => ({
+                    ...i,
+                    fusoInicioMin: offEm(i.inicio),
+                    fusoFimMin: offEm(i.fim),
+                })),
+                fusoPeriodoInicioMin: offEm(dossie.periodoInicio),
+                fusoPeriodoFimMin: offEm(dossie.periodoFim),
+                fusoCriadoEmMin: offEm(alerta.createdAt),
                 registroGeradorId: dossie.registroGeradorId,
                 observacao: dossie.observacao,
                 criadoEm: alerta.createdAt,
             };
         })
             .filter((item) => item !== null);
+    }
+    async linhasDeFuso(alertas) {
+        const resultado = new Map();
+        if (alertas.length === 0)
+            return resultado;
+        const ids = [...new Set(alertas.map((a) => a.motorista.id))];
+        const instantes = alertas.flatMap((a) => {
+            const d = a.detalhes
+                ?.dossieDeCobranca;
+            return [a.createdAt.getTime(), d?.periodoInicio ? new Date(d.periodoInicio).getTime() : NaN, d?.periodoFim ? new Date(d.periodoFim).getTime() : NaN].filter((n) => !Number.isNaN(n));
+        });
+        const margem = 7 * 24 * 3_600_000;
+        const registros = await this.prisma.registroJornada.findMany({
+            where: {
+                motoristaId: { in: ids },
+                timestampEvento: {
+                    gte: new Date(Math.min(...instantes) - margem),
+                    lte: new Date(Math.max(...instantes) + margem),
+                },
+            },
+            select: { motoristaId: true, timestampEvento: true, fusoOffsetMin: true },
+        });
+        for (const id of ids) {
+            resultado.set(id, (0, fuso_brasil_util_1.construirLinhaDoTempoFuso)(registros
+                .filter((r) => r.motoristaId === id)
+                .map((r) => ({
+                t: r.timestampEvento.getTime(),
+                offsetMin: r.fusoOffsetMin ?? null,
+            })), []));
+        }
+        return resultado;
     }
 };
 exports.DossieCobrancaService = DossieCobrancaService;

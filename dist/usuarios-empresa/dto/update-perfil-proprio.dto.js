@@ -16,6 +16,7 @@ class UpdatePerfilProprioDto {
     nome;
     email;
     telefoneWhatsapp;
+    telefoneGerenciamentoRisco;
 }
 exports.UpdatePerfilProprioDto = UpdatePerfilProprioDto;
 __decorate([
@@ -39,4 +40,13 @@ __decorate([
     }),
     __metadata("design:type", String)
 ], UpdatePerfilProprioDto.prototype, "telefoneWhatsapp", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, sanitizar_decorator_1.NormalizarTelefone)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(/^\+\d{10,15}$/, {
+        message: 'telefoneGerenciamentoRisco deve estar em formato E.164, ex.: +5511999998888',
+    }),
+    __metadata("design:type", Object)
+], UpdatePerfilProprioDto.prototype, "telefoneGerenciamentoRisco", void 0);
 //# sourceMappingURL=update-perfil-proprio.dto.js.map

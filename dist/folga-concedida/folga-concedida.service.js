@@ -16,6 +16,7 @@ const audit_service_1 = require("../common/audit/audit.service");
 const whatsapp_notifications_service_1 = require("../common/notifications/whatsapp-notifications.service");
 const prisma_service_1 = require("../common/prisma/prisma.service");
 const tenant_service_1 = require("../common/tenant/tenant.service");
+const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
 function paraDiaUtc(data) {
     const d = typeof data === 'string' ? new Date(data) : data;
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -41,9 +42,12 @@ let FolgaConcedidaService = class FolgaConcedidaService {
         await this.tenant.verificarMotoristaAtivo(motoristaId);
         const motorista = await this.prisma.motorista.findUnique({
             where: { id: motoristaId },
+            include: { empresa: { select: { fusoHorario: true } } },
         });
         if (!motorista)
             throw new common_1.NotFoundException('Motorista não encontrado');
+        const offsetEmpresaMin = (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(motorista.empresa
+            ?.fusoHorario);
         const dia = paraDiaUtc(dto.data);
         const inicioProximoDia = proximoDiaUtc(dia);
         let folga;
@@ -72,13 +76,19 @@ let FolgaConcedidaService = class FolgaConcedidaService {
             entidadeId: folga.id,
             detalhes: { motoristaId, data: dia.toISOString().slice(0, 10) },
         });
-        const registrosDoDia = await this.prisma.registroJornada.findMany({
+        const diaChave = dia.toISOString().slice(0, 10);
+        const candidatos = await this.prisma.registroJornada.findMany({
             where: {
                 motoristaId,
-                timestampEvento: { gte: dia, lt: inicioProximoDia },
+                timestampEvento: {
+                    gte: new Date(dia.getTime() + 2 * 3_600_000),
+                    lt: new Date(inicioProximoDia.getTime() + 5 * 3_600_000),
+                },
             },
             orderBy: { sequencial: 'asc' },
         });
+        const registrosDoDia = candidatos.filter((r) => (0, fuso_brasil_util_1.chaveDiaBrt)(r.timestampEvento, r.fusoOffsetMin ??
+            offsetEmpresaMin) === diaChave);
         if (registrosDoDia.length > 0) {
             const diaFormatado = dia.toISOString().slice(0, 10);
             const alerta = await this.prisma.alertaJornada.create({
@@ -87,8 +97,14 @@ let FolgaConcedidaService = class FolgaConcedidaService {
                     tipo: client_1.TipoAlertaJornada.PONTO_REGISTRADO_EM_DIA_DE_FOLGA,
                     severidade: client_1.SeveridadeAlerta.ATENCAO,
                     mensagem: `Folga concedida para ${diaFormatado}, mas já existem ${registrosDoDia.length} registro(s) de ponto nesse dia , confira o conflito.`,
-                    janelaInicio: dia,
-                    janelaFim: inicioProximoDia,
+                    janelaInicio: new Date(dia.getTime() -
+                        (registrosDoDia[0]
+                            .fusoOffsetMin ?? offsetEmpresaMin) *
+                            60_000),
+                    janelaFim: new Date(inicioProximoDia.getTime() -
+                        (registrosDoDia[0]
+                            .fusoOffsetMin ?? offsetEmpresaMin) *
+                            60_000),
                     minutosAcumulados: 0,
                     registroGeradorId: registrosDoDia[0].id,
                     detalhes: {

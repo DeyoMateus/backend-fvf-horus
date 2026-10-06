@@ -17,6 +17,7 @@ const audit_service_1 = require("../common/audit/audit.service");
 const prisma_service_1 = require("../common/prisma/prisma.service");
 const tenant_service_1 = require("../common/tenant/tenant.service");
 const tenant_context_1 = require("../common/tenant/tenant-context");
+const device_key_hash_util_1 = require("../common/crypto/device-key-hash.util");
 let DispositivosService = class DispositivosService {
     prisma;
     audit;
@@ -39,9 +40,7 @@ let DispositivosService = class DispositivosService {
             throw new common_1.ConflictException('Este aparelho já está vinculado a outro motorista');
         }
         const deviceApiKeyPlano = (0, crypto_1.randomBytes)(32).toString('hex');
-        const deviceApiKeyHash = (0, crypto_1.createHash)('sha256')
-            .update(deviceApiKeyPlano)
-            .digest('hex');
+        const deviceApiKeyHash = (0, device_key_hash_util_1.hashChaveDispositivo)(deviceApiKeyPlano);
         const vinculo = await this.prisma.dispositivoVinculado.upsert({
             where: { motoristaId },
             update: {
@@ -197,9 +196,7 @@ let DispositivosService = class DispositivosService {
             throw new common_1.ConflictException('Este aparelho já está vinculado a outro motorista , resolva manualmente antes de aprovar.');
         }
         const deviceApiKeyPlano = (0, crypto_1.randomBytes)(32).toString('hex');
-        const deviceApiKeyHash = (0, crypto_1.createHash)('sha256')
-            .update(deviceApiKeyPlano)
-            .digest('hex');
+        const deviceApiKeyHash = (0, device_key_hash_util_1.hashChaveDispositivo)(deviceApiKeyPlano);
         const ctxTenant = tenant_context_1.TenantContext.atual();
         if (!ctxTenant) {
             throw new Error('DispositivosService.aprovarTroca sem contexto de tenant , ver TenantContextInterceptor.');

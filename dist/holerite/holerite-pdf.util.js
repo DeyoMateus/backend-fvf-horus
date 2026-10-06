@@ -6,6 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.gerarPdfHolerite = gerarPdfHolerite;
 exports.gerarPdfFechamentoLote = gerarPdfFechamentoLote;
 const pdfkit_1 = __importDefault(require("pdfkit"));
+const fuso_contexto_1 = require("../common/fuso/fuso-contexto");
+const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
 function formatarDiaBr(diaIso) {
     const [ano, mes, dia] = diaIso.split('-');
     return `${dia}/${mes}/${ano}`;
@@ -27,13 +29,12 @@ const ROTULO_EVENTO_DETALHADO = {
     FIM_JORNADA: 'Fim de jornada',
     OUTRO: 'Evento diverso',
 };
-function formatarDataHoraBr(data) {
-    const dia = String(data.getUTCDate()).padStart(2, '0');
-    const mes = String(data.getUTCMonth() + 1).padStart(2, '0');
-    const ano = data.getUTCFullYear();
-    const hora = String(data.getUTCHours()).padStart(2, '0');
-    const minuto = String(data.getUTCMinutes()).padStart(2, '0');
-    return `${dia}/${mes}/${ano} ${hora}:${minuto}`;
+function horaDoEvento(evento, fusoEmpresaOffsetMin) {
+    const offset = evento.fusoOffsetMin ?? fusoEmpresaOffsetMin;
+    const texto = (0, fuso_brasil_util_1.formatarDataHoraBrt)(evento.timestampEvento, offset);
+    return offset === fusoEmpresaOffsetMin
+        ? texto
+        : `${texto} (${(0, fuso_brasil_util_1.rotuloFuso)(offset)})`;
 }
 function desenharSecaoMotorista(doc, motorista, empresa, resultado) {
     doc.fontSize(10).fillColor('#374151');
@@ -43,7 +44,7 @@ function desenharSecaoMotorista(doc, motorista, empresa, resultado) {
     doc.text(`Motorista: ${motorista.nome}`);
     doc.text(`CPF: ${motorista.cpf}   CNH: ${motorista.cnh}`);
     doc.text(`Período: ${resultado.periodoInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${resultado.periodoFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`);
-    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`);
+    doc.text(`Gerado em: ${(0, fuso_contexto_1.agoraDoCliente)()}`);
     if (resultado.regraSindicalAplicada) {
         doc.text(`Convenção coletiva aplicada: ${resultado.regraSindicalAplicada.nome}`);
     }
@@ -223,6 +224,7 @@ function desenharSecaoMotorista(doc, motorista, empresa, resultado) {
             .fillColor('#6b7280')
             .text('Nenhum evento registrado (nem ajustado pelo gestor) no período.', xInicialDetalhe, doc.y);
     }
+    const fusoEmpresaOffsetMin = resultado.fusoEmpresaOffsetMin ?? fuso_brasil_util_1.OFFSET_PADRAO_MIN;
     const blocos = [];
     const avulsos = [];
     let atual = null;
@@ -236,11 +238,11 @@ function desenharSecaoMotorista(doc, motorista, empresa, resultado) {
                 60000)
             : null;
         const tituloFim = fimJornada
-            ? formatarDataHoraBr(fimJornada.timestampEvento)
+            ? horaDoEvento(fimJornada, fusoEmpresaOffsetMin)
             : 'em aberto no fim do período';
         const sufixoDuracao = duracaoMin !== null ? `  •  duração ${formatarHoras(duracaoMin)}` : '';
         blocos.push({
-            titulo: `${formatarDataHoraBr(inicio.timestampEvento)} até ${tituloFim}${sufixoDuracao}`,
+            titulo: `${horaDoEvento(inicio, fusoEmpresaOffsetMin)} até ${tituloFim}${sufixoDuracao}`,
             eventos: atual,
         });
         atual = null;
@@ -275,7 +277,7 @@ function desenharSecaoMotorista(doc, motorista, empresa, resultado) {
             quebrarPaginaSeNecessario(24);
             const temLocalizacao = evento.latitude != null && evento.longitude != null;
             desenharLinhaDetalhe([
-                formatarDataHoraBr(evento.timestampEvento),
+                horaDoEvento(evento, fusoEmpresaOffsetMin),
                 ROTULO_EVENTO_DETALHADO[evento.tipoEvento] ?? evento.tipoEvento,
                 evento.origemGestor ? 'RH' : 'Motorista',
                 temLocalizacao
@@ -346,9 +348,7 @@ async function gerarPdfHolerite(motorista, empresa, resultado) {
     const finalizado = new Promise((resolve) => {
         doc.on('end', () => resolve(Buffer.concat(chunks)));
     });
-    doc
-        .fontSize(16)
-        .text('FVF Hórus , Apuração de jornada (espelho de ponto)', {
+    doc.fontSize(16).text('FVF Hórus , Apuração de jornada (espelho de ponto)', {
         align: 'center',
     });
     doc.moveDown(0.2);
@@ -378,7 +378,7 @@ async function gerarPdfFechamentoLote(itens, periodoInicio, periodoFim) {
         .fontSize(9)
         .fillColor('#374151')
         .text(`Período: ${periodoInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}   |   ` +
-        `${itens.length} motorista(s)   |   Gerado em: ${new Date().toLocaleString('pt-BR')}`, { align: 'center' });
+        `${itens.length} motorista(s)   |   Gerado em: ${(0, fuso_contexto_1.agoraDoCliente)()}`, { align: 'center' });
     doc.moveDown();
     doc
         .fontSize(8)

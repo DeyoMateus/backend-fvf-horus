@@ -153,6 +153,10 @@ let SuperAdminService = class SuperAdminService {
                         email: true,
                         papel: true,
                         ativo: true,
+                        telefoneWhatsapp: true,
+                        telefoneGerenciamentoRisco: true,
+                        recebeWhatsappAlertas: true,
+                        recebeWhatsappEquipeGr: true,
                         createdAt: true,
                     },
                 },
@@ -170,6 +174,7 @@ let SuperAdminService = class SuperAdminService {
                 cnpj: e.cnpj,
                 ativo: e.ativo,
                 registroInpiAfd: e.registroInpiAfd,
+                fusoHorario: e.fusoHorario,
                 totalMotoristas: e._count.motoristas,
             })),
             usuarios: grupo.usuarios,
@@ -217,6 +222,7 @@ let SuperAdminService = class SuperAdminService {
                 razaoSocial: dto.razaoSocial ?? undefined,
                 cnpj: dto.cnpj ?? undefined,
                 registroInpiAfd: dto.registroInpiAfd ?? undefined,
+                fusoHorario: dto.fusoHorario ?? undefined,
             },
         });
         await this.audit.registrar({
@@ -285,6 +291,40 @@ let SuperAdminService = class SuperAdminService {
             entidadeId: usuarioId,
             detalhes: {
                 antes: { nome: usuario.nome, email: usuario.email },
+                depois: dto,
+            },
+        });
+        return atualizado;
+    }
+    async atualizarDestinatariosWhatsapp(usuarioId, dto, superAdminId) {
+        const usuario = await this.prisma.usuarioEmpresa.findUnique({
+            where: { id: usuarioId },
+        });
+        if (!usuario)
+            throw new common_1.NotFoundException('Usuário não encontrado');
+        const atualizado = await this.prisma.usuarioEmpresa.update({
+            where: { id: usuarioId },
+            data: {
+                recebeWhatsappAlertas: dto.recebeWhatsappAlertas ?? undefined,
+                recebeWhatsappEquipeGr: dto.recebeWhatsappEquipeGr ?? undefined,
+            },
+            select: {
+                id: true,
+                recebeWhatsappAlertas: true,
+                recebeWhatsappEquipeGr: true,
+            },
+        });
+        await this.audit.registrar({
+            actorType: client_1.ActorType.SUPER_ADMIN,
+            actorId: superAdminId,
+            acao: 'DESTINATARIOS_WHATSAPP_ALTERADOS_PELO_SUPER_ADMIN',
+            entidade: 'UsuarioEmpresa',
+            entidadeId: usuarioId,
+            detalhes: {
+                antes: {
+                    recebeWhatsappAlertas: usuario.recebeWhatsappAlertas,
+                    recebeWhatsappEquipeGr: usuario.recebeWhatsappEquipeGr,
+                },
                 depois: dto,
             },
         });

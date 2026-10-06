@@ -24,6 +24,7 @@ class CreateRegistroJornadaDto {
     idempotencyKey;
     flagsIntegridadeDispositivo;
     elapsedRealtimeMs;
+    fusoOffsetMin;
 }
 exports.CreateRegistroJornadaDto = CreateRegistroJornadaDto;
 __decorate([
@@ -77,4 +78,12 @@ __decorate([
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateRegistroJornadaDto.prototype, "elapsedRealtimeMs", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(-720),
+    (0, class_validator_1.Max)(840),
+    __metadata("design:type", Number)
+], CreateRegistroJornadaDto.prototype, "fusoOffsetMin", void 0);
 //# sourceMappingURL=create-registro-jornada.dto.js.map

@@ -14,6 +14,7 @@ const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../common/prisma/prisma.service");
 const tenant_service_1 = require("../common/tenant/tenant.service");
+const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
 const LIMITE_JORNADA_NORMAL_DIARIA_MIN = 480;
 const ADICIONAL_NOTURNO_INICIO_HORA = 22;
 const ADICIONAL_NOTURNO_FIM_HORA = 5;
@@ -26,36 +27,41 @@ let HoleriteService = class HoleriteService {
     }
     async calcular(motoristaId, dataInicio, dataFim, opcoes, grupoIdSolicitante) {
         await this.tenant.verificarMotoristaNoGrupo(motoristaId, grupoIdSolicitante);
-        const dataFimEfetiva = this.estenderParaFimDoDiaSeMeiaNoite(dataFim);
         const motoristaComRegra = await this.prisma.motorista.findUnique({
             where: { id: motoristaId },
-            select: { empresa: { select: { regraSindical: true } } },
+            select: {
+                empresa: { select: { regraSindical: true, fusoHorario: true } },
+            },
         });
         const regra = motoristaComRegra?.empresa.regraSindical ?? null;
+        const fusoEmpresaOffsetMin = (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(motoristaComRegra?.empresa.fusoHorario);
+        const dataInicioEfetiva = (0, fuso_brasil_util_1.inicioDePeriodoBrt)(dataInicio, fusoEmpresaOffsetMin);
+        const dataFimEfetiva = (0, fuso_brasil_util_1.fimDePeriodoBrt)(dataFim, fusoEmpresaOffsetMin);
         const limiteJornadaNormalMin = regra?.limiteJornadaNormalMin ?? LIMITE_JORNADA_NORMAL_DIARIA_MIN;
         const [registros, tratamentos] = await Promise.all([
             this.prisma.registroJornada.findMany({
                 where: {
                     motoristaId,
-                    timestampEvento: { gte: dataInicio, lte: dataFimEfetiva },
+                    timestampEvento: { gte: dataInicioEfetiva, lte: dataFimEfetiva },
                 },
                 orderBy: { timestampEvento: 'asc' },
             }),
             this.prisma.tratamentoPonto.findMany({
                 where: {
                     motoristaId,
-                    timestampEvento: { gte: dataInicio, lte: dataFimEfetiva },
+                    timestampEvento: { gte: dataInicioEfetiva, lte: dataFimEfetiva },
                 },
                 orderBy: { timestampEvento: 'asc' },
             }),
         ]);
+        const linhaFuso = await this.montarLinhaDoTempoFuso(motoristaId, registros, fusoEmpresaOffsetMin);
         const eventos = this.unificarEventos(registros, tratamentos);
-        const eventosDetalhados = this.construirEventosDetalhados(registros, tratamentos);
+        const eventosDetalhados = this.construirEventosDetalhados(registros, tratamentos, linhaFuso, fusoEmpresaOffsetMin);
         const intervalos = [
             ...this.calcularIntervalos(eventos, dataFimEfetiva),
             ...this.calcularIntervalosIndefinido(eventos, dataFimEfetiva),
         ];
-        const dias = this.agruparPorDia(intervalos, limiteJornadaNormalMin);
+        const dias = this.agruparPorDia(intervalos, limiteJornadaNormalMin, linhaFuso, fusoEmpresaOffsetMin);
         const totais = dias.reduce((acc, d) => ({
             direcaoMin: acc.direcaoMin + d.direcaoMin,
             esperaMin: acc.esperaMin + d.esperaMin,
@@ -78,18 +84,10 @@ let HoleriteService = class HoleriteService {
             opcoes,
             dias,
             eventos: eventosDetalhados,
+            fusoEmpresaOffsetMin,
             totais,
             regraSindicalAplicada: regra ? { id: regra.id, nome: regra.nome } : null,
         };
-    }
-    estenderParaFimDoDiaSeMeiaNoite(data) {
-        const eMeiaNoiteExata = data.getUTCHours() === 0 &&
-            data.getUTCMinutes() === 0 &&
-            data.getUTCSeconds() === 0 &&
-            data.getUTCMilliseconds() === 0;
-        if (!eMeiaNoiteExata)
-            return data;
-        return new Date(data.getTime() + 24 * 60 * 60 * 1000 - 1);
     }
     async calcularEmLote(motoristaIds, dataInicio, dataFim, opcoes, grupoIdSolicitante) {
         const motoristas = await this.prisma.motorista.findMany({
@@ -123,6 +121,33 @@ let HoleriteService = class HoleriteService {
         }
         return itens;
     }
+    async montarLinhaDoTempoFuso(motoristaId, registros, padraoMin) {
+        const pontos = registros.map((r) => ({
+            t: r.timestampEvento.getTime(),
+            offsetMin: r.fusoOffsetMin ?? null,
+        }));
+        const distintos = new Set(pontos.map((p) => p.offsetMin ?? padraoMin));
+        let amostras = [];
+        if (distintos.size > 1) {
+            const tempos = pontos.map((p) => p.t);
+            const linhas = await this.prisma.amostraLocalizacao.findMany({
+                where: {
+                    motoristaId,
+                    capturadoEm: {
+                        gte: new Date(Math.min(...tempos)),
+                        lte: new Date(Math.max(...tempos)),
+                    },
+                },
+                select: { capturadoEm: true, longitude: true },
+                orderBy: { capturadoEm: 'asc' },
+            });
+            amostras = linhas.map((a) => ({
+                t: a.capturadoEm.getTime(),
+                longitude: Number(a.longitude),
+            }));
+        }
+        return (0, fuso_brasil_util_1.construirLinhaDoTempoFuso)(pontos, amostras, padraoMin);
+    }
     unificarEventos(registros, tratamentos) {
         const eventos = [
             ...registros.map((r) => ({
@@ -139,7 +164,7 @@ let HoleriteService = class HoleriteService {
         eventos.sort((a, b) => a.timestampEvento.getTime() - b.timestampEvento.getTime());
         return eventos;
     }
-    construirEventosDetalhados(registros, tratamentos) {
+    construirEventosDetalhados(registros, tratamentos, linhaFuso, padraoMin) {
         const eventos = [
             ...registros.map((r) => ({
                 timestampEvento: r.timestampEvento,
@@ -148,6 +173,7 @@ let HoleriteService = class HoleriteService {
                 detalhe: r.observacao ?? null,
                 latitude: r.latitude != null ? Number(r.latitude) : null,
                 longitude: r.longitude != null ? Number(r.longitude) : null,
+                fusoOffsetMin: r.fusoOffsetMin ?? padraoMin,
             })),
             ...tratamentos.map((t) => ({
                 timestampEvento: t.timestampEvento,
@@ -156,6 +182,8 @@ let HoleriteService = class HoleriteService {
                 detalhe: t.motivo,
                 latitude: null,
                 longitude: null,
+                fusoOffsetMin: t.fusoOffsetMin ??
+                    (0, fuso_brasil_util_1.offsetNoInstante)(linhaFuso, t.timestampEvento.getTime(), padraoMin),
             })),
         ];
         eventos.sort((a, b) => a.timestampEvento.getTime() - b.timestampEvento.getTime());
@@ -272,7 +300,7 @@ let HoleriteService = class HoleriteService {
         }
         return intervalos;
     }
-    agruparPorDia(intervalos, limiteJornadaNormalMin) {
+    agruparPorDia(intervalos, limiteJornadaNormalMin, linhaFuso, padraoMin) {
         const porDia = new Map();
         const obterDia = (chave) => {
             let d = porDia.get(chave);
@@ -294,8 +322,8 @@ let HoleriteService = class HoleriteService {
         for (const intervalo of intervalos) {
             if (intervalo.emAberto)
                 continue;
-            for (const pedaco of this.dividirPorDiaCalendario(intervalo.inicio, intervalo.fim)) {
-                const chave = pedaco.inicio.toISOString().slice(0, 10);
+            for (const pedaco of (0, fuso_brasil_util_1.dividirPorDiaCivil)(intervalo.inicio, intervalo.fim, linhaFuso, padraoMin)) {
+                const chave = (0, fuso_brasil_util_1.chaveDiaBrt)(pedaco.inicio, pedaco.offsetMin);
                 const dia = obterDia(chave);
                 const minutos = (pedaco.fim.getTime() - pedaco.inicio.getTime()) / 60000;
                 if (intervalo.categoria === 'DIRECAO')
@@ -305,7 +333,7 @@ let HoleriteService = class HoleriteService {
                 else
                     dia.indefinidoMin += minutos;
                 if (intervalo.categoria !== 'INDEFINIDO') {
-                    dia.noturnoMin += this.calcularMinutosNoturnos(pedaco.inicio, pedaco.fim);
+                    dia.noturnoMin += (0, fuso_brasil_util_1.minutosNoturnosEntre)(pedaco.inicio, pedaco.fim, pedaco.offsetMin, ADICIONAL_NOTURNO_INICIO_HORA, ADICIONAL_NOTURNO_FIM_HORA);
                 }
                 if (intervalo.origemGestor)
                     dia.teveFechamentoGestor = true;
@@ -320,30 +348,6 @@ let HoleriteService = class HoleriteService {
             dia.extraMin = Math.max(0, dia.direcaoMin - limiteJornadaNormalMin);
         }
         return Array.from(porDia.values()).sort((a, b) => a.dia.localeCompare(b.dia));
-    }
-    dividirPorDiaCalendario(inicio, fim) {
-        const pedacos = [];
-        let cursor = inicio;
-        while (cursor < fim) {
-            const proximaMeiaNoite = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate() + 1, 0, 0, 0, 0));
-            const fimDoPedaco = proximaMeiaNoite < fim ? proximaMeiaNoite : fim;
-            pedacos.push({ inicio: cursor, fim: fimDoPedaco });
-            cursor = fimDoPedaco;
-        }
-        return pedacos;
-    }
-    calcularMinutosNoturnos(inicio, fim) {
-        const diaBase = Date.UTC(inicio.getUTCFullYear(), inicio.getUTCMonth(), inicio.getUTCDate());
-        const janela1Inicio = diaBase + ADICIONAL_NOTURNO_INICIO_HORA * 3600_000;
-        const janela1Fim = diaBase + 24 * 3600_000;
-        const janela2Inicio = diaBase;
-        const janela2Fim = diaBase + ADICIONAL_NOTURNO_FIM_HORA * 3600_000;
-        const sobreposicao = (aIni, aFim, bIni, bFim) => Math.max(0, Math.min(aFim, bFim) - Math.max(aIni, bIni));
-        const ini = inicio.getTime();
-        const f = fim.getTime();
-        const minutosNoturnos = sobreposicao(ini, f, janela1Inicio, janela1Fim) +
-            sobreposicao(ini, f, janela2Inicio, janela2Fim);
-        return minutosNoturnos / 60000;
     }
 };
 exports.HoleriteService = HoleriteService;

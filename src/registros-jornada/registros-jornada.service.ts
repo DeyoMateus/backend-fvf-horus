@@ -2104,6 +2104,113 @@ export class RegistrosJornadaService {
   }
 
   /**
+   * Rodada 165: varredura AUTOMÁTICA da cadeia de hashes de todos os
+   * motoristas (antes só rodava quando alguém clicava em "Verificar",
+   * então uma alteração direta no banco ficava invisível até lá).
+   * Para cada motorista com divergência ainda NÃO aceita, cria um
+   * alerta CRITICO `INTEGRIDADE_CADEIA_VIOLADA` (uma vez por conjunto de
+   * eventos divergentes, sem repetir a cada varredura) e avisa pelo
+   * WhatsApp a equipe de Gerenciamento de Risco. Somente leitura sobre
+   * o ledger: nunca altera registro nenhum.
+   */
+  async varrerIntegridadeCadeias(): Promise<{
+    verificados: number;
+    comViolacao: number;
+    alertasCriados: number;
+  }> {
+    return TenantContext.paraSistema(async () => {
+      const motoristas = await this.prisma.motorista.findMany({
+        select: { id: true, nome: true, empresaId: true, hashGenesis: true },
+      });
+      let comViolacao = 0;
+      let alertasCriados = 0;
+
+      for (const motorista of motoristas) {
+        try {
+          const registros = await this.prisma.registroJornada.findMany({
+            where: { motoristaId: motorista.id },
+            orderBy: { sequencial: 'asc' },
+          });
+          if (registros.length === 0) continue;
+
+          const resultado = this.hashChain.verificarCadeia(
+            motorista.hashGenesis,
+            registros,
+          );
+          if (resultado.quebras.length === 0) continue;
+
+          const aceites = await this.prisma.integridadeAceite.findMany({
+            where: { motoristaId: motorista.id },
+            select: { sequencial: true },
+          });
+          const aceitos = new Set(aceites.map((a) => a.sequencial));
+          const pendentes = resultado.quebras.filter(
+            (q) => !aceitos.has(q.sequencial),
+          );
+          if (pendentes.length === 0) continue;
+          comViolacao++;
+
+          const assinatura = pendentes
+            .map((q) => q.sequencial)
+            .sort((a, b) => a - b)
+            .join(',');
+          const jaAlertados = await this.prisma.alertaJornada.findMany({
+            where: {
+              motoristaId: motorista.id,
+              tipo: 'INTEGRIDADE_CADEIA_VIOLADA',
+            },
+            select: { detalhes: true },
+          });
+          const jaExiste = jaAlertados.some(
+            (a) =>
+              (a.detalhes as { assinatura?: string } | null)?.assinatura ===
+              assinatura,
+          );
+          if (jaExiste) continue;
+
+          const primeira = registros.find(
+            (r) => r.sequencial === pendentes[0].sequencial,
+          )!;
+          const mensagem =
+            `Integridade violada: a cadeia de registros de ${motorista.nome} ` +
+            `tem ${pendentes.length} evento(s) cujo conteúdo não confere com o ` +
+            `hash gravado (nº ${assinatura}). Possível alteração direta no ` +
+            `banco de dados. Abra o motorista, analise cada evento e, se ` +
+            `for falso positivo conhecido, aceite a divergência.`;
+          await this.prisma.alertaJornada.create({
+            data: {
+              motoristaId: motorista.id,
+              tipo: 'INTEGRIDADE_CADEIA_VIOLADA',
+              severidade: 'CRITICO',
+              mensagem,
+              janelaInicio: primeira.timestampEvento,
+              janelaFim: primeira.timestampEvento,
+              minutosAcumulados: 0,
+              registroGeradorId: primeira.id,
+              detalhes: {
+                assinatura,
+                sequenciais: pendentes.map((q) => q.sequencial),
+                motivos: pendentes.map((q) => q.motivo),
+                origem: 'varredura_automatica',
+              },
+            },
+          });
+          alertasCriados++;
+          void this.whatsapp.notificarGestoresDaEmpresa(
+            motorista.empresaId,
+            mensagem,
+          );
+        } catch (err) {
+          this.logger.warn(
+            `Falha ao verificar a cadeia do motorista ${motorista.id}: ${(err as Error).message}`,
+          );
+        }
+      }
+      return { verificados: motoristas.length, comViolacao, alertasCriados };
+    });
+  }
+
+  /**
    * Rodada 158: tela de análise de UM evento da cadeia de integridade.
    * Devolve o evento, os vizinhos, os hashes gravados x recalculado, o
    * payload canônico usado no cálculo e uma bateria de "e se" (variações

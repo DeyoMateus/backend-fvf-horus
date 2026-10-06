@@ -11,11 +11,13 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UpdateEmpresaDto = void 0;
 const class_validator_1 = require("class-validator");
+const fuso_brasil_util_1 = require("../../common/fuso/fuso-brasil.util");
 const sanitizar_decorator_1 = require("../../common/sanitizacao/sanitizar.decorator");
 class UpdateEmpresaDto {
     razaoSocial;
     cnpj;
     registroInpiAfd;
+    fusoHorario;
 }
 exports.UpdateEmpresaDto = UpdateEmpresaDto;
 __decorate([
@@ -38,4 +40,9 @@ __decorate([
     (0, class_validator_1.Length)(3, 200),
     __metadata("design:type", String)
 ], UpdateEmpresaDto.prototype, "registroInpiAfd", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(fuso_brasil_util_1.FUSOS_EMPRESA_PERMITIDOS, { message: 'fusoHorario inválido' }),
+    __metadata("design:type", String)
+], UpdateEmpresaDto.prototype, "fusoHorario", void 0);
 //# sourceMappingURL=update-empresa.dto.js.map

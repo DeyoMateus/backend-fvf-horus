@@ -7,6 +7,7 @@ import { JornadaLegalModule } from '../common/jornada-legal/jornada-legal.module
 import { RepPModule } from '../common/rep-p/rep-p.module';
 import { FeriadosModule } from '../feriados/feriados.module';
 import { PushNotificationsModule } from '../common/notifications/push-notifications.module';
+import { MonitoramentoIntegridadeCadeiaService } from './monitoramento-integridade-cadeia.service';
 import { MonitoramentoJornadaAbertaService } from './monitoramento-jornada-aberta.service';
 import { RegistrosJornadaController } from './registros-jornada.controller';
 import { RegistrosJornadaService } from './registros-jornada.service';
@@ -41,6 +42,7 @@ import { VerificacaoJornadaAgendadaService } from './verificacao-agendada.servic
   providers: [
     RegistrosJornadaService,
     MonitoramentoJornadaAbertaService,
+    MonitoramentoIntegridadeCadeiaService,
     VerificacaoJornadaAgendadaService,
     VerificacaoJornadaAgendadaProcessor,
     LoteRegistrosJornadaProcessor,

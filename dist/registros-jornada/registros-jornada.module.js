@@ -16,6 +16,7 @@ const jornada_legal_module_1 = require("../common/jornada-legal/jornada-legal.mo
 const rep_p_module_1 = require("../common/rep-p/rep-p.module");
 const feriados_module_1 = require("../feriados/feriados.module");
 const push_notifications_module_1 = require("../common/notifications/push-notifications.module");
+const monitoramento_integridade_cadeia_service_1 = require("./monitoramento-integridade-cadeia.service");
 const monitoramento_jornada_aberta_service_1 = require("./monitoramento-jornada-aberta.service");
 const registros_jornada_controller_1 = require("./registros-jornada.controller");
 const registros_jornada_service_1 = require("./registros-jornada.service");
@@ -44,6 +45,7 @@ exports.RegistrosJornadaModule = RegistrosJornadaModule = __decorate([
         providers: [
             registros_jornada_service_1.RegistrosJornadaService,
             monitoramento_jornada_aberta_service_1.MonitoramentoJornadaAbertaService,
+            monitoramento_integridade_cadeia_service_1.MonitoramentoIntegridadeCadeiaService,
             verificacao_agendada_service_1.VerificacaoJornadaAgendadaService,
             verificacao_agendada_processor_1.VerificacaoJornadaAgendadaProcessor,
             lote_registros_jornada_processor_1.LoteRegistrosJornadaProcessor,

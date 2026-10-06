@@ -4,4 +4,5 @@ export declare class CreateTratamentoPontoDto {
     timestampEvento: string;
     motivo: string;
     registroReferenciaId?: string;
+    fusoOffsetMin?: number;
 }

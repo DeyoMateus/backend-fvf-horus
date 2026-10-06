@@ -61,7 +61,9 @@ let RedisThrottlerStorageService = class RedisThrottlerStorageService {
         this.redis = new ioredis_1.Redis({
             host: process.env.REDIS_HOST ?? 'localhost',
             port: Number(process.env.REDIS_PORT ?? 6379),
+            password: process.env.REDIS_PASSWORD || undefined,
             maxRetriesPerRequest: 1,
+            enableOfflineQueue: false,
             retryStrategy: (times) => Math.min(times * 200, 2000),
             lazyConnect: false,
         });
@@ -123,6 +125,22 @@ let RedisThrottlerStorageService = class RedisThrottlerStorageService {
             isBlocked: registro.isBlocked,
             timeToBlockExpire: Math.ceil(Math.max(registro.blockExpiresAt - agora, 0) / 1000),
         };
+    }
+    async segundosBloqueado(key, throttlerName) {
+        const chaveRedis = `throttler:${throttlerName}:${key}`;
+        const agora = Date.now();
+        try {
+            const d = await this.redis.hmget(chaveRedis, 'isBlocked', 'blockExpiresAt');
+            if (d[0] !== '1')
+                return 0;
+            return Math.max(Math.ceil((Number(d[1] ?? 0) - agora) / 1000), 0);
+        }
+        catch {
+            const r = this.fallbackLocal.get(chaveRedis);
+            if (!r || !r.isBlocked)
+                return 0;
+            return Math.max(Math.ceil((r.blockExpiresAt - agora) / 1000), 0);
+        }
     }
     async onModuleDestroy() {
         await this.redis.quit().catch(() => undefined);

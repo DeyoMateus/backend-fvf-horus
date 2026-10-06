@@ -14,10 +14,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RepPService = void 0;
 const common_1 = require("@nestjs/common");
+const fuso_contexto_1 = require("../fuso/fuso-contexto");
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const client_1 = require("@prisma/client");
 const nsr_service_1 = require("../nsr/nsr.service");
 const ordenacao_temporal_util_1 = require("../ordenacao-temporal.util");
+const fuso_brasil_util_1 = require("../fuso/fuso-brasil.util");
 const ROTULO_EVENTO = {
     INICIO_JORNADA: 'Início de Jornada',
     INICIO_DESCANSO: 'Início de Descanso/Intervalo',
@@ -68,17 +70,29 @@ let RepPService = class RepPService {
         ];
         const feriadosPagosSet = new Set(feriadosNoPeriodo.filter((f) => f.pagoComoDomingo).map((f) => f.data));
         const feriadosPorDia = new Map(feriadosNoPeriodo.map((f) => [f.data, f.descricao]));
-        const diasChaves = Array.from(new Set(eventos.map((e) => this.chaveDia(e.timestampEvento)))).sort();
-        const resumosPorDia = diasChaves.map((dia) => this.resumirDia(dia, registros, regraSindical, feriadosPagosSet, feriadosPorDia));
+        const offsetEmpresaMin = (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(empresa.fusoHorario);
+        const linhaFuso = (0, fuso_brasil_util_1.construirLinhaDoTempoFuso)(registros.map((r) => ({
+            t: r.timestampEvento.getTime(),
+            offsetMin: r.fusoOffsetMin ?? null,
+        })), [], offsetEmpresaMin);
+        const offsetPorDia = new Map();
+        for (const e of eventos) {
+            const off = e.registro?.fusoOffsetMin ?? offsetEmpresaMin;
+            const chave = this.chaveDia(e.timestampEvento, off);
+            if (!offsetPorDia.has(chave))
+                offsetPorDia.set(chave, off);
+        }
+        const diasChaves = Array.from(offsetPorDia.keys()).sort();
+        const resumosPorDia = diasChaves.map((dia) => this.resumirDia(dia, registros, regraSindical, feriadosPagosSet, feriadosPorDia, offsetPorDia.get(dia) ?? offsetEmpresaMin, linhaFuso));
         const doc = new pdfkit_1.default({ margin: 40, size: 'A4' });
         const chunks = [];
         doc.on('data', (chunk) => chunks.push(chunk));
         const finalizado = new Promise((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));
         this.escreverCabecalho(doc, motorista, empresa, opcoes, regraSindical, feriadosNoPeriodo);
-        this.escreverTabelaEventos(doc, eventos);
+        this.escreverTabelaEventos(doc, eventos, offsetEmpresaMin);
         this.escreverResumosDiarios(doc, resumosPorDia);
         if (tratamentos.length > 0) {
-            this.escreverAjustesRh(doc, tratamentos);
+            this.escreverAjustesRh(doc, tratamentos, linhaFuso, offsetEmpresaMin);
         }
         this.escreverRodape(doc, motorista, registros, tratamentos, deviceUuidAtual);
         doc.end();
@@ -104,7 +118,7 @@ let RepPService = class RepPService {
         doc.text(`Motorista: ${motorista.nome}`);
         doc.text(`CPF: ${motorista.cpf}   CNH: ${motorista.cnh}`);
         doc.text(`Período: ${opcoes.periodoInicio.toLocaleString('pt-BR', { timeZone: 'UTC' })} até ${opcoes.periodoFim.toLocaleString('pt-BR', { timeZone: 'UTC' })}`);
-        doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`);
+        doc.text(`Gerado em: ${(0, fuso_contexto_1.agoraDoCliente)()}`);
         doc.text(regraSindical
             ? `Convenção coletiva aplicada: ${regraSindical.nome} (${regraSindical.categoriaTransporte})`
             : 'Convenção coletiva aplicada: nenhuma vinculada a este CNPJ , parâmetros de referência CLT/Lei 13.103');
@@ -115,7 +129,7 @@ let RepPService = class RepPService {
             : 'Feriados cadastrados pelo RH e considerados neste período: nenhum , só domingos recebem o percentual diferenciado, quando configurado na convenção coletiva.', { align: 'justify' });
         doc.moveDown();
     }
-    escreverTabelaEventos(doc, eventos) {
+    escreverTabelaEventos(doc, eventos, offsetEmpresaMin) {
         doc
             .fontSize(11)
             .font('Helvetica-Bold')
@@ -124,7 +138,8 @@ let RepPService = class RepPService {
         doc.moveDown(0.3);
         let diaAtual = null;
         for (const evento of eventos) {
-            const dia = this.chaveDia(evento.timestampEvento);
+            const offsetEvento = evento.registro?.fusoOffsetMin ?? offsetEmpresaMin;
+            const dia = this.chaveDia(evento.timestampEvento, offsetEvento);
             if (dia !== diaAtual) {
                 diaAtual = dia;
                 doc.moveDown(0.4);
@@ -135,7 +150,12 @@ let RepPService = class RepPService {
                     .text(`, ${this.formatarDiaBr(dia)} ,`);
             }
             const registro = evento.registro;
-            const horario = evento.timestampEvento.toLocaleTimeString('pt-BR');
+            const horarioBase = (0, fuso_brasil_util_1.paraParedeBrt)(evento.timestampEvento, offsetEvento)
+                .toISOString()
+                .slice(11, 19);
+            const horario = offsetEvento === offsetEmpresaMin
+                ? horarioBase
+                : `${horarioBase} (${(0, fuso_brasil_util_1.rotuloFuso)(offsetEvento)})`;
             const gps = registro.latitude != null && registro.longitude != null
                 ? `${Number(registro.latitude).toFixed(6)}, ${Number(registro.longitude).toFixed(6)}` +
                     (registro.precisaoGpsM != null
@@ -199,7 +219,7 @@ let RepPService = class RepPService {
             doc.moveDown(0.6);
         }
     }
-    escreverAjustesRh(doc, tratamentos) {
+    escreverAjustesRh(doc, tratamentos, linhaFuso, padraoMin) {
         doc.moveDown();
         doc
             .fontSize(11)
@@ -221,7 +241,8 @@ let RepPService = class RepPService {
                 .fontSize(8.5)
                 .font('Helvetica')
                 .fillColor('#111827')
-                .text(`${t.timestampEvento.toLocaleString('pt-BR')}  ,  ${ROTULO_EVENTO[t.tipoEvento]}`);
+                .text(`${(0, fuso_contexto_1.instanteDoEvento)(t.timestampEvento, t.fusoOffsetMin ??
+                (0, fuso_brasil_util_1.offsetNoInstante)(linhaFuso, t.timestampEvento.getTime(), padraoMin))}  ,  ${ROTULO_EVENTO[t.tipoEvento]}`);
             doc.fontSize(7.5).fillColor('#6b7280').text(`   Motivo: ${t.motivo}`);
             doc
                 .fontSize(7.5)
@@ -266,11 +287,11 @@ let RepPService = class RepPService {
             '(salário, DSR e demais verbas) nem constitui, por si só, garantia de conformidade trabalhista. A ' +
             'adequação depende das regras configuradas, dos processos internos e das normas aplicáveis à empresa.', { align: 'justify' });
     }
-    resumirDia(dia, registros, regra, feriadosPagosSet, feriadosPorDia) {
-        const inicioDia = new Date(`${dia}T00:00:00.000Z`);
-        const fimDia = new Date(`${dia}T23:59:59.999Z`);
-        const direcaoMin = this.somarIntervalosNoDia(registros, client_1.TipoEvento.INICIO_DIRECAO, [client_1.TipoEvento.FIM_DIRECAO], inicioDia, fimDia);
-        const esperaMin = this.somarIntervalosNoDia(registros, client_1.TipoEvento.ESPERA_CARGA_DESCARGA, [client_1.TipoEvento.FIM_ESPERA_CARGA_DESCARGA, client_1.TipoEvento.FIM_DESCARREGAMENTO], inicioDia, fimDia);
+    resumirDia(dia, registros, regra, feriadosPagosSet, feriadosPorDia, offsetMin, linhaFuso = []) {
+        const inicioDia = new Date(new Date(`${dia}T00:00:00.000Z`).getTime() - offsetMin * 60_000);
+        const fimDia = new Date(inicioDia.getTime() + fuso_brasil_util_1.DIA_MS - 1);
+        const direcaoMin = this.somarPedacosDoDia(registros, client_1.TipoEvento.INICIO_DIRECAO, [client_1.TipoEvento.FIM_DIRECAO], dia, linhaFuso, offsetMin).total;
+        const esperaMin = this.somarPedacosDoDia(registros, client_1.TipoEvento.ESPERA_CARGA_DESCARGA, [client_1.TipoEvento.FIM_ESPERA_CARGA_DESCARGA, client_1.TipoEvento.FIM_DESCARREGAMENTO], dia, linhaFuso, offsetMin).total;
         const pausas = this.construirIntervalosCompletos(registros, client_1.TipoEvento.INICIO_DESCANSO, [client_1.TipoEvento.FIM_DESCANSO])
             .filter((p) => p.fim.getTime() > inicioDia.getTime() &&
             p.inicio.getTime() < fimDia.getTime())
@@ -281,7 +302,7 @@ let RepPService = class RepPService {
         const pausasDirecaoContinuadaMin = pausas
             .slice(1)
             .reduce((acc, p) => acc + this.minutosEntre(p.inicio, p.fim), 0);
-        const noturnoMin = this.calcularMinutosNoturnosNoDia(registros, inicioDia);
+        const noturnoMin = this.somarPedacosDoDia(registros, client_1.TipoEvento.INICIO_DIRECAO, [client_1.TipoEvento.FIM_DIRECAO], dia, linhaFuso, offsetMin).noturno;
         const limiteJornadaNormalMin = regra?.limiteJornadaNormalMin ?? 480;
         const limiteFaixa1Min = regra?.limiteHoraExtraFaixa1Min ?? 120;
         const ehDomingo = inicioDia.getUTCDay() === 0;
@@ -352,6 +373,19 @@ let RepPService = class RepPService {
             descansoInterjornadaMin: this.minutosEntre(fimJornadaDoDia.timestampEvento, proximoInicioJornada.timestampEvento),
         };
     }
+    somarPedacosDoDia(registros, tipoInicio, tiposFim, dia, linhaFuso, padraoMin) {
+        let total = 0;
+        let noturno = 0;
+        for (const intervalo of this.construirIntervalosCompletos(registros, tipoInicio, tiposFim)) {
+            for (const pedaco of (0, fuso_brasil_util_1.dividirPorDiaCivil)(intervalo.inicio, intervalo.fim, linhaFuso, padraoMin)) {
+                if ((0, fuso_brasil_util_1.chaveDiaBrt)(pedaco.inicio, pedaco.offsetMin) !== dia)
+                    continue;
+                total += this.minutosEntre(pedaco.inicio, pedaco.fim);
+                noturno += (0, fuso_brasil_util_1.minutosNoturnosEntre)(pedaco.inicio, pedaco.fim, pedaco.offsetMin, ADICIONAL_NOTURNO_INICIO_HORA, ADICIONAL_NOTURNO_FIM_HORA);
+            }
+        }
+        return { total, noturno };
+    }
     somarIntervalosNoDia(registros, tipoInicio, tiposFim, inicioDia, fimDia) {
         const intervalos = this.construirIntervalosCompletos(registros, tipoInicio, tiposFim);
         let total = 0;
@@ -381,29 +415,11 @@ let RepPService = class RepPService {
         }
         return intervalos;
     }
-    calcularMinutosNoturnosNoDia(registros, inicioDia) {
-        const diaBase = inicioDia.getTime();
-        const janela1Inicio = diaBase + ADICIONAL_NOTURNO_INICIO_HORA * 3600_000;
-        const janela1Fim = diaBase + 24 * 3600_000;
-        const janela2Inicio = diaBase;
-        const janela2Fim = diaBase + ADICIONAL_NOTURNO_FIM_HORA * 3600_000;
-        const sobreposicao = (aIni, aFim, bIni, bFim) => Math.max(0, Math.min(aFim, bFim) - Math.max(aIni, bIni));
-        const intervalosDirecao = this.construirIntervalosCompletos(registros, client_1.TipoEvento.INICIO_DIRECAO, [client_1.TipoEvento.FIM_DIRECAO]);
-        let total = 0;
-        for (const intervalo of intervalosDirecao) {
-            const ini = intervalo.inicio.getTime();
-            const fim = intervalo.fim.getTime();
-            total +=
-                sobreposicao(ini, fim, janela1Inicio, janela1Fim) +
-                    sobreposicao(ini, fim, janela2Inicio, janela2Fim);
-        }
-        return total / 60000;
-    }
     minutosEntre(inicio, fim) {
         return (fim.getTime() - inicio.getTime()) / 60000;
     }
-    chaveDia(data) {
-        return data.toISOString().slice(0, 10);
+    chaveDia(data, offsetMin) {
+        return (0, fuso_brasil_util_1.chaveDiaBrt)(data, offsetMin);
     }
     formatarDiaBr(chaveDia) {
         const [ano, mes, dia] = chaveDia.split('-');

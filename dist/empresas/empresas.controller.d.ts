@@ -18,6 +18,7 @@ export declare class EmpresasController {
         cnpj: string;
         razaoSocial: string;
         registroInpiAfd: string | null;
+        fusoHorario: string;
         regraSindicalId: string | null;
     }>;
     list(user: UsuarioAutenticado): import("@prisma/client").Prisma.PrismaPromise<({
@@ -34,6 +35,7 @@ export declare class EmpresasController {
         cnpj: string;
         razaoSocial: string;
         registroInpiAfd: string | null;
+        fusoHorario: string;
         regraSindicalId: string | null;
     })[]>;
     afd(res: Response, user: UsuarioAutenticado, empresaId?: string, inicio?: string, fim?: string): Promise<void>;
@@ -46,6 +48,7 @@ export declare class EmpresasController {
         cnpj: string;
         razaoSocial: string;
         registroInpiAfd: string | null;
+        fusoHorario: string;
         regraSindicalId: string | null;
     }>;
     vincularRegraSindical(id: string, regraSindicalId: string | null, user: UsuarioAutenticado): Promise<{
@@ -62,6 +65,7 @@ export declare class EmpresasController {
         cnpj: string;
         razaoSocial: string;
         registroInpiAfd: string | null;
+        fusoHorario: string;
         regraSindicalId: string | null;
     }>;
 }

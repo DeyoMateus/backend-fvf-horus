@@ -13,6 +13,7 @@ exports.DashboardService = exports.TIPOS_ALERTA_RISCO_FRAUDE = void 0;
 const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../common/prisma/prisma.service");
+const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
 exports.TIPOS_ALERTA_RISCO_FRAUDE = [
     client_1.TipoAlertaJornada.OCIOSIDADE_DIRECAO_SUSPEITA,
     client_1.TipoAlertaJornada.VELOCIDADE_IMPOSSIVEL_ENTRE_REGISTROS,
@@ -20,6 +21,7 @@ exports.TIPOS_ALERTA_RISCO_FRAUDE = [
     client_1.TipoAlertaJornada.SEQUENCIA_JORNADA_MUITO_RAPIDA,
     client_1.TipoAlertaJornada.ODOMETRO_REGRESSIVO,
     client_1.TipoAlertaJornada.INTEGRIDADE_DISPOSITIVO_SUSPEITA,
+    client_1.TipoAlertaJornada.INTEGRIDADE_CADEIA_VIOLADA,
 ];
 const HORAS_JORNADA_ABERTA_ALERTA = 16;
 let DashboardService = class DashboardService {
@@ -31,7 +33,7 @@ let DashboardService = class DashboardService {
         const agora = new Date();
         const inicio24h = new Date(agora.getTime() - 24 * 60 * 60 * 1000);
         const inicio7d = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const [totalMotoristasAtivos, estadosAtuais, alertasAbertosPorSeveridade, alertas24h, riscoFraude7d, topTipos7d,] = await Promise.all([
+        const [totalMotoristasAtivos, estadosAtuais, alertasAbertosPorSeveridade, alertas24h, riscoFraude7d, topTipos7d, empresaReferencia,] = await Promise.all([
             this.prisma.motorista.count({
                 where: { empresa: { grupoId }, status: client_1.StatusMotorista.ATIVO },
             }),
@@ -63,6 +65,11 @@ let DashboardService = class DashboardService {
                 _count: { tipo: true },
                 orderBy: { _count: { tipo: 'desc' } },
                 take: 5,
+            }),
+            this.prisma.empresa.findFirst({
+                where: { grupoId },
+                orderBy: { createdAt: 'asc' },
+                select: { fusoHorario: true },
             }),
         ]);
         const contagemEstados = {
@@ -110,6 +117,7 @@ let DashboardService = class DashboardService {
         }
         return {
             atualizadoEm: agora.toISOString(),
+            fusoHorario: empresaReferencia?.fusoHorario ?? 'America/Sao_Paulo',
             motoristas: {
                 totalAtivos: totalMotoristasAtivos,
                 semNenhumRegistro: Math.max(0, totalMotoristasAtivos - motoristasComRegistro),
@@ -173,6 +181,9 @@ let DashboardService = class DashboardService {
                 const estadosAtuais = await this.estadoAtualPorMotorista(grupoId);
                 const filtrados = estadosAtuais.filter((l) => tiposAlvo.has(l.tipoEvento));
                 const agora = new Date();
+                const direcaoContinua = card === 'em-direcao'
+                    ? await this.direcaoContinuaPorMotorista(filtrados.map((l) => l.motoristaId), agora)
+                    : new Map();
                 return {
                     tipo: 'motoristas',
                     itens: filtrados
@@ -180,8 +191,10 @@ let DashboardService = class DashboardService {
                         motoristaId: l.motoristaId,
                         nome: l.nome,
                         detalhe: card === 'jornada-aberta-sem-sub-evento'
-                            ? `Tempo indefinido há ${this.formatarHorasMinutos((agora.getTime() - l.timestampEvento.getTime()) / 60000)} (desde ${l.timestampEvento.toLocaleString('pt-BR')})`
-                            : `${l.tipoEvento} às ${l.timestampEvento.toLocaleString('pt-BR')}`,
+                            ? `Tempo indefinido há ${this.formatarHorasMinutos((agora.getTime() - l.timestampEvento.getTime()) / 60000)} (desde ${(0, fuso_brasil_util_1.marcarHorario)(l.timestampEvento)})`
+                            : card === 'em-direcao' && direcaoContinua.has(l.motoristaId)
+                                ? `${l.tipoEvento} às ${(0, fuso_brasil_util_1.marcarHorario)(l.timestampEvento)} · ${this.descreverDirecaoContinua(direcaoContinua.get(l.motoristaId))}`
+                                : `${l.tipoEvento} às ${(0, fuso_brasil_util_1.marcarHorario)(l.timestampEvento)}`,
                     }))
                         .sort((a, b) => a.nome.localeCompare(b.nome)),
                 };
@@ -262,6 +275,9 @@ let DashboardService = class DashboardService {
         }));
     }
     async tendencia(grupoId, opts) {
+        const offGestor = (0, fuso_brasil_util_1.offsetValido)(opts.fusoOffsetMin)
+            ? opts.fusoOffsetMin
+            : -180;
         let diaInicio;
         let diaFimExclusivo;
         let diasClamped;
@@ -281,55 +297,63 @@ let DashboardService = class DashboardService {
         }
         else {
             diasClamped = Math.min(Math.max(opts.dias ?? 30, 1), 180);
-            const hojeUtc = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z');
+            const hojeUtc = new Date((0, fuso_brasil_util_1.chaveDiaBrt)(new Date(), offGestor) + 'T00:00:00.000Z');
             diaInicio = new Date(hojeUtc.getTime() - (diasClamped - 1) * 24 * 60 * 60 * 1000);
             diaFimExclusivo = new Date(hojeUtc.getTime() + 24 * 60 * 60 * 1000);
         }
         const desde = diaInicio;
+        const desdeInstante = new Date(desde.getTime() + fuso_brasil_util_1.OFFSET_BRT_MS);
+        const fimExclusivoInstante = new Date(diaFimExclusivo.getTime() + fuso_brasil_util_1.OFFSET_BRT_MS);
+        const desdeAlerta = new Date(desde.getTime() - offGestor * 60_000);
+        const fimAlerta = new Date(diaFimExclusivo.getTime() - offGestor * 60_000);
+        const desdeAmplo = new Date(desde.getTime() + 2 * 3_600_000);
+        const fimAmplo = new Date(diaFimExclusivo.getTime() + 5 * 3_600_000);
         const [registrosPorDia, alertasPorDiaSeveridade, fraudePorDia, horasPorDia,] = await Promise.all([
             this.prisma.$queryRaw(client_1.Prisma.sql `
-        SELECT date_trunc('day', r."timestampEvento") AS dia, COUNT(*)::int AS total
+        SELECT date_trunc('day', r."timestampEvento" + COALESCE(r."fusoOffsetMin", -180) * interval '1 minute') AS dia, COUNT(*)::int AS total
         FROM registros_jornada r
         JOIN motoristas m ON m.id = r."motoristaId"
         JOIN empresas emp ON emp.id = m."empresaId"
         WHERE emp."grupoId" = ${grupoId}
-          AND r."timestampEvento" >= ${desde}
-          AND r."timestampEvento" < ${diaFimExclusivo}
+          AND r."timestampEvento" >= ${desdeAmplo}
+          AND r."timestampEvento" < ${fimAmplo}
+          AND date_trunc('day', r."timestampEvento" + COALESCE(r."fusoOffsetMin", -180) * interval '1 minute') >= ${desde}
+          AND date_trunc('day', r."timestampEvento" + COALESCE(r."fusoOffsetMin", -180) * interval '1 minute') < ${diaFimExclusivo}
         GROUP BY 1
         ORDER BY 1
       `),
             this.prisma.$queryRaw(client_1.Prisma.sql `
-        SELECT date_trunc('day', a."createdAt") AS dia, a.severidade, COUNT(*)::int AS total
+        SELECT date_trunc('day', a."createdAt" + ${offGestor}::int * interval '1 minute') AS dia, a.severidade, COUNT(*)::int AS total
         FROM alertas_jornada a
         JOIN motoristas m ON m.id = a."motoristaId"
         JOIN empresas emp ON emp.id = m."empresaId"
         WHERE emp."grupoId" = ${grupoId}
-          AND a."createdAt" >= ${desde}
-          AND a."createdAt" < ${diaFimExclusivo}
+          AND a."createdAt" >= ${desdeAlerta}
+          AND a."createdAt" < ${fimAlerta}
         GROUP BY 1, 2
         ORDER BY 1
       `),
             this.prisma.$queryRaw(client_1.Prisma.sql `
-        SELECT date_trunc('day', a."createdAt") AS dia, COUNT(*)::int AS total
+        SELECT date_trunc('day', a."createdAt" + ${offGestor}::int * interval '1 minute') AS dia, COUNT(*)::int AS total
         FROM alertas_jornada a
         JOIN motoristas m ON m.id = a."motoristaId"
         JOIN empresas emp ON emp.id = m."empresaId"
         WHERE emp."grupoId" = ${grupoId}
-          AND a."createdAt" >= ${desde}
-          AND a."createdAt" < ${diaFimExclusivo}
+          AND a."createdAt" >= ${desdeAlerta}
+          AND a."createdAt" < ${fimAlerta}
           AND a.tipo::text IN (${client_1.Prisma.join(exports.TIPOS_ALERTA_RISCO_FRAUDE)})
         GROUP BY 1
         ORDER BY 1
       `),
             this.prisma.$queryRaw(client_1.Prisma.sql `
         WITH eventos_brutos AS (
-          SELECT r."motoristaId", r."tipoEvento", r."timestampEvento"
+          SELECT r."motoristaId", r."tipoEvento", r."timestampEvento", r."fusoOffsetMin"
           FROM registros_jornada r
           JOIN motoristas m ON m.id = r."motoristaId"
           JOIN empresas emp ON emp.id = m."empresaId"
           WHERE emp."grupoId" = ${grupoId} AND r."tipoEvento" != 'OUTRO'
           UNION ALL
-          SELECT t."motoristaId", t."tipoEvento", t."timestampEvento"
+          SELECT t."motoristaId", t."tipoEvento", t."timestampEvento", NULL::int AS "fusoOffsetMin"
           FROM tratamentos_ponto t
           JOIN motoristas m ON m.id = t."motoristaId"
           JOIN empresas emp ON emp.id = m."empresaId"
@@ -347,11 +371,12 @@ let DashboardService = class DashboardService {
             "tipoEvento",
             "timestampEvento",
             LAG("tipoEvento") OVER (PARTITION BY "motoristaId" ORDER BY "timestampEvento") AS tipo_anterior,
-            LAG("timestampEvento") OVER (PARTITION BY "motoristaId" ORDER BY "timestampEvento") AS tempo_anterior
+            LAG("timestampEvento") OVER (PARTITION BY "motoristaId" ORDER BY "timestampEvento") AS tempo_anterior,
+            LAG("fusoOffsetMin") OVER (PARTITION BY "motoristaId" ORDER BY "timestampEvento") AS fuso_anterior
           FROM eventos_brutos
         )
         SELECT
-          date_trunc('day', tempo_anterior) AS dia,
+          date_trunc('day', tempo_anterior + COALESCE(fuso_anterior, -180) * interval '1 minute') AS dia,
           SUM(CASE WHEN "tipoEvento" = 'FIM_DIRECAO' AND tipo_anterior = 'INICIO_DIRECAO'
               THEN EXTRACT(EPOCH FROM ("timestampEvento" - tempo_anterior)) / 60.0 ELSE 0 END) AS minutos_direcao,
           SUM(CASE WHEN "tipoEvento" IN ('FIM_ESPERA_CARGA_DESCARGA', 'FIM_DESCARREGAMENTO') AND tipo_anterior = 'ESPERA_CARGA_DESCARGA'
@@ -367,8 +392,10 @@ let DashboardService = class DashboardService {
               THEN EXTRACT(EPOCH FROM ("timestampEvento" - tempo_anterior)) / 60.0 ELSE 0 END) AS minutos_indefinido
         FROM eventos
         WHERE tempo_anterior IS NOT NULL
-          AND tempo_anterior >= ${desde}
-          AND tempo_anterior < ${diaFimExclusivo}
+          AND tempo_anterior >= ${desdeAmplo}
+          AND tempo_anterior < ${fimAmplo}
+          AND date_trunc('day', tempo_anterior + COALESCE(fuso_anterior, -180) * interval '1 minute') >= ${desde}
+          AND date_trunc('day', tempo_anterior + COALESCE(fuso_anterior, -180) * interval '1 minute') < ${diaFimExclusivo}
         GROUP BY 1
         ORDER BY 1
       `),
@@ -423,26 +450,31 @@ let DashboardService = class DashboardService {
         }
         return Array.from(porDia.values());
     }
-    async tendenciaDetalhe(grupoId, dia, indicador) {
-        const inicioDia = new Date(`${dia}T00:00:00.000Z`);
-        const fimDia = new Date(inicioDia.getTime() + 24 * 60 * 60 * 1000);
-        if (Number.isNaN(inicioDia.getTime())) {
+    async tendenciaDetalhe(grupoId, dia, indicador, fusoOffsetMin) {
+        const diaCivil = new Date(`${dia}T00:00:00.000Z`);
+        if (Number.isNaN(diaCivil.getTime())) {
             return { tipo: 'registros', itens: [] };
         }
+        const offGestor = (0, fuso_brasil_util_1.offsetValido)(fusoOffsetMin) ? fusoOffsetMin : -180;
+        const inicioAmplo = new Date(diaCivil.getTime() + 2 * 3_600_000);
+        const fimAmplo = new Date(diaCivil.getTime() + 24 * 3_600_000 + 5 * 3_600_000);
+        const inicioDia = new Date(diaCivil.getTime() - offGestor * 60_000);
+        const fimDia = new Date(inicioDia.getTime() + 24 * 60 * 60 * 1000);
         switch (indicador) {
             case 'registros': {
                 const registros = await this.prisma.registroJornada.findMany({
                     where: {
                         motorista: { empresa: { grupoId } },
-                        timestampEvento: { gte: inicioDia, lt: fimDia },
+                        timestampEvento: { gte: inicioAmplo, lt: fimAmplo },
                     },
                     include: { motorista: { select: { id: true, nome: true } } },
                     orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
-                    take: 300,
+                    take: 600,
                 });
+                const doDia = registros.filter((r) => (0, fuso_brasil_util_1.chaveDiaBrt)(r.timestampEvento, r.fusoOffsetMin ?? -180) === dia);
                 return {
                     tipo: 'registros',
-                    itens: registros.map((r) => ({
+                    itens: doDia.map((r) => ({
                         registroId: r.id,
                         motoristaId: r.motorista.id,
                         nome: r.motorista.nome,
@@ -510,13 +542,13 @@ let DashboardService = class DashboardService {
                         ];
                 const trechos = await this.prisma.$queryRaw(client_1.Prisma.sql `
           WITH eventos_brutos AS (
-            SELECT r."motoristaId", m.nome AS nome, r."tipoEvento", r."timestampEvento"
+            SELECT r."motoristaId", m.nome AS nome, r."tipoEvento", r."timestampEvento", r."fusoOffsetMin"
             FROM registros_jornada r
             JOIN motoristas m ON m.id = r."motoristaId"
             JOIN empresas emp ON emp.id = m."empresaId"
             WHERE emp."grupoId" = ${grupoId} AND r."tipoEvento" != 'OUTRO'
             UNION ALL
-            SELECT t."motoristaId", m.nome AS nome, t."tipoEvento", t."timestampEvento"
+            SELECT t."motoristaId", m.nome AS nome, t."tipoEvento", t."timestampEvento", NULL::int AS "fusoOffsetMin"
             FROM tratamentos_ponto t
             JOIN motoristas m ON m.id = t."motoristaId"
             JOIN empresas emp ON emp.id = m."empresaId"
@@ -529,14 +561,16 @@ let DashboardService = class DashboardService {
               "tipoEvento",
               "timestampEvento",
               LAG("tipoEvento") OVER (PARTITION BY "motoristaId" ORDER BY "timestampEvento") AS tipo_anterior,
-              LAG("timestampEvento") OVER (PARTITION BY "motoristaId" ORDER BY "timestampEvento") AS tempo_anterior
+              LAG("timestampEvento") OVER (PARTITION BY "motoristaId" ORDER BY "timestampEvento") AS tempo_anterior,
+              LAG("fusoOffsetMin") OVER (PARTITION BY "motoristaId" ORDER BY "timestampEvento") AS fuso_anterior
             FROM eventos_brutos
           )
           SELECT "motoristaId", nome, tempo_anterior AS inicio, "timestampEvento" AS fim,
             EXTRACT(EPOCH FROM ("timestampEvento" - tempo_anterior)) / 60.0 AS minutos
           FROM eventos
           WHERE tempo_anterior IS NOT NULL
-            AND tempo_anterior >= ${inicioDia} AND tempo_anterior < ${fimDia}
+            AND tempo_anterior >= ${inicioAmplo} AND tempo_anterior < ${fimAmplo}
+            AND date_trunc('day', tempo_anterior + COALESCE(fuso_anterior, -180) * interval '1 minute') = ${diaCivil}
             AND "tipoEvento"::text IN (${client_1.Prisma.join(tipoFim)})
             AND tipo_anterior::text IN (${client_1.Prisma.join(tipoInicio)})
           ORDER BY tempo_anterior ASC
@@ -595,11 +629,75 @@ let DashboardService = class DashboardService {
       WHERE ur."tipoEvento" != 'FIM_JORNADA'
     `);
     }
+    async direcaoContinuaPorMotorista(motoristaIds, agora) {
+        const resultado = new Map();
+        if (motoristaIds.length === 0)
+            return resultado;
+        const eventos = await this.prisma.registroJornada.findMany({
+            where: { motoristaId: { in: motoristaIds } },
+            select: { motoristaId: true, tipoEvento: true, timestampEvento: true },
+            orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
+        });
+        const porMotorista = new Map();
+        for (const e of eventos) {
+            const lista = porMotorista.get(e.motoristaId) ?? [];
+            lista.push(e);
+            porMotorista.set(e.motoristaId, lista);
+        }
+        const PAUSA_QUALIFICADA_MS = 30 * 60000;
+        for (const [motoristaId, todos] of porMotorista) {
+            let idxInicio = 0;
+            for (let i = todos.length - 1; i >= 0; i--) {
+                if (todos[i].tipoEvento === 'INICIO_JORNADA') {
+                    idxInicio = i;
+                    break;
+                }
+            }
+            const jornada = todos.slice(idxInicio);
+            const intervalos = (tipoInicio, tipoFim) => {
+                const lista = [];
+                let aberto = null;
+                for (const r of jornada) {
+                    if (r.tipoEvento === tipoInicio)
+                        aberto = r.timestampEvento.getTime();
+                    else if (r.tipoEvento === tipoFim && aberto !== null) {
+                        lista.push({ inicio: aberto, fim: r.timestampEvento.getTime() });
+                        aberto = null;
+                    }
+                }
+                if (aberto !== null)
+                    lista.push({ inicio: aberto, fim: agora.getTime() });
+                return lista;
+            };
+            const direcao = intervalos('INICIO_DIRECAO', 'FIM_DIRECAO');
+            const pausas = intervalos('INICIO_DESCANSO', 'FIM_DESCANSO')
+                .filter((p) => p.fim - p.inicio >= PAUSA_QUALIFICADA_MS)
+                .sort((a, b) => b.fim - a.fim);
+            const corte = pausas[0]?.fim ?? jornada[0].timestampEvento.getTime();
+            const ms = direcao
+                .filter((i) => i.fim > corte)
+                .reduce((acc, i) => acc + (i.fim - Math.max(i.inicio, corte)), 0);
+            resultado.set(motoristaId, ms / 60000);
+        }
+        return resultado;
+    }
+    descreverDirecaoContinua(minutos) {
+        const tempo = this.formatarHorasMinutos(minutos);
+        if (minutos >= 330) {
+            return `Direção contínua há ${tempo} · CRÍTICO: limite de 05:30 excedido em ${this.formatarHorasMinutos(minutos - 330)}`;
+        }
+        if (minutos >= 300) {
+            return `Direção contínua há ${tempo} · ATENÇÃO: faltam ${this.formatarHorasMinutos(330 - minutos)} para o limite de 05:30`;
+        }
+        return `Direção contínua há ${tempo} · Normal (atenção a partir de 05:00)`;
+    }
     formatarHorasMinutos(minutos) {
         const totalMin = Math.max(0, Math.round(minutos));
+        if (totalMin < 60)
+            return `${totalMin} m`;
         const h = Math.floor(totalMin / 60);
         const m = totalMin % 60;
-        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} h`;
     }
 };
 exports.DashboardService = DashboardService;

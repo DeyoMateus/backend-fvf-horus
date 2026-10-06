@@ -33,6 +33,9 @@ let HashChainService = class HashChainService {
             timestampEvento: new Date(payload.timestampEvento).toISOString(),
             tipoEvento: payload.tipoEvento,
         };
+        if (payload.fusoOffsetMin !== null && payload.fusoOffsetMin !== undefined) {
+            ordenado.fusoOffsetMin = payload.fusoOffsetMin;
+        }
         return JSON.stringify(ordenado);
     }
     calcularHash(hashAnterior, sequencial, payload) {
@@ -66,6 +69,7 @@ let HashChainService = class HashChainService {
                 observacao: registro.observacao,
                 sequencial: registro.sequencial,
                 deviceUuidUsado: registro.deviceUuidUsado,
+                fusoOffsetMin: registro.fusoOffsetMin ?? null,
             });
             if (hashRecalculado !== registro.hashAtual) {
                 quebras.push({

@@ -14,6 +14,7 @@ export declare class RedisThrottlerStorageService implements ThrottlerStorage, O
     constructor();
     increment(key: string, ttl: number, limit: number, blockDuration: number, throttlerName: string): Promise<RegistroThrottlerStorage>;
     private incrementarFallbackLocal;
+    segundosBloqueado(key: string, throttlerName: string): Promise<number>;
     onModuleDestroy(): Promise<void>;
 }
 export {};

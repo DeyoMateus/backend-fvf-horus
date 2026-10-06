@@ -3,6 +3,7 @@ import { CreateEmpresaMaeDto } from './dto/create-empresa-mae.dto';
 import { UpdateGrupoDto } from './dto/update-grupo.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
 import { AtualizarStatusEmpresaDto } from './dto/atualizar-status-empresa.dto';
+import { DestinatariosWhatsappUsuarioDto } from './dto/destinatarios-whatsapp-usuario.dto';
 import { UpdateUsuarioSuperAdminDto } from './dto/update-usuario-super-admin.dto';
 import { CreateUsuarioGrupoDto } from './dto/create-usuario-grupo.dto';
 import { AtualizarStatusUsuarioEmpresaDto } from '../usuarios-empresa/dto/atualizar-status-usuario-empresa.dto';
@@ -52,6 +53,7 @@ export declare class SuperAdminController {
             cnpj: string;
             ativo: boolean;
             registroInpiAfd: string | null;
+            fusoHorario: string;
             totalMotoristas: number;
         }[];
         usuarios: {
@@ -61,6 +63,10 @@ export declare class SuperAdminController {
             email: string;
             papel: import("@prisma/client").$Enums.PapelUsuario;
             ativo: boolean;
+            telefoneWhatsapp: string | null;
+            telefoneGerenciamentoRisco: string | null;
+            recebeWhatsappAlertas: boolean;
+            recebeWhatsappEquipeGr: boolean;
         }[];
     }>;
     atualizarGrupo(id: string, dto: UpdateGrupoDto, superAdmin: SuperAdminAutenticado): Promise<{
@@ -78,6 +84,7 @@ export declare class SuperAdminController {
         cnpj: string;
         razaoSocial: string;
         registroInpiAfd: string | null;
+        fusoHorario: string;
         regraSindicalId: string | null;
     }>;
     atualizarStatusEmpresa(id: string, dto: AtualizarStatusEmpresaDto, superAdmin: SuperAdminAutenticado): Promise<{
@@ -89,7 +96,13 @@ export declare class SuperAdminController {
         cnpj: string;
         razaoSocial: string;
         registroInpiAfd: string | null;
+        fusoHorario: string;
         regraSindicalId: string | null;
+    }>;
+    atualizarDestinatariosWhatsapp(id: string, dto: DestinatariosWhatsappUsuarioDto, superAdmin: SuperAdminAutenticado): Promise<{
+        id: string;
+        recebeWhatsappAlertas: boolean;
+        recebeWhatsappEquipeGr: boolean;
     }>;
     atualizarUsuario(id: string, dto: UpdateUsuarioSuperAdminDto, superAdmin: SuperAdminAutenticado): Promise<{
         id: string;

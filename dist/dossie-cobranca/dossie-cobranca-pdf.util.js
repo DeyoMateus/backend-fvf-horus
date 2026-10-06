@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.gerarPdfDossieCobranca = gerarPdfDossieCobranca;
 const pdfkit_1 = __importDefault(require("pdfkit"));
+const fuso_contexto_1 = require("../common/fuso/fuso-contexto");
 function formatarHoras(minutos) {
     const h = Math.floor(minutos / 60);
     const m = Math.round(minutos % 60);
@@ -26,7 +27,7 @@ async function gerarPdfDossieCobranca(itens, empresaNome, periodoInicio, periodo
     doc
         .fontSize(9)
         .fillColor('#374151')
-        .text(`${empresaNome}   |   Período: ${periodoInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}   |   Gerado em: ${new Date().toLocaleString('pt-BR')}`, { align: 'center' });
+        .text(`${empresaNome}   |   Período: ${periodoInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}   |   Gerado em: ${(0, fuso_contexto_1.agoraDoCliente)()}`, { align: 'center' });
     doc.moveDown();
     doc
         .fontSize(8)
@@ -55,8 +56,8 @@ async function gerarPdfDossieCobranca(itens, empresaNome, periodoInicio, periodo
             .fontSize(9)
             .font('Helvetica')
             .fillColor('#374151')
-            .text(`CPF: ${item.motoristaCpf}   |   Ocorrência detectada em: ${item.criadoEm.toLocaleString('pt-BR')}`);
-        doc.text(`Janela avaliada: ${new Date(item.periodoInicio).toLocaleString('pt-BR')} até ${new Date(item.periodoFim).toLocaleString('pt-BR')}`);
+            .text(`CPF: ${item.motoristaCpf}   |   Ocorrência detectada em: ${(0, fuso_contexto_1.instanteDoEvento)(item.criadoEm, item.fusoCriadoEmMin)}`);
+        doc.text(`Janela avaliada: ${(0, fuso_contexto_1.instanteDoEvento)(new Date(item.periodoInicio), item.fusoPeriodoInicioMin)} até ${(0, fuso_contexto_1.instanteDoEvento)(new Date(item.periodoFim), item.fusoPeriodoFimMin)}`);
         doc
             .font('Helvetica-Bold')
             .text(`Total de espera: ${formatarHoras(item.minutosTotais)}`);
@@ -66,7 +67,7 @@ async function gerarPdfDossieCobranca(itens, empresaNome, periodoInicio, periodo
             const inicio = new Date(intervalo.inicio);
             const fim = new Date(intervalo.fim);
             const duracaoMin = Math.round((fim.getTime() - inicio.getTime()) / 60000);
-            doc.text(`  • ${inicio.toLocaleString('pt-BR')} → ${fim.toLocaleString('pt-BR')} (${formatarHoras(duracaoMin)})`);
+            doc.text(`  • ${(0, fuso_contexto_1.instanteDoEvento)(inicio, intervalo.fusoInicioMin)} → ${(0, fuso_contexto_1.instanteDoEvento)(fim, intervalo.fusoFimMin)} (${formatarHoras(duracaoMin)})`);
         }
         doc.fontSize(8).fillColor('#6b7280').text(item.observacao);
         doc.fillColor('#111827');

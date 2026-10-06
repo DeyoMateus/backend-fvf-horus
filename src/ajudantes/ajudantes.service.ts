@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ActorType, Prisma, StatusMotorista } from '@prisma/client';
-import { createHash, randomBytes, randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { AuditService } from '../common/audit/audit.service';
 import { TenantService } from '../common/tenant/tenant.service';
 import { TenantContext } from '../common/tenant/tenant-context';
@@ -16,6 +16,7 @@ import { normalizarPaginacao } from '../common/pagination/pagination.util';
 import { CreateAjudanteDto } from './dto/create-ajudante.dto';
 import { AtualizarStatusAjudanteDto } from './dto/atualizar-status-ajudante.dto';
 import { VincularDispositivoAjudanteDto } from './dto/vincular-dispositivo-ajudante.dto';
+import { hashChaveDispositivo } from '../common/crypto/device-key-hash.util';
 
 /**
  * Ajudante (Rodada 66) , cadastro SEPARADO do Motorista (decisão
@@ -323,9 +324,7 @@ export class AjudantesService {
     }
 
     const deviceApiKeyPlano = randomBytes(32).toString('hex');
-    const deviceApiKeyHash = createHash('sha256')
-      .update(deviceApiKeyPlano)
-      .digest('hex');
+    const deviceApiKeyHash = hashChaveDispositivo(deviceApiKeyPlano);
 
     const vinculo = await this.prisma.dispositivoVinculadoAjudante.upsert({
       where: { ajudanteId },

@@ -69,6 +69,11 @@ export class AlertasJornadaService {
       where: {
         motoristaId,
         ...(apenasNaoVisualizados ? { visualizadoEm: null } : {}),
+        // Rodada 165: violação de integridade é assunto do gestor/GR; o
+        // motorista (visão sem grupo solicitante) nunca recebe esse alerta.
+        ...(grupoIdSolicitante
+          ? {}
+          : { tipo: { not: 'INTEGRIDADE_CADEIA_VIOLADA' as const } }),
       },
       orderBy: { createdAt: 'desc' },
     });

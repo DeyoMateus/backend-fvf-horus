@@ -15,11 +15,11 @@ export declare class SolicitacoesAjustePontoService {
     constructor(prisma: PrismaService, audit: AuditService, tenant: TenantService, storage: StorageService, push: PushNotificationsService, tratamentosPontoService: TratamentosPontoService);
     criar(motoristaId: string, dto: CreateSolicitacaoAjusteDto): Promise<{
         id: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         registroReferenciaId: string | null;
         justificativa: string;
         decididoPorUsuarioId: string | null;
@@ -47,11 +47,11 @@ export declare class SolicitacoesAjustePontoService {
         } | null;
     } & {
         id: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         registroReferenciaId: string | null;
         justificativa: string;
         decididoPorUsuarioId: string | null;
@@ -70,11 +70,11 @@ export declare class SolicitacoesAjustePontoService {
         conteudo: Buffer<ArrayBufferLike>;
         id: string;
         createdAt: Date;
+        solicitacaoId: string;
         nomeArquivo: string;
         contentType: string;
         tamanhoBytes: number;
         chaveStorage: string | null;
-        solicitacaoId: string;
     }>;
     listarPorMotorista(motoristaId: string, grupoIdSolicitante: string): Promise<({
         registroReferencia: {
@@ -96,11 +96,11 @@ export declare class SolicitacoesAjustePontoService {
         } | null;
     } & {
         id: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         registroReferenciaId: string | null;
         justificativa: string;
         decididoPorUsuarioId: string | null;
@@ -132,11 +132,11 @@ export declare class SolicitacoesAjustePontoService {
         } | null;
     } & {
         id: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         registroReferenciaId: string | null;
         justificativa: string;
         decididoPorUsuarioId: string | null;
@@ -169,11 +169,11 @@ export declare class SolicitacoesAjustePontoService {
             } | null;
         } & {
             id: string;
+            createdAt: Date;
+            status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
             motoristaId: string;
             tipoEvento: import("@prisma/client").$Enums.TipoEvento;
             timestampEvento: Date;
-            createdAt: Date;
-            status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
             registroReferenciaId: string | null;
             justificativa: string;
             decididoPorUsuarioId: string | null;
@@ -205,11 +205,11 @@ export declare class SolicitacoesAjustePontoService {
         } | null;
     } & {
         id: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         registroReferenciaId: string | null;
         justificativa: string;
         decididoPorUsuarioId: string | null;
@@ -237,11 +237,11 @@ export declare class SolicitacoesAjustePontoService {
         } | null;
     } & {
         id: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         registroReferenciaId: string | null;
         justificativa: string;
         decididoPorUsuarioId: string | null;
@@ -253,11 +253,11 @@ export declare class SolicitacoesAjustePontoService {
         conteudo: Buffer<ArrayBufferLike>;
         id: string;
         createdAt: Date;
+        solicitacaoId: string;
         nomeArquivo: string;
         contentType: string;
         tamanhoBytes: number;
         chaveStorage: string | null;
-        solicitacaoId: string;
     }>;
     removerEvidenciaDoPainel(evidenciaId: string, grupoIdSolicitante: string): Promise<void>;
     private buscarPendentePertencente;

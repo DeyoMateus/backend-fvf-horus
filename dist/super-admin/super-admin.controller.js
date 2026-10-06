@@ -21,6 +21,7 @@ const create_empresa_mae_dto_1 = require("./dto/create-empresa-mae.dto");
 const update_grupo_dto_1 = require("./dto/update-grupo.dto");
 const update_empresa_dto_1 = require("./dto/update-empresa.dto");
 const atualizar_status_empresa_dto_1 = require("./dto/atualizar-status-empresa.dto");
+const destinatarios_whatsapp_usuario_dto_1 = require("./dto/destinatarios-whatsapp-usuario.dto");
 const update_usuario_super_admin_dto_1 = require("./dto/update-usuario-super-admin.dto");
 const create_usuario_grupo_dto_1 = require("./dto/create-usuario-grupo.dto");
 const atualizar_status_usuario_empresa_dto_1 = require("../usuarios-empresa/dto/atualizar-status-usuario-empresa.dto");
@@ -51,6 +52,9 @@ let SuperAdminController = class SuperAdminController {
     }
     atualizarStatusEmpresa(id, dto, superAdmin) {
         return this.superAdminService.atualizarStatusEmpresa(id, dto.ativo, superAdmin.sub);
+    }
+    atualizarDestinatariosWhatsapp(id, dto, superAdmin) {
+        return this.superAdminService.atualizarDestinatariosWhatsapp(id, dto, superAdmin.sub);
     }
     atualizarUsuario(id, dto, superAdmin) {
         return this.superAdminService.atualizarUsuario(id, dto, superAdmin.sub);
@@ -127,6 +131,15 @@ __decorate([
     __metadata("design:paramtypes", [String, atualizar_status_empresa_dto_1.AtualizarStatusEmpresaDto, Object]),
     __metadata("design:returntype", void 0)
 ], SuperAdminController.prototype, "atualizarStatusEmpresa", null);
+__decorate([
+    (0, common_1.Patch)('usuarios/:id/whatsapp-alertas'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentSuperAdmin)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, destinatarios_whatsapp_usuario_dto_1.DestinatariosWhatsappUsuarioDto, Object]),
+    __metadata("design:returntype", void 0)
+], SuperAdminController.prototype, "atualizarDestinatariosWhatsapp", null);
 __decorate([
     (0, common_1.Patch)('usuarios/:id'),
     __param(0, (0, common_1.Param)('id')),

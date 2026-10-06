@@ -19,15 +19,18 @@ const banco_horas_service_1 = require("../banco-horas/banco-horas.service");
 const holerite_service_1 = require("../holerite/holerite.service");
 const atualizar_perfil_motorista_dto_1 = require("./dto/atualizar-perfil-motorista.dto");
 const motoristas_service_1 = require("./motoristas.service");
+const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
 function inicioDoMes(agora) {
-    return new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), 1, 0, 0, 0));
+    const p = (0, fuso_brasil_util_1.paraParedeBrt)(agora);
+    return new Date(Date.UTC(p.getUTCFullYear(), p.getUTCMonth(), 1, 0, 0, 0));
 }
 function resolverInicioMesSolicitado(agora, anoQuery, mesQuery) {
     const inicioMesAtual = inicioDoMes(agora);
     if (!anoQuery && !mesQuery)
         return inicioMesAtual;
-    const ano = anoQuery ? Number(anoQuery) : agora.getUTCFullYear();
-    const mes = mesQuery ? Number(mesQuery) : agora.getUTCMonth() + 1;
+    const agoraBrt = (0, fuso_brasil_util_1.paraParedeBrt)(agora);
+    const ano = anoQuery ? Number(anoQuery) : agoraBrt.getUTCFullYear();
+    const mes = mesQuery ? Number(mesQuery) : agoraBrt.getUTCMonth() + 1;
     if (!Number.isFinite(ano) ||
         !Number.isFinite(mes) ||
         mes < 1 ||
@@ -40,7 +43,7 @@ function resolverInicioMesSolicitado(agora, anoQuery, mesQuery) {
         : inicioSolicitado;
 }
 function fimDoMes(inicioMes) {
-    return new Date(Date.UTC(inicioMes.getUTCFullYear(), inicioMes.getUTCMonth() + 1, 1, 0, 0, 0) - 1);
+    return new Date(Date.UTC(inicioMes.getUTCFullYear(), inicioMes.getUTCMonth() + 1, 0, 0, 0, 0));
 }
 let MotoristasMobileController = class MotoristasMobileController {
     motoristasService;

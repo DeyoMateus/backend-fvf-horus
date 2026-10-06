@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SolicitacoesAjustePontoService = void 0;
 const common_1 = require("@nestjs/common");
+const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
 const client_1 = require("@prisma/client");
 const crypto_1 = require("crypto");
 const audit_service_1 = require("../common/audit/audit.service");
@@ -212,7 +213,7 @@ let SolicitacoesAjustePontoService = class SolicitacoesAjustePontoService {
                 tratamentoPontoId: tratamento.id,
             },
         });
-        await this.push.notificarMotorista(solicitacao.motoristaId, 'Pedido de ajuste aprovado', `Seu pedido de correção (${solicitacao.tipoEvento} em ${solicitacao.timestampEvento.toLocaleString('pt-BR')}) foi aprovado pela empresa.`, { tipo: 'SOLICITACAO_AJUSTE_APROVADA', solicitacaoId });
+        await this.push.notificarMotorista(solicitacao.motoristaId, 'Pedido de ajuste aprovado', `Seu pedido de correção (${solicitacao.tipoEvento} em ${(0, fuso_brasil_util_1.marcarHorario)(solicitacao.timestampEvento)}) foi aprovado pela empresa.`, { tipo: 'SOLICITACAO_AJUSTE_APROVADA', solicitacaoId });
         return atualizada;
     }
     async rejeitar(solicitacaoId, motivoDecisao, usuarioId, grupoIdSolicitante) {
@@ -238,7 +239,7 @@ let SolicitacoesAjustePontoService = class SolicitacoesAjustePontoService {
             entidadeId: solicitacaoId,
             detalhes: { motoristaId: solicitacao.motoristaId, motivoDecisao },
         });
-        await this.push.notificarMotorista(solicitacao.motoristaId, 'Pedido de ajuste não aprovado', `Seu pedido de correção (${solicitacao.tipoEvento} em ${solicitacao.timestampEvento.toLocaleString('pt-BR')}) não foi aprovado. Motivo: ${motivoDecisao}`, { tipo: 'SOLICITACAO_AJUSTE_REJEITADA', solicitacaoId });
+        await this.push.notificarMotorista(solicitacao.motoristaId, 'Pedido de ajuste não aprovado', `Seu pedido de correção (${solicitacao.tipoEvento} em ${(0, fuso_brasil_util_1.marcarHorario)(solicitacao.timestampEvento)}) não foi aprovado. Motivo: ${motivoDecisao}`, { tipo: 'SOLICITACAO_AJUSTE_REJEITADA', solicitacaoId });
         return atualizada;
     }
     async baixarEvidenciaDoPainel(evidenciaId, grupoIdSolicitante) {

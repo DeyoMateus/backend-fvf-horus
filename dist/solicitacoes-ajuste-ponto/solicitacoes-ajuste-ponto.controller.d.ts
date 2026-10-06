@@ -25,11 +25,11 @@ export declare class SolicitacoesAjustePontoPorMotoristaController {
         } | null;
     } & {
         id: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         registroReferenciaId: string | null;
         justificativa: string;
         decididoPorUsuarioId: string | null;
@@ -65,11 +65,11 @@ export declare class SolicitacoesAjustePontoGeralController {
         } | null;
     } & {
         id: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         registroReferenciaId: string | null;
         justificativa: string;
         decididoPorUsuarioId: string | null;
@@ -102,11 +102,11 @@ export declare class SolicitacoesAjustePontoGeralController {
             } | null;
         } & {
             id: string;
+            createdAt: Date;
+            status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
             motoristaId: string;
             tipoEvento: import("@prisma/client").$Enums.TipoEvento;
             timestampEvento: Date;
-            createdAt: Date;
-            status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
             registroReferenciaId: string | null;
             justificativa: string;
             decididoPorUsuarioId: string | null;
@@ -138,11 +138,11 @@ export declare class SolicitacoesAjustePontoGeralController {
         } | null;
     } & {
         id: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         registroReferenciaId: string | null;
         justificativa: string;
         decididoPorUsuarioId: string | null;
@@ -170,11 +170,11 @@ export declare class SolicitacoesAjustePontoGeralController {
         } | null;
     } & {
         id: string;
+        createdAt: Date;
+        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
         registroReferenciaId: string | null;
         justificativa: string;
         decididoPorUsuarioId: string | null;

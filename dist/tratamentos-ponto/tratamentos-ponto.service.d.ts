@@ -17,25 +17,32 @@ export declare class TratamentosPontoService {
     constructor(prisma: PrismaService, hashChain: HashChainService, audit: AuditService, tenant: TenantService, storage: StorageService, push: PushNotificationsService, registrosJornada: RegistrosJornadaService);
     create(motoristaId: string, dto: CreateTratamentoPontoDto, usuarioId: string, grupoIdSolicitante: string): Promise<{
         id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        motivo: string;
         usuarioId: string;
+        motivo: string;
         registroReferenciaId: string | null;
         hashReferencia: string;
         hashRegistro: string;
         motoristaCienciaEm: Date | null;
     }>;
-    criarRegistroAncorado(motoristaId: string, tipoEvento: CreateTratamentoPontoDto['tipoEvento'], timestampEvento: Date, motivo: string, usuarioId: string, registroReferenciaId?: string): Promise<{
+    private fusoDoMotoristaNoInstante;
+    private validarEncaixeNaJornada;
+    contextoDoAjuste(motoristaId: string, timestampEvento: Date, grupoIdSolicitante: string): Promise<{
+        permitidos: string[];
+    }>;
+    criarRegistroAncorado(motoristaId: string, tipoEvento: CreateTratamentoPontoDto['tipoEvento'], timestampEvento: Date, motivo: string, usuarioId: string, registroReferenciaId?: string, fusoOffsetMin?: number | null): Promise<{
         id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        motivo: string;
         usuarioId: string;
+        motivo: string;
         registroReferenciaId: string | null;
         hashReferencia: string;
         hashRegistro: string;
@@ -56,12 +63,13 @@ export declare class TratamentosPontoService {
         }[];
     } & {
         id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        motivo: string;
         usuarioId: string;
+        motivo: string;
         registroReferenciaId: string | null;
         hashReferencia: string;
         hashRegistro: string;
@@ -78,20 +86,21 @@ export declare class TratamentosPontoService {
         conteudo: Buffer<ArrayBufferLike>;
         id: string;
         createdAt: Date;
-        tratamentoId: string;
         nomeArquivo: string;
+        tratamentoId: string;
         contentType: string;
         tamanhoBytes: number;
         chaveStorage: string | null;
     }>;
     verificarTratamentoNoGrupo(tratamentoId: string, grupoIdSolicitante: string): Promise<{
         id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        motivo: string;
         usuarioId: string;
+        motivo: string;
         registroReferenciaId: string | null;
         hashReferencia: string;
         hashRegistro: string;
@@ -100,12 +109,12 @@ export declare class TratamentosPontoService {
     verificarEvidenciaNoGrupo(evidenciaId: string, grupoIdSolicitante: string): Promise<{
         id: string;
         createdAt: Date;
-        tratamentoId: string;
         nomeArquivo: string;
+        conteudo: import("@prisma/client/runtime/library").Bytes | null;
+        tratamentoId: string;
         contentType: string;
         tamanhoBytes: number;
         chaveStorage: string | null;
-        conteudo: import("@prisma/client/runtime/library").Bytes | null;
     }>;
     listarMeusAjustes(motoristaId: string): Promise<({
         usuario: {
@@ -119,12 +128,13 @@ export declare class TratamentosPontoService {
         }[];
     } & {
         id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        motivo: string;
         usuarioId: string;
+        motivo: string;
         registroReferenciaId: string | null;
         hashReferencia: string;
         hashRegistro: string;
@@ -134,20 +144,21 @@ export declare class TratamentosPontoService {
         conteudo: Buffer<ArrayBufferLike>;
         id: string;
         createdAt: Date;
-        tratamentoId: string;
         nomeArquivo: string;
+        tratamentoId: string;
         contentType: string;
         tamanhoBytes: number;
         chaveStorage: string | null;
     }>;
     darCiencia(tratamentoId: string, motoristaId: string): Promise<{
         id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        motivo: string;
         usuarioId: string;
+        motivo: string;
         registroReferenciaId: string | null;
         hashReferencia: string;
         hashRegistro: string;

@@ -110,6 +110,9 @@ export class RedisThrottlerStorageService
       // cliente próprio (evita competir com o BullMQ por comandos
       // bloqueantes e mantém este módulo desacoplado).
       maxRetriesPerRequest: 1,
+      // Rodada 165: com o Redis fora, falha NA HORA (e cai no fallback local)
+      // em vez de enfileirar o comando esperando a reconexão e atrasar a requisição.
+      enableOfflineQueue: false,
       retryStrategy: (times) => Math.min(times * 200, 2000),
       lazyConnect: false,
     });
@@ -211,6 +214,29 @@ export class RedisThrottlerStorageService
         Math.max(registro.blockExpiresAt - agora, 0) / 1000,
       ),
     };
+  }
+
+  /**
+   * Rodada 165: consulta SEM incrementar. Devolve os segundos restantes
+   * de bloqueio da chave (0 = livre). Usado para checar, antes de
+   * autenticar, se um IP já está bloqueado por falhas anteriores.
+   */
+  async segundosBloqueado(key: string, throttlerName: string): Promise<number> {
+    const chaveRedis = `throttler:${throttlerName}:${key}`;
+    const agora = Date.now();
+    try {
+      const d = await this.redis.hmget(
+        chaveRedis,
+        'isBlocked',
+        'blockExpiresAt',
+      );
+      if (d[0] !== '1') return 0;
+      return Math.max(Math.ceil((Number(d[1] ?? 0) - agora) / 1000), 0);
+    } catch {
+      const r = this.fallbackLocal.get(chaveRedis);
+      if (!r || !r.isBlocked) return 0;
+      return Math.max(Math.ceil((r.blockExpiresAt - agora) / 1000), 0);
+    }
   }
 
   async onModuleDestroy() {

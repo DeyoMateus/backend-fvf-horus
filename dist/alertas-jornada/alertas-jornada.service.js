@@ -40,6 +40,9 @@ let AlertasJornadaService = class AlertasJornadaService {
             where: {
                 motoristaId,
                 ...(apenasNaoVisualizados ? { visualizadoEm: null } : {}),
+                ...(grupoIdSolicitante
+                    ? {}
+                    : { tipo: { not: 'INTEGRIDADE_CADEIA_VIOLADA' } }),
             },
             orderBy: { createdAt: 'desc' },
         });

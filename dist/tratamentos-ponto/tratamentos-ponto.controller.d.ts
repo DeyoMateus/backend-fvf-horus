@@ -7,16 +7,20 @@ export declare class TratamentosPontoController {
     constructor(tratamentosService: TratamentosPontoService);
     create(motoristaId: string, dto: CreateTratamentoPontoDto, user: UsuarioAutenticado): Promise<{
         id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        motivo: string;
         usuarioId: string;
+        motivo: string;
         registroReferenciaId: string | null;
         hashReferencia: string;
         hashRegistro: string;
         motoristaCienciaEm: Date | null;
+    }>;
+    contexto(motoristaId: string, timestamp: string, user: UsuarioAutenticado): Promise<{
+        permitidos: string[];
     }>;
     list(motoristaId: string, user: UsuarioAutenticado): Promise<({
         usuario: {
@@ -33,12 +37,13 @@ export declare class TratamentosPontoController {
         }[];
     } & {
         id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        motivo: string;
         usuarioId: string;
+        motivo: string;
         registroReferenciaId: string | null;
         hashReferencia: string;
         hashRegistro: string;

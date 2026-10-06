@@ -18,6 +18,7 @@ class CreateTratamentoPontoDto {
     timestampEvento;
     motivo;
     registroReferenciaId;
+    fusoOffsetMin;
 }
 exports.CreateTratamentoPontoDto = CreateTratamentoPontoDto;
 __decorate([
@@ -39,4 +40,11 @@ __decorate([
     (0, class_validator_1.IsUUID)(),
     __metadata("design:type", String)
 ], CreateTratamentoPontoDto.prototype, "registroReferenciaId", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(-720),
+    (0, class_validator_1.Max)(840),
+    __metadata("design:type", Number)
+], CreateTratamentoPontoDto.prototype, "fusoOffsetMin", void 0);
 //# sourceMappingURL=create-tratamento-ponto.dto.js.map

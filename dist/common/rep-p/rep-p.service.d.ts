@@ -3,6 +3,7 @@ import { NsrService } from '../nsr/nsr.service';
 interface EmpresaDoRelatorio {
     razaoSocial: string;
     cnpj: string;
+    fusoHorario?: string | null;
 }
 export interface FeriadoDoRelatorio {
     data: string;
@@ -29,9 +30,9 @@ export declare class RepPService {
     private escreverRodape;
     private resumirDia;
     private calcularDescansoInterjornada;
+    private somarPedacosDoDia;
     private somarIntervalosNoDia;
     private construirIntervalosCompletos;
-    private calcularMinutosNoturnosNoDia;
     private minutosEntre;
     private chaveDia;
     private formatarDiaBr;

@@ -33,6 +33,7 @@ const bullmq_1 = require("@nestjs/bullmq");
 const bullmq_2 = require("bullmq");
 const verificacao_agendada_service_1 = require("./verificacao-agendada.service");
 const lote_registros_jornada_constants_1 = require("./lote-registros-jornada.constants");
+const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
 let RegistrosJornadaService = class RegistrosJornadaService {
     static { RegistrosJornadaService_1 = this; }
     prisma;
@@ -73,6 +74,7 @@ let RegistrosJornadaService = class RegistrosJornadaService {
                 connection: {
                     host: process.env.REDIS_HOST ?? 'localhost',
                     port: Number(process.env.REDIS_PORT ?? 6379),
+                    password: process.env.REDIS_PASSWORD || undefined,
                 },
             });
             this.queueEventsLote.on('error', (err) => {
@@ -111,7 +113,12 @@ let RegistrosJornadaService = class RegistrosJornadaService {
             });
             const timestampEventoNovo = new Date(dto.timestampEvento);
             let precisaRegistrarPendenciaRelogioConfiavel = false;
+            const igualPermitido = !!ultimo &&
+                timestampEventoNovo.getTime() === ultimo.timestampEvento.getTime() &&
+                (dto.tipoEvento === client_1.TipoEvento.FIM_JORNADA ||
+                    ultimo.tipoEvento === client_1.TipoEvento.INICIO_JORNADA);
             if (ultimo &&
+                !igualPermitido &&
                 timestampEventoNovo.getTime() <= ultimo.timestampEvento.getTime()) {
                 await this.audit.registrar({
                     actorType: client_1.ActorType.MOTORISTA,
@@ -224,8 +231,11 @@ let RegistrosJornadaService = class RegistrosJornadaService {
             const hashAnterior = ultimo?.hashAtual ?? motorista.hashGenesis;
             const latitude = this.arredondarCoordenada(dto.latitude);
             const longitude = this.arredondarCoordenada(dto.longitude);
+            const fusoResolvido = (0, fuso_brasil_util_1.resolverFusoDoRegistro)(dto.fusoOffsetMin, dto.latitude, dto.longitude);
+            const fusoOffsetMin = fusoResolvido.offsetMin;
             const hashAtual = this.hashChain.calcularHash(hashAnterior, sequencial, {
                 motoristaId,
+                fusoOffsetMin,
                 tipoEvento: dto.tipoEvento,
                 timestampEvento: dto.timestampEvento,
                 latitude: latitude ?? null,
@@ -254,6 +264,7 @@ let RegistrosJornadaService = class RegistrosJornadaService {
                     deviceUuidUsado,
                     idempotencyKey: dto.idempotencyKey,
                     elapsedRealtimeMs: dto.elapsedRealtimeMs ?? null,
+                    fusoOffsetMin,
                 },
             });
             if (precisaRegistrarPendenciaRelogioConfiavel &&
@@ -274,10 +285,28 @@ let RegistrosJornadaService = class RegistrosJornadaService {
                 acao: 'REGISTRO_JORNADA_CRIADO',
                 entidade: 'RegistroJornada',
                 entidadeId: registro.id,
-                detalhes: { sequencial, tipoEvento: dto.tipoEvento },
+                detalhes: { sequencial, tipoEvento: dto.tipoEvento, fusoOffsetMin },
                 ip,
                 userAgent,
             });
+            if (fusoResolvido.divergenteDoGps) {
+                await this.audit.registrar({
+                    actorType: client_1.ActorType.MOTORISTA,
+                    actorId: motoristaId,
+                    acao: 'FUSO_APARELHO_INCOMPATIVEL_GPS',
+                    entidade: 'RegistroJornada',
+                    entidadeId: registro.id,
+                    detalhes: {
+                        fusoInformadoPeloAparelhoMin: fusoResolvido.informadoPeloAparelho,
+                        fusoAplicadoMin: fusoOffsetMin,
+                        latitude,
+                        longitude,
+                        deviceUuidUsado,
+                    },
+                    ip,
+                    userAgent,
+                });
+            }
             if (dto.flagsIntegridadeDispositivo?.length) {
                 await this.audit.registrar({
                     actorType: client_1.ActorType.MOTORISTA,
@@ -562,7 +591,8 @@ let RegistrosJornadaService = class RegistrosJornadaService {
     }
     async avaliarFolgaConflitante(tx, motoristaId, registroRecemCriado) {
         try {
-            const dia = new Date(Date.UTC(registroRecemCriado.timestampEvento.getUTCFullYear(), registroRecemCriado.timestampEvento.getUTCMonth(), registroRecemCriado.timestampEvento.getUTCDate()));
+            const offsetDoPonto = registroRecemCriado.fusoOffsetMin ?? -180;
+            const dia = new Date(`${(0, fuso_brasil_util_1.chaveDiaBrt)(registroRecemCriado.timestampEvento, offsetDoPonto)}T00:00:00.000Z`);
             const folgaDoDia = await tx.folgaConcedida.findUnique({
                 where: { motoristaId_data: { motoristaId, data: dia } },
             });
@@ -576,8 +606,8 @@ let RegistrosJornadaService = class RegistrosJornadaService {
                     tipo: client_1.TipoAlertaJornada.PONTO_REGISTRADO_EM_DIA_DE_FOLGA,
                     severidade: client_1.SeveridadeAlerta.ATENCAO,
                     mensagem,
-                    janelaInicio: dia,
-                    janelaFim: new Date(dia.getTime() + 24 * 60 * 60 * 1000),
+                    janelaInicio: new Date(dia.getTime() - offsetDoPonto * 60_000),
+                    janelaFim: new Date(dia.getTime() - offsetDoPonto * 60_000 + 24 * 60 * 60 * 1000),
                     minutosAcumulados: 0,
                     registroGeradorId: registroRecemCriado.id,
                     detalhes: {
@@ -643,7 +673,7 @@ let RegistrosJornadaService = class RegistrosJornadaService {
                 return null;
             const mensagem = `Motorista iniciou direção sem nenhum CT-e vinculado/emitido nas últimas ` +
                 `${Math.round(this.JANELA_CTE_RECENTE_MS / 60000)} minutos, mas ainda existe um CT-e em aberto` +
-                `${cteAberto.numero ? ` (nº ${cteAberto.numero})` : ''}, vinculado desde ${cteAberto.createdAt.toLocaleString('pt-BR')} ` +
+                `${cteAberto.numero ? ` (nº ${cteAberto.numero})` : ''}, vinculado desde ${(0, fuso_brasil_util_1.marcarHorario)(cteAberto.createdAt)} ` +
                 `e ainda sem "Fim de descarregamento" registrado. Confira se essa entrega já foi feita e só não foi baixada no ` +
                 `sistema, ou se o motorista está rodando vazio por outro motivo.`;
             const alerta = await tx.alertaJornada.create({
@@ -934,6 +964,28 @@ let RegistrosJornadaService = class RegistrosJornadaService {
             orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
         });
     }
+    async listarParaDispositivo(motoristaId, inicio, fim) {
+        const desde = inicio ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const registros = await this.prisma.registroJornada.findMany({
+            where: {
+                motoristaId,
+                timestampEvento: { gte: desde, ...(fim ? { lte: fim } : {}) },
+            },
+            orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
+            take: 1000,
+        });
+        return registros.map((r) => ({
+            idLocal: r.idempotencyKey ?? r.id,
+            tipoEvento: r.tipoEvento,
+            timestampEvento: r.timestampEvento.toISOString(),
+            latitude: r.latitude != null ? Number(r.latitude) : null,
+            longitude: r.longitude != null ? Number(r.longitude) : null,
+            precisaoGpsM: r.precisaoGpsM ?? null,
+            observacao: r.observacao ?? null,
+            fusoOffsetMin: r.fusoOffsetMin ?? null,
+            criadoEm: r.createdAt.toISOString(),
+        }));
+    }
     async buscarPorIdempotencyKey(motoristaId, idempotencyKey) {
         const registro = await this.prisma.registroJornada.findUnique({
             where: { idempotencyKey },
@@ -943,15 +995,19 @@ let RegistrosJornadaService = class RegistrosJornadaService {
         }
         return registro;
     }
-    listByMotoristaNoPeriodo(motoristaId, inicio, fim) {
+    listByMotoristaNoPeriodo(motoristaId, inicio, fim, offsetEmpresaMin) {
         return this.prisma.registroJornada.findMany({
             where: {
                 motoristaId,
                 ...(inicio || fim
                     ? {
                         timestampEvento: {
-                            ...(inicio ? { gte: inicio } : {}),
-                            ...(fim ? { lte: fim } : {}),
+                            ...(inicio
+                                ? { gte: (0, fuso_brasil_util_1.inicioDePeriodoBrt)(inicio, offsetEmpresaMin) }
+                                : {}),
+                            ...(fim
+                                ? { lte: (0, fuso_brasil_util_1.fimDePeriodoBrt)(fim, offsetEmpresaMin) }
+                                : {}),
                         },
                     }
                     : {}),
@@ -1058,6 +1114,214 @@ let RegistrosJornadaService = class RegistrosJornadaService {
                 assinaturasInvalidas.length === 0,
         };
     }
+    async varrerIntegridadeCadeias() {
+        return tenant_context_1.TenantContext.paraSistema(async () => {
+            const motoristas = await this.prisma.motorista.findMany({
+                select: { id: true, nome: true, empresaId: true, hashGenesis: true },
+            });
+            let comViolacao = 0;
+            let alertasCriados = 0;
+            for (const motorista of motoristas) {
+                try {
+                    const registros = await this.prisma.registroJornada.findMany({
+                        where: { motoristaId: motorista.id },
+                        orderBy: { sequencial: 'asc' },
+                    });
+                    if (registros.length === 0)
+                        continue;
+                    const resultado = this.hashChain.verificarCadeia(motorista.hashGenesis, registros);
+                    if (resultado.quebras.length === 0)
+                        continue;
+                    const aceites = await this.prisma.integridadeAceite.findMany({
+                        where: { motoristaId: motorista.id },
+                        select: { sequencial: true },
+                    });
+                    const aceitos = new Set(aceites.map((a) => a.sequencial));
+                    const pendentes = resultado.quebras.filter((q) => !aceitos.has(q.sequencial));
+                    if (pendentes.length === 0)
+                        continue;
+                    comViolacao++;
+                    const assinatura = pendentes
+                        .map((q) => q.sequencial)
+                        .sort((a, b) => a - b)
+                        .join(',');
+                    const jaAlertados = await this.prisma.alertaJornada.findMany({
+                        where: {
+                            motoristaId: motorista.id,
+                            tipo: 'INTEGRIDADE_CADEIA_VIOLADA',
+                        },
+                        select: { detalhes: true },
+                    });
+                    const jaExiste = jaAlertados.some((a) => a.detalhes?.assinatura ===
+                        assinatura);
+                    if (jaExiste)
+                        continue;
+                    const primeira = registros.find((r) => r.sequencial === pendentes[0].sequencial);
+                    const mensagem = `Integridade violada: a cadeia de registros de ${motorista.nome} ` +
+                        `tem ${pendentes.length} evento(s) cujo conteúdo não confere com o ` +
+                        `hash gravado (nº ${assinatura}). Possível alteração direta no ` +
+                        `banco de dados. Abra o motorista, analise cada evento e, se ` +
+                        `for falso positivo conhecido, aceite a divergência.`;
+                    await this.prisma.alertaJornada.create({
+                        data: {
+                            motoristaId: motorista.id,
+                            tipo: 'INTEGRIDADE_CADEIA_VIOLADA',
+                            severidade: 'CRITICO',
+                            mensagem,
+                            janelaInicio: primeira.timestampEvento,
+                            janelaFim: primeira.timestampEvento,
+                            minutosAcumulados: 0,
+                            registroGeradorId: primeira.id,
+                            detalhes: {
+                                assinatura,
+                                sequenciais: pendentes.map((q) => q.sequencial),
+                                motivos: pendentes.map((q) => q.motivo),
+                                origem: 'varredura_automatica',
+                            },
+                        },
+                    });
+                    alertasCriados++;
+                    void this.whatsapp.notificarGestoresDaEmpresa(motorista.empresaId, mensagem);
+                }
+                catch (err) {
+                    this.logger.warn(`Falha ao verificar a cadeia do motorista ${motorista.id}: ${err.message}`);
+                }
+            }
+            return { verificados: motoristas.length, comViolacao, alertasCriados };
+        });
+    }
+    async analisarEventoIntegridade(motoristaId, sequencial, grupoIdSolicitante) {
+        await this.conferirTenant(motoristaId, grupoIdSolicitante);
+        const motorista = await this.prisma.motorista.findUnique({
+            where: { id: motoristaId },
+        });
+        if (!motorista)
+            throw new common_1.NotFoundException('Motorista não encontrado');
+        const registros = await this.prisma.registroJornada.findMany({
+            where: { motoristaId },
+            orderBy: { sequencial: 'asc' },
+        });
+        const idx = registros.findIndex((r) => r.sequencial === sequencial);
+        if (idx < 0)
+            throw new common_1.NotFoundException('Evento não encontrado');
+        const evento = registros[idx];
+        const anterior = idx > 0 ? registros[idx - 1] : null;
+        const proximo = idx < registros.length - 1 ? registros[idx + 1] : null;
+        const hashEsperadoAnterior = anterior
+            ? anterior.hashAtual
+            : motorista.hashGenesis;
+        const hashAnteriorConfere = evento.hashAnterior === hashEsperadoAnterior;
+        const basePayload = {
+            motoristaId: evento.motoristaId,
+            tipoEvento: evento.tipoEvento,
+            timestampEvento: evento.timestampEvento,
+            latitude: evento.latitude,
+            longitude: evento.longitude,
+            precisaoGpsM: evento.precisaoGpsM,
+            odometro: evento.odometro,
+            observacao: evento.observacao,
+            sequencial: evento.sequencial,
+            deviceUuidUsado: evento.deviceUuidUsado,
+            fusoOffsetMin: evento.fusoOffsetMin ?? null,
+        };
+        const hashDe = (payload, hashAnt) => this.hashChain.calcularHash(hashAnt, evento.sequencial, payload);
+        const hashRecalculado = hashDe(basePayload, evento.hashAnterior);
+        const hashConfere = hashRecalculado === evento.hashAtual;
+        const variacoes = [
+            {
+                descricao: 'sem o fuso horário no cálculo',
+                payload: { ...basePayload, fusoOffsetMin: null },
+            },
+            {
+                descricao: 'sem a precisão do GPS',
+                payload: { ...basePayload, precisaoGpsM: null },
+            },
+            {
+                descricao: 'sem latitude/longitude',
+                payload: { ...basePayload, latitude: null, longitude: null },
+            },
+            {
+                descricao: 'sem observação',
+                payload: { ...basePayload, observacao: null },
+            },
+            {
+                descricao: 'sem odômetro',
+                payload: { ...basePayload, odometro: null },
+            },
+            {
+                descricao: 'precisão do GPS arredondada para inteiro',
+                payload: {
+                    ...basePayload,
+                    precisaoGpsM: evento.precisaoGpsM == null
+                        ? null
+                        : Math.round(evento.precisaoGpsM),
+                },
+            },
+        ];
+        const tentativas = hashConfere
+            ? []
+            : variacoes.map((v) => ({
+                descricao: v.descricao,
+                bate: hashDe(v.payload, evento.hashAnterior) === evento.hashAtual,
+            }));
+        const variacaoQueBate = tentativas.find((t) => t.bate)?.descricao ?? null;
+        const aceite = await this.prisma.integridadeAceite.findFirst({
+            where: { motoristaId, sequencial },
+            include: { aceitoPorUsuario: { select: { nome: true } } },
+        });
+        const divergente = !hashAnteriorConfere || !hashConfere;
+        const temGps = evento.latitude !== null && evento.longitude !== null;
+        const resumo = (r) => r
+            ? {
+                sequencial: r.sequencial,
+                tipoEvento: r.tipoEvento,
+                timestampEvento: r.timestampEvento,
+                criadoEm: r.createdAt,
+            }
+            : null;
+        return {
+            motoristaId,
+            divergente,
+            explicacao: divergente
+                ? this.explicarDivergencia(hashAnteriorConfere
+                    ? 'hashAtual não corresponde ao recálculo (evento foi alterado)'
+                    : 'hashAnterior não corresponde ao hash do evento anterior', temGps)
+                : 'Este evento está íntegro: o hash gravado bate com o recálculo e o encadeamento com o evento anterior está correto.',
+            evento: {
+                sequencial: evento.sequencial,
+                tipoEvento: evento.tipoEvento,
+                timestampEvento: evento.timestampEvento,
+                criadoEm: evento.createdAt,
+                latitude: evento.latitude === null ? null : Number(evento.latitude),
+                longitude: evento.longitude === null ? null : Number(evento.longitude),
+                precisaoGpsM: evento.precisaoGpsM,
+                odometro: evento.odometro,
+                observacao: evento.observacao,
+                fusoOffsetMin: evento.fusoOffsetMin ?? null,
+                deviceUuidUsado: evento.deviceUuidUsado,
+            },
+            anterior: resumo(anterior),
+            proximo: resumo(proximo),
+            verificacao: {
+                hashAnteriorConfere,
+                hashAnteriorGravado: evento.hashAnterior,
+                hashAnteriorEsperado: hashEsperadoAnterior,
+                hashConfere,
+                hashGravado: evento.hashAtual,
+                hashRecalculado,
+                payloadCanonico: this.hashChain.canonicalizar(basePayload),
+                tentativas,
+                variacaoQueBate,
+            },
+            aceite: aceite
+                ? {
+                    motivo: aceite.motivo,
+                    aceitoPorNome: aceite.aceitoPorUsuario.nome,
+                    aceitoEm: aceite.aceitoEm,
+                }
+                : null,
+        };
+    }
     async aceitarDivergenciaIntegridade(motoristaId, sequencial, motivo, usuarioId, grupoIdSolicitante) {
         await this.conferirTenant(motoristaId, grupoIdSolicitante);
         if (!motivo?.trim()) {
@@ -1080,7 +1344,12 @@ let RegistrosJornadaService = class RegistrosJornadaService {
         let aceite;
         try {
             aceite = await this.prisma.integridadeAceite.create({
-                data: { motoristaId, sequencial, motivo: motivo.trim(), aceitoPorUsuarioId: usuarioId },
+                data: {
+                    motoristaId,
+                    sequencial,
+                    motivo: motivo.trim(),
+                    aceitoPorUsuarioId: usuarioId,
+                },
                 include: { aceitoPorUsuario: { select: { nome: true } } },
             });
         }

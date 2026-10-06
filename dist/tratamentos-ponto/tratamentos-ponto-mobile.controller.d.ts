@@ -19,12 +19,13 @@ export declare class TratamentosPontoMobileController {
         }[];
     } & {
         id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        motivo: string;
         usuarioId: string;
+        motivo: string;
         registroReferenciaId: string | null;
         hashReferencia: string;
         hashRegistro: string;
@@ -36,12 +37,13 @@ export declare class TratamentosPontoMobileController {
         };
     }): Promise<{
         id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
         motoristaId: string;
         tipoEvento: import("@prisma/client").$Enums.TipoEvento;
         timestampEvento: Date;
-        createdAt: Date;
-        motivo: string;
         usuarioId: string;
+        motivo: string;
         registroReferenciaId: string | null;
         hashReferencia: string;
         hashRegistro: string;

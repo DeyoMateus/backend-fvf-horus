@@ -5,13 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ActorType, StatusSolicitacaoDispositivo } from '@prisma/client';
-import { createHash, randomBytes, timingSafeEqual } from 'crypto';
+import { randomBytes, timingSafeEqual } from 'crypto';
 import { AuditService } from '../common/audit/audit.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { TenantService } from '../common/tenant/tenant.service';
 import { TenantContext } from '../common/tenant/tenant-context';
 import { VincularDispositivoDto } from './dto/vincular-dispositivo.dto';
 import { SolicitarTrocaDispositivoDto } from './dto/solicitar-troca-dispositivo.dto';
+import { hashChaveDispositivo } from '../common/crypto/device-key-hash.util';
 
 /**
  * Device binding: só um usuário da empresa (ADMIN/GESTOR) pode vincular
@@ -62,9 +63,7 @@ export class DispositivosService {
     // como uma secret key de provedor de nuvem, para o app gravar no
     // keystore/keychain seguro do aparelho.
     const deviceApiKeyPlano = randomBytes(32).toString('hex');
-    const deviceApiKeyHash = createHash('sha256')
-      .update(deviceApiKeyPlano)
-      .digest('hex');
+    const deviceApiKeyHash = hashChaveDispositivo(deviceApiKeyPlano);
 
     const vinculo = await this.prisma.dispositivoVinculado.upsert({
       where: { motoristaId },
@@ -315,9 +314,7 @@ export class DispositivosService {
     }
 
     const deviceApiKeyPlano = randomBytes(32).toString('hex');
-    const deviceApiKeyHash = createHash('sha256')
-      .update(deviceApiKeyPlano)
-      .digest('hex');
+    const deviceApiKeyHash = hashChaveDispositivo(deviceApiKeyPlano);
 
     // Mesmo padrão de motoristas.service.ts: array-transaction única,
     // então usa `this.prisma.cru.*` (sem a interceptação de RLS) e um

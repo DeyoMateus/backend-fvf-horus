@@ -10,5 +10,8 @@ export declare class WhatsappNotificationsService {
     private readonly logger;
     constructor(fila: Queue<JobNotificacaoWhatsapp>, prisma: PrismaService);
     configurado(): boolean;
+    private avisoNaoConfiguradoEmitido;
+    private avisarSeNaoConfigurado;
+    private enfileirar;
     notificarGestoresDaEmpresa(empresaId: string, mensagem: string): Promise<void>;
 }

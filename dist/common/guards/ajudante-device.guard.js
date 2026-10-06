@@ -12,15 +12,21 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AjudanteDeviceGuard = void 0;
 const common_1 = require("@nestjs/common");
 const crypto_1 = require("crypto");
+const device_key_hash_util_1 = require("../crypto/device-key-hash.util");
+const device_auth_limiter_service_1 = require("../throttler/device-auth-limiter.service");
 const prisma_service_1 = require("../prisma/prisma.service");
 const tenant_context_1 = require("../tenant/tenant-context");
 let AjudanteDeviceGuard = class AjudanteDeviceGuard {
     prisma;
-    constructor(prisma) {
+    limiter;
+    constructor(prisma, limiter) {
         this.prisma = prisma;
+        this.limiter = limiter;
     }
     async canActivate(context) {
         const request = context.switchToHttp().getRequest();
+        const ip = request.ip ?? 'desconhecido';
+        await this.limiter.exigirNaoBloqueado(ip);
         const ajudanteId = request.headers['x-ajudante-id'];
         const deviceKey = request.headers['x-device-key'];
         const deviceUuid = request.headers['x-device-uuid'];
@@ -30,6 +36,7 @@ let AjudanteDeviceGuard = class AjudanteDeviceGuard {
             typeof ajudanteId !== 'string' ||
             typeof deviceKey !== 'string' ||
             typeof deviceUuid !== 'string') {
+            await this.limiter.registrarFalha(ip, 'sem-credenciais');
             throw new common_1.UnauthorizedException('Credenciais de dispositivo ausentes');
         }
         const ajudante = await tenant_context_1.TenantContext.paraSistema(() => this.prisma.ajudante.findUnique({
@@ -42,6 +49,7 @@ let AjudanteDeviceGuard = class AjudanteDeviceGuard {
         if (!ajudante ||
             ajudante.status !== 'ATIVO' ||
             !ajudante.dispositivoVinculado) {
+            await this.limiter.registrarFalha(ip, ajudanteId);
             throw new common_1.UnauthorizedException('Dispositivo não autorizado');
         }
         const vinculo = ajudante.dispositivoVinculado;
@@ -50,13 +58,18 @@ let AjudanteDeviceGuard = class AjudanteDeviceGuard {
             .update(vinculo.deviceUuid)
             .digest();
         const uuidOk = (0, crypto_1.timingSafeEqual)(uuidRecebido, uuidVinculado);
-        const chaveRecebida = (0, crypto_1.createHash)('sha256').update(deviceKey).digest();
-        const chaveArmazenada = Buffer.from(vinculo.deviceApiKeyHash, 'hex');
-        const chaveOk = chaveRecebida.length === chaveArmazenada.length &&
-            (0, crypto_1.timingSafeEqual)(chaveRecebida, chaveArmazenada);
+        const { ok: chaveOk, precisaMigrar } = (0, device_key_hash_util_1.conferirChaveDispositivo)(deviceKey, vinculo.deviceApiKeyHash);
         if (!uuidOk || !chaveOk) {
+            await this.limiter.registrarFalha(ip, ajudanteId);
             throw new common_1.UnauthorizedException('Dispositivo não autorizado');
         }
+        if (precisaMigrar) {
+            void tenant_context_1.TenantContext.paraSistema(() => this.prisma.dispositivoVinculadoAjudante.update({
+                where: { id: vinculo.id },
+                data: { deviceApiKeyHash: (0, device_key_hash_util_1.hashChaveDispositivo)(deviceKey) },
+            })).catch(() => undefined);
+        }
+        await this.limiter.limitarUso(ajudanteId);
         request.ajudante = ajudante;
         request.deviceUuid = vinculo.deviceUuid;
         request.grupoId = ajudante.empresa.grupoId;
@@ -66,6 +79,7 @@ let AjudanteDeviceGuard = class AjudanteDeviceGuard {
 exports.AjudanteDeviceGuard = AjudanteDeviceGuard;
 exports.AjudanteDeviceGuard = AjudanteDeviceGuard = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
+        device_auth_limiter_service_1.DeviceAuthLimiterService])
 ], AjudanteDeviceGuard);
 //# sourceMappingURL=ajudante-device.guard.js.map

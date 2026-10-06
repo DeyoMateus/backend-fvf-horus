@@ -52,7 +52,9 @@ const dossie_cobranca_module_1 = require("./dossie-cobranca/dossie-cobranca.modu
 const fechamento_fiscal_module_1 = require("./fechamento-fiscal/fechamento-fiscal.module");
 const limpeza_tokens_module_1 = require("./common/limpeza-tokens/limpeza-tokens.module");
 const redis_throttler_storage_service_1 = require("./common/throttler/redis-throttler-storage.service");
+const throttler_module_1 = require("./common/throttler/throttler.module");
 const tenant_context_interceptor_1 = require("./common/tenant/tenant-context.interceptor");
+const fuso_cliente_interceptor_1 = require("./common/fuso/fuso-cliente.interceptor");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -61,10 +63,11 @@ exports.AppModule = AppModule = __decorate([
         imports: [
             config_1.ConfigModule.forRoot({ isGlobal: true }),
             throttler_1.ThrottlerModule.forRootAsync({
-                imports: [],
-                useFactory: () => ({
+                imports: [throttler_module_1.AppThrottlerStorageModule],
+                inject: [redis_throttler_storage_service_1.RedisThrottlerStorageService],
+                useFactory: (storage) => ({
                     throttlers: [{ ttl: 60_000, limit: 60 }],
-                    storage: new redis_throttler_storage_service_1.RedisThrottlerStorageService(),
+                    storage,
                 }),
             }),
             bullmq_1.BullModule.forRootAsync({
@@ -72,6 +75,7 @@ exports.AppModule = AppModule = __decorate([
                     connection: {
                         host: process.env.REDIS_HOST ?? 'localhost',
                         port: Number(process.env.REDIS_PORT ?? 6379),
+                        password: process.env.REDIS_PASSWORD || undefined,
                     },
                 }),
             }),
@@ -118,6 +122,7 @@ exports.AppModule = AppModule = __decorate([
             app_service_1.AppService,
             { provide: core_1.APP_GUARD, useClass: throttler_1.ThrottlerGuard },
             { provide: core_1.APP_INTERCEPTOR, useClass: tenant_context_interceptor_1.TenantContextInterceptor },
+            { provide: core_1.APP_INTERCEPTOR, useClass: fuso_cliente_interceptor_1.FusoClienteInterceptor },
         ],
     })
 ], AppModule);

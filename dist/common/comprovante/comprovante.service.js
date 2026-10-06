@@ -11,6 +11,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ComprovanteService = void 0;
 const common_1 = require("@nestjs/common");
+const fuso_contexto_1 = require("../fuso/fuso-contexto");
 const pdfkit_1 = __importDefault(require("pdfkit"));
 let ComprovanteService = class ComprovanteService {
     async gerarPdfRegistros(motorista, empresa, registros, periodoInicio, periodoFim) {
@@ -20,9 +21,7 @@ let ComprovanteService = class ComprovanteService {
         const finalizado = new Promise((resolve) => {
             doc.on('end', () => resolve(Buffer.concat(chunks)));
         });
-        doc
-            .fontSize(16)
-            .text('FVF Hórus , Comprovante de registro de jornada', {
+        doc.fontSize(16).text('FVF Hórus , Comprovante de registro de jornada', {
             align: 'center',
         });
         doc.moveDown();
@@ -33,7 +32,7 @@ let ComprovanteService = class ComprovanteService {
         doc.text(`Motorista: ${motorista.nome}`);
         doc.text(`CPF: ${motorista.cpf}   CNH: ${motorista.cnh}`);
         doc.text(`Período: ${periodoInicio.toLocaleString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleString('pt-BR', { timeZone: 'UTC' })}`);
-        doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`);
+        doc.text(`Gerado em: ${(0, fuso_contexto_1.agoraDoCliente)()}`);
         doc.text(`Hash gênesis da cadeia: ${motorista.hashGenesis}`);
         doc.moveDown();
         doc.fontSize(9).fillColor('#111827');
@@ -45,7 +44,7 @@ let ComprovanteService = class ComprovanteService {
             doc
                 .fontSize(9)
                 .fillColor('#111827')
-                .text(`#${registro.sequencial}  ${registro.tipoEvento}  ,  ${new Date(registro.timestampEvento).toLocaleString('pt-BR')}` +
+                .text(`#${registro.sequencial}  ${registro.tipoEvento}  ,  ${(0, fuso_contexto_1.instanteDoEvento)(new Date(registro.timestampEvento), registro.fusoOffsetMin)}` +
                 (registro.observacao ? `  (${registro.observacao})` : ''));
             doc
                 .fontSize(7)

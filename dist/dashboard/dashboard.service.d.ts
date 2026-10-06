@@ -8,6 +8,7 @@ export declare class DashboardService {
     constructor(prisma: PrismaService);
     resumo(grupoId: string): Promise<{
         atualizadoEm: string;
+        fusoHorario: string;
         motoristas: {
             totalAtivos: number;
             semNenhumRegistro: number;
@@ -68,6 +69,7 @@ export declare class DashboardService {
         dias?: number;
         desde?: string;
         ate?: string;
+        fusoOffsetMin?: number;
     }): Promise<{
         dia: string;
         registros: number;
@@ -79,7 +81,7 @@ export declare class DashboardService {
         horasEspera: number;
         horasIndefinido: number;
     }[]>;
-    tendenciaDetalhe(grupoId: string, dia: string, indicador: ChaveIndicadorTendencia): Promise<{
+    tendenciaDetalhe(grupoId: string, dia: string, indicador: ChaveIndicadorTendencia, fusoOffsetMin?: number): Promise<{
         tipo: "registros";
         itens: {
             registroId: string;
@@ -110,5 +112,7 @@ export declare class DashboardService {
     }>;
     private estadoAtualPorMotorista;
     private jornadasEmAbertoComInicio;
+    private direcaoContinuaPorMotorista;
+    private descreverDirecaoContinua;
     private formatarHorasMinutos;
 }

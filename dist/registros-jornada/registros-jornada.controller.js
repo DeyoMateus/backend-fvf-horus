@@ -31,14 +31,16 @@ const tenant_service_1 = require("../common/tenant/tenant.service");
 const create_registro_jornada_dto_1 = require("./dto/create-registro-jornada.dto");
 const lote_registro_jornada_dto_1 = require("./dto/lote-registro-jornada.dto");
 const registros_jornada_service_1 = require("./registros-jornada.service");
+const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
 const INCLUDE_EMPRESA_DOCUMENTO = {
-    empresa: { select: { razaoSocial: true, cnpj: true } },
+    empresa: { select: { razaoSocial: true, cnpj: true, fusoHorario: true } },
 };
 const INCLUDE_EMPRESA_COM_REGRA_SINDICAL = {
     empresa: {
         select: {
             razaoSocial: true,
             cnpj: true,
+            fusoHorario: true,
             regraSindical: true,
             grupoId: true,
         },
@@ -68,6 +70,15 @@ let RegistrosJornadaController = class RegistrosJornadaController {
     criarLote(req, dto, ip, userAgent) {
         return this.registrosService.processarLote(req.motorista.id, req.deviceUuid, dto.eventos, ip, userAgent);
     }
+    async meusRegistros(req, inicio, fim) {
+        const dataInicio = inicio ? new Date(inicio) : undefined;
+        const dataFim = fim ? new Date(fim) : undefined;
+        if ((dataInicio && Number.isNaN(dataInicio.getTime())) ||
+            (dataFim && Number.isNaN(dataFim.getTime()))) {
+            throw new common_2.BadRequestException('Datas inválidas (use ISO 8601)');
+        }
+        return this.registrosService.listarParaDispositivo(req.motorista.id, dataInicio, dataFim);
+    }
     async meuComprovante(req, res, inicio, fim) {
         await this.responderComprovante(res, req.motorista.id, inicio, fim);
     }
@@ -93,6 +104,9 @@ let RegistrosJornadaController = class RegistrosJornadaController {
     verificarIntegridade(motoristaId, user) {
         return this.registrosService.verificarIntegridade(motoristaId, user.sub, user.grupoId);
     }
+    analisarEventoIntegridade(motoristaId, sequencial, user) {
+        return this.registrosService.analisarEventoIntegridade(motoristaId, Number(sequencial), user.grupoId);
+    }
     aceitarDivergenciaIntegridade(motoristaId, sequencial, motivo, user) {
         return this.registrosService.aceitarDivergenciaIntegridade(motoristaId, Number(sequencial), motivo, user.sub, user.grupoId);
     }
@@ -107,7 +121,7 @@ let RegistrosJornadaController = class RegistrosJornadaController {
         });
         if (!motorista)
             throw new common_2.NotFoundException('Motorista não encontrado');
-        const registros = await this.registrosService.listByMotoristaNoPeriodo(motoristaId, inicio ? new Date(inicio) : undefined, fim ? new Date(fim) : undefined);
+        const registros = await this.registrosService.listByMotoristaNoPeriodo(motoristaId, inicio ? new Date(inicio) : undefined, fim ? new Date(fim) : undefined, (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(motorista.empresa.fusoHorario));
         const csv = this.aejService.gerarCsv(motorista, motorista.empresa, registros);
         res.set({
             'Content-Type': 'text/csv; charset=utf-8',
@@ -139,11 +153,14 @@ let RegistrosJornadaController = class RegistrosJornadaController {
         const periodoInicio = dataInicio ?? new Date(0);
         const periodoFim = dataFim ?? new Date();
         const [registros, tratamentos, feriadosRaw] = await Promise.all([
-            this.registrosService.listByMotoristaNoPeriodo(motoristaId, dataInicio, dataFim),
+            this.registrosService.listByMotoristaNoPeriodo(motoristaId, dataInicio, dataFim, (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(motorista.empresa.fusoHorario)),
             this.prisma.tratamentoPonto.findMany({
                 where: {
                     motoristaId,
-                    timestampEvento: { gte: periodoInicio, lte: periodoFim },
+                    timestampEvento: {
+                        gte: (0, fuso_brasil_util_1.inicioDePeriodoBrt)(periodoInicio, (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(motorista.empresa.fusoHorario)),
+                        lte: (0, fuso_brasil_util_1.fimDePeriodoBrt)(periodoFim, (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(motorista.empresa.fusoHorario)),
+                    },
                 },
                 orderBy: { timestampEvento: 'asc' },
                 include: { usuario: { select: { nome: true } } },
@@ -178,7 +195,7 @@ let RegistrosJornadaController = class RegistrosJornadaController {
             throw new common_2.NotFoundException('Motorista não encontrado');
         const dataInicio = inicio ? new Date(inicio) : undefined;
         const dataFim = fim ? new Date(fim) : undefined;
-        const registros = await this.registrosService.listByMotoristaNoPeriodo(motoristaId, dataInicio, dataFim);
+        const registros = await this.registrosService.listByMotoristaNoPeriodo(motoristaId, dataInicio, dataFim, (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(motorista.empresa.fusoHorario));
         const pdf = await this.comprovanteService.gerarPdfRegistros(motorista, motorista.empresa, registros, dataInicio ?? registros[0]?.timestampEvento ?? new Date(), dataFim ?? new Date());
         res.set({
             'Content-Type': 'application/pdf',
@@ -211,6 +228,16 @@ __decorate([
     __metadata("design:paramtypes", [Object, lote_registro_jornada_dto_1.LoteRegistroJornadaDto, String, String]),
     __metadata("design:returntype", void 0)
 ], RegistrosJornadaController.prototype, "criarLote", null);
+__decorate([
+    (0, common_1.Get)('meus-registros'),
+    (0, common_1.UseGuards)(motorista_device_guard_1.MotoristaDeviceGuard),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('inicio')),
+    __param(2, (0, common_1.Query)('fim')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, String]),
+    __metadata("design:returntype", Promise)
+], RegistrosJornadaController.prototype, "meusRegistros", null);
 __decorate([
     (0, common_1.Get)('meu-comprovante'),
     (0, common_1.UseGuards)(motorista_device_guard_1.MotoristaDeviceGuard),
@@ -252,6 +279,17 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], RegistrosJornadaController.prototype, "verificarIntegridade", null);
+__decorate([
+    (0, common_1.Get)('motorista/:motoristaId/integridade/:sequencial'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(client_1.PapelUsuario.ADMIN, client_1.PapelUsuario.GESTOR),
+    __param(0, (0, common_1.Param)('motoristaId')),
+    __param(1, (0, common_1.Param)('sequencial')),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", void 0)
+], RegistrosJornadaController.prototype, "analisarEventoIntegridade", null);
 __decorate([
     (0, common_1.Patch)('motorista/:motoristaId/integridade/:sequencial/aceitar'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

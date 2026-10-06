@@ -9,6 +9,7 @@ export interface RegistroParaHash {
     observacao?: string | null;
     sequencial: number;
     deviceUuidUsado: string;
+    fusoOffsetMin?: number | null;
 }
 export declare class HashChainService {
     gerarHashGenesis(input: {
@@ -33,6 +34,7 @@ export declare class HashChainService {
         odometro: number | null;
         observacao: string | null;
         deviceUuidUsado: string;
+        fusoOffsetMin?: number | null;
     }>): {
         valido: boolean;
         totalRegistros: number;

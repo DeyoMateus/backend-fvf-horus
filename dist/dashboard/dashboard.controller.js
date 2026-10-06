@@ -52,11 +52,12 @@ let DashboardController = class DashboardController {
     resumo(user) {
         return this.dashboardService.resumo(user.grupoId);
     }
-    tendencia(user, dias, desde, ate) {
+    tendencia(user, dias, desde, ate, fusoOffsetMin) {
         return this.dashboardService.tendencia(user.grupoId, {
             dias: dias ? Number(dias) : 30,
             desde,
             ate,
+            fusoOffsetMin: fusoOffsetMin !== undefined ? Number(fusoOffsetMin) : undefined,
         });
     }
     detalhe(user, card) {
@@ -65,12 +66,12 @@ let DashboardController = class DashboardController {
             : '';
         return this.dashboardService.detalheCard(user.grupoId, cardValido);
     }
-    tendenciaDetalhe(user, dia, indicador) {
+    tendenciaDetalhe(user, dia, indicador, fusoOffsetMin) {
         const diaValido = REGEX_DIA.test(dia ?? '') ? dia : '1970-01-01';
         const indicadorValido = INDICADORES_TENDENCIA_VALIDOS.includes(indicador)
             ? indicador
             : 'registros';
-        return this.dashboardService.tendenciaDetalhe(user.grupoId, diaValido, indicadorValido);
+        return this.dashboardService.tendenciaDetalhe(user.grupoId, diaValido, indicadorValido, fusoOffsetMin !== undefined ? Number(fusoOffsetMin) : undefined);
     }
 };
 exports.DashboardController = DashboardController;
@@ -87,8 +88,9 @@ __decorate([
     __param(1, (0, common_1.Query)('dias')),
     __param(2, (0, common_1.Query)('desde')),
     __param(3, (0, common_1.Query)('ate')),
+    __param(4, (0, common_1.Query)('fusoOffsetMin')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String, String]),
     __metadata("design:returntype", void 0)
 ], DashboardController.prototype, "tendencia", null);
 __decorate([
@@ -104,8 +106,9 @@ __decorate([
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Query)('dia')),
     __param(2, (0, common_1.Query)('indicador')),
+    __param(3, (0, common_1.Query)('fusoOffsetMin')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String]),
     __metadata("design:returntype", void 0)
 ], DashboardController.prototype, "tendenciaDetalhe", null);
 exports.DashboardController = DashboardController = __decorate([

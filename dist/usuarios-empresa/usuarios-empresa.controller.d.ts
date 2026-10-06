@@ -13,6 +13,7 @@ export declare class UsuariosEmpresaController {
         papel: import("@prisma/client").$Enums.PapelUsuario;
         ativo: boolean;
         telefoneWhatsapp: string | null;
+        telefoneGerenciamentoRisco: string | null;
     }[]>;
     atualizarStatus(id: string, dto: AtualizarStatusUsuarioEmpresaDto, user: UsuarioAutenticado): Promise<{
         id: string;
@@ -22,6 +23,7 @@ export declare class UsuariosEmpresaController {
         papel: import("@prisma/client").$Enums.PapelUsuario;
         ativo: boolean;
         telefoneWhatsapp: string | null;
+        telefoneGerenciamentoRisco: string | null;
     }>;
     obterMeuPerfil(user: UsuarioAutenticado): Promise<{
         id: string;
@@ -31,6 +33,7 @@ export declare class UsuariosEmpresaController {
         papel: import("@prisma/client").$Enums.PapelUsuario;
         ativo: boolean;
         telefoneWhatsapp: string | null;
+        telefoneGerenciamentoRisco: string | null;
     }>;
     atualizarMeuPerfil(dto: UpdatePerfilProprioDto, user: UsuarioAutenticado): Promise<{
         id: string;
@@ -40,5 +43,6 @@ export declare class UsuariosEmpresaController {
         papel: import("@prisma/client").$Enums.PapelUsuario;
         ativo: boolean;
         telefoneWhatsapp: string | null;
+        telefoneGerenciamentoRisco: string | null;
     }>;
 }

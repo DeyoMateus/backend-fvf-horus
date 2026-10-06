@@ -9,6 +9,7 @@ export interface EventoDetalhadoHolerite {
     detalhe: string | null;
     latitude: number | null;
     longitude: number | null;
+    fusoOffsetMin: number;
 }
 export interface DiaHolerite {
     dia: string;
@@ -32,6 +33,7 @@ export interface ResultadoHolerite {
     opcoes: OpcoesHolerite;
     dias: DiaHolerite[];
     eventos: EventoDetalhadoHolerite[];
+    fusoEmpresaOffsetMin: number;
     totais: {
         direcaoMin: number;
         esperaMin: number;
@@ -50,17 +52,15 @@ export declare class HoleriteService {
     private readonly tenant;
     constructor(prisma: PrismaService, tenant: TenantService);
     calcular(motoristaId: string, dataInicio: Date, dataFim: Date, opcoes: OpcoesHolerite, grupoIdSolicitante: string): Promise<ResultadoHolerite>;
-    private estenderParaFimDoDiaSeMeiaNoite;
     calcularEmLote(motoristaIds: string[] | null | undefined, dataInicio: Date, dataFim: Date, opcoes: OpcoesHolerite, grupoIdSolicitante: string): Promise<Array<{
         motorista: Pick<Motorista, 'id' | 'nome' | 'cpf' | 'cnh'>;
         empresa: EmpresaDoComprovante;
         resultado: ResultadoHolerite;
     }>>;
+    private montarLinhaDoTempoFuso;
     private unificarEventos;
     private construirEventosDetalhados;
     private calcularIntervalos;
     private calcularIntervalosIndefinido;
     private agruparPorDia;
-    private dividirPorDiaCalendario;
-    private calcularMinutosNoturnos;
 }
