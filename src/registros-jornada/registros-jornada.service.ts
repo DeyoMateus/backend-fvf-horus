@@ -2104,6 +2104,163 @@ export class RegistrosJornadaService {
   }
 
   /**
+   * Rodada 158: tela de análise de UM evento da cadeia de integridade.
+   * Devolve o evento, os vizinhos, os hashes gravados x recalculado, o
+   * payload canônico usado no cálculo e uma bateria de "e se" (variações
+   * de um campo por vez) para apontar QUAL campo explica a divergência.
+   * Somente leitura: nunca altera nada na cadeia.
+   */
+  async analisarEventoIntegridade(
+    motoristaId: string,
+    sequencial: number,
+    grupoIdSolicitante: string,
+  ) {
+    await this.conferirTenant(motoristaId, grupoIdSolicitante);
+    const motorista = await this.prisma.motorista.findUnique({
+      where: { id: motoristaId },
+    });
+    if (!motorista) throw new NotFoundException('Motorista não encontrado');
+
+    const registros = await this.prisma.registroJornada.findMany({
+      where: { motoristaId },
+      orderBy: { sequencial: 'asc' },
+    });
+    const idx = registros.findIndex((r) => r.sequencial === sequencial);
+    if (idx < 0) throw new NotFoundException('Evento não encontrado');
+    const evento = registros[idx];
+    const anterior = idx > 0 ? registros[idx - 1] : null;
+    const proximo = idx < registros.length - 1 ? registros[idx + 1] : null;
+
+    const hashEsperadoAnterior = anterior
+      ? anterior.hashAtual
+      : motorista.hashGenesis;
+    const hashAnteriorConfere = evento.hashAnterior === hashEsperadoAnterior;
+
+    const basePayload = {
+      motoristaId: evento.motoristaId,
+      tipoEvento: evento.tipoEvento as string,
+      timestampEvento: evento.timestampEvento,
+      latitude: evento.latitude as unknown as number | null,
+      longitude: evento.longitude as unknown as number | null,
+      precisaoGpsM: evento.precisaoGpsM,
+      odometro: evento.odometro,
+      observacao: evento.observacao,
+      sequencial: evento.sequencial,
+      deviceUuidUsado: evento.deviceUuidUsado,
+      fusoOffsetMin: evento.fusoOffsetMin ?? null,
+    };
+    const hashDe = (payload: typeof basePayload, hashAnt: string) =>
+      this.hashChain.calcularHash(hashAnt, evento.sequencial, payload);
+
+    const hashRecalculado = hashDe(basePayload, evento.hashAnterior);
+    const hashConfere = hashRecalculado === evento.hashAtual;
+
+    const variacoes: Array<{ descricao: string; payload: typeof basePayload }> =
+      [
+        {
+          descricao: 'sem o fuso horário no cálculo',
+          payload: { ...basePayload, fusoOffsetMin: null },
+        },
+        {
+          descricao: 'sem a precisão do GPS',
+          payload: { ...basePayload, precisaoGpsM: null },
+        },
+        {
+          descricao: 'sem latitude/longitude',
+          payload: { ...basePayload, latitude: null, longitude: null },
+        },
+        {
+          descricao: 'sem observação',
+          payload: { ...basePayload, observacao: null },
+        },
+        {
+          descricao: 'sem odômetro',
+          payload: { ...basePayload, odometro: null },
+        },
+        {
+          descricao: 'precisão do GPS arredondada para inteiro',
+          payload: {
+            ...basePayload,
+            precisaoGpsM:
+              evento.precisaoGpsM == null
+                ? null
+                : Math.round(evento.precisaoGpsM),
+          },
+        },
+      ];
+    const tentativas = hashConfere
+      ? []
+      : variacoes.map((v) => ({
+          descricao: v.descricao,
+          bate: hashDe(v.payload, evento.hashAnterior) === evento.hashAtual,
+        }));
+    const variacaoQueBate = tentativas.find((t) => t.bate)?.descricao ?? null;
+
+    const aceite = await this.prisma.integridadeAceite.findFirst({
+      where: { motoristaId, sequencial },
+      include: { aceitoPorUsuario: { select: { nome: true } } },
+    });
+    const divergente = !hashAnteriorConfere || !hashConfere;
+    const temGps = evento.latitude !== null && evento.longitude !== null;
+
+    const resumo = (r: (typeof registros)[number] | null) =>
+      r
+        ? {
+            sequencial: r.sequencial,
+            tipoEvento: r.tipoEvento,
+            timestampEvento: r.timestampEvento,
+            criadoEm: r.createdAt,
+          }
+        : null;
+
+    return {
+      motoristaId,
+      divergente,
+      explicacao: divergente
+        ? this.explicarDivergencia(
+            hashAnteriorConfere
+              ? 'hashAtual não corresponde ao recálculo (evento foi alterado)'
+              : 'hashAnterior não corresponde ao hash do evento anterior',
+            temGps,
+          )
+        : 'Este evento está íntegro: o hash gravado bate com o recálculo e o encadeamento com o evento anterior está correto.',
+      evento: {
+        sequencial: evento.sequencial,
+        tipoEvento: evento.tipoEvento,
+        timestampEvento: evento.timestampEvento,
+        criadoEm: evento.createdAt,
+        latitude: evento.latitude === null ? null : Number(evento.latitude),
+        longitude: evento.longitude === null ? null : Number(evento.longitude),
+        precisaoGpsM: evento.precisaoGpsM,
+        odometro: evento.odometro,
+        observacao: evento.observacao,
+        fusoOffsetMin: evento.fusoOffsetMin ?? null,
+        deviceUuidUsado: evento.deviceUuidUsado,
+      },
+      anterior: resumo(anterior),
+      proximo: resumo(proximo),
+      verificacao: {
+        hashAnteriorConfere,
+        hashAnteriorGravado: evento.hashAnterior,
+        hashAnteriorEsperado: hashEsperadoAnterior,
+        hashConfere,
+        hashGravado: evento.hashAtual,
+        hashRecalculado,
+        payloadCanonico: this.hashChain.canonicalizar(basePayload),
+        tentativas,
+        variacaoQueBate,
+      },
+      aceite: aceite
+        ? {
+            motivo: aceite.motivo,
+            aceitoPorNome: aceite.aceitoPorUsuario.nome,
+            aceitoEm: aceite.aceitoEm,
+          }
+        : null,
+    };
+  }
+
+  /**
    * Aceita/regulariza UMA divergência específica (um `sequencial`) da
    * verificação de integridade , pedido do usuário: "não tem como
    * ignorar ele para regularizar ou iniciar novamente a integridade

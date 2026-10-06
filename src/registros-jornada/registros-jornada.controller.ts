@@ -214,6 +214,22 @@ export class RegistrosJornadaController {
     );
   }
 
+  /** Rodada 158: análise detalhada de um único evento da cadeia (tela própria). */
+  @Get('motorista/:motoristaId/integridade/:sequencial')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
+  analisarEventoIntegridade(
+    @Param('motoristaId') motoristaId: string,
+    @Param('sequencial') sequencial: string,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
+    return this.registrosService.analisarEventoIntegridade(
+      motoristaId,
+      Number(sequencial),
+      user.grupoId,
+    );
+  }
+
   /** Pedido do usuário: aceitar/regularizar uma divergência específica da verificação de integridade, em vez de ela ficar marcada como problema pra sempre. */
   @Patch('motorista/:motoristaId/integridade/:sequencial/aceitar')
   @UseGuards(JwtAuthGuard, RolesGuard)
