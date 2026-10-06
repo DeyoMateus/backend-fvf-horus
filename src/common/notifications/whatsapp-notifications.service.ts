@@ -53,6 +53,33 @@ export class WhatsappNotificationsService {
     );
   }
 
+  private avisoNaoConfiguradoEmitido = false;
+
+  /** Rodada 162: antes o "não configurado" era silencioso e ninguém sabia por que nada chegava. Agora loga um aviso (uma vez). */
+  private avisarSeNaoConfigurado(): boolean {
+    if (this.configurado()) return true;
+    if (!this.avisoNaoConfiguradoEmitido) {
+      this.avisoNaoConfiguradoEmitido = true;
+      this.logger.warn(
+        'WhatsApp NÃO configurado: faltam EVOLUTION_API_URL/EVOLUTION_API_KEY/EVOLUTION_INSTANCE (ou as variáveis da Meta). Nenhuma mensagem será enviada.',
+      );
+    }
+    return false;
+  }
+
+  private async enfileirar(telefone: string, mensagem: string): Promise<void> {
+    await this.fila.add(
+      'enviar',
+      { telefone, mensagem },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5_000 },
+        removeOnComplete: true,
+        removeOnFail: 50,
+      },
+    );
+  }
+
   /**
    * Notifica todos os gestores/admins do GRUPO ao qual esta empresa
    * (CNPJ) pertence, que tiverem telefone cadastrado , usuários são do
@@ -62,7 +89,7 @@ export class WhatsappNotificationsService {
     empresaId: string,
     mensagem: string,
   ): Promise<void> {
-    if (!this.configurado()) return; // fail-open silencioso , ver comentário da classe
+    if (!this.avisarSeNaoConfigurado()) return; // fail-open , ver comentário da classe
 
     try {
       const empresa = await this.prisma.empresa.findUnique({
@@ -75,33 +102,43 @@ export class WhatsappNotificationsService {
         where: {
           grupoId: empresa.grupoId,
           ativo: true,
-          telefoneWhatsapp: { not: null },
         },
-        select: { telefoneWhatsapp: true, fusoOffsetMin: true },
+        select: {
+          telefoneWhatsapp: true,
+          telefoneGerenciamentoRisco: true,
+          recebeWhatsappAlertas: true,
+          recebeWhatsappEquipeGr: true,
+          fusoOffsetMin: true,
+        },
       });
       const offsetEmpresaMin = offsetPadraoDaEmpresa(empresa.fusoHorario);
 
+      // Rodada 163/164: destinatários = número da equipe de Gerenciamento de
+      // Risco (padrão) e, se o super admin ligou, o WhatsApp pessoal do
+      // usuário. Números repetidos recebem uma mensagem só.
+      const jaEnfileirados = new Set<string>();
       for (const gestor of gestores) {
-        if (!gestor.telefoneWhatsapp) continue;
-        await this.fila.add(
-          'enviar',
-          {
-            telefone: gestor.telefoneWhatsapp,
-            // Rodada 148: a hora vai no fuso de QUEM recebe (07h em Brasília
-            // é 06h em Cuiabá); sem fuso aprendido, o da transportadora.
-            mensagem: renderizarHorarios(
-              mensagem,
-              offsetValido(gestor.fusoOffsetMin)
-                ? gestor.fusoOffsetMin
-                : offsetEmpresaMin,
-            ),
-          },
-          {
-            attempts: 3,
-            backoff: { type: 'exponential', delay: 5_000 },
-            removeOnComplete: true,
-            removeOnFail: 50,
-          },
+        const fuso = offsetValido(gestor.fusoOffsetMin)
+          ? gestor.fusoOffsetMin
+          : offsetEmpresaMin;
+        // Rodada 164: padrão = só a equipe de GR; o WhatsApp pessoal só
+        // recebe se o super admin ligou (o gestor já é avisado na plataforma).
+        for (const telefone of [
+          gestor.recebeWhatsappAlertas ? gestor.telefoneWhatsapp : null,
+          gestor.recebeWhatsappEquipeGr
+            ? gestor.telefoneGerenciamentoRisco
+            : null,
+        ]) {
+          if (!telefone || jaEnfileirados.has(telefone)) continue;
+          jaEnfileirados.add(telefone);
+          // Rodada 148: a hora vai no fuso de QUEM recebe (07h em Brasília
+          // é 06h em Cuiabá); sem fuso aprendido, o da transportadora.
+          await this.enfileirar(telefone, renderizarHorarios(mensagem, fuso));
+        }
+      }
+      if (jaEnfileirados.size === 0) {
+        this.logger.warn(
+          `Nenhum telefone de WhatsApp (gestor ou Gerenciamento de Risco) cadastrado no grupo da empresa ${empresaId}: WhatsApp não enviado.`,
         );
       }
     } catch (err) {

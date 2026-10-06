@@ -37,4 +37,17 @@ export class UpdatePerfilProprioDto {
       'telefoneWhatsapp deve estar em formato E.164, ex.: +5511999998888',
   })
   telefoneWhatsapp?: string;
+
+  /**
+   * Rodada 163: WhatsApp da equipe de Gerenciamento de Risco. Só vale para
+   * ADMIN (o serviço ignora para GESTOR). `null` limpa o campo.
+   */
+  @IsOptional()
+  @NormalizarTelefone()
+  @IsString()
+  @Matches(/^\+\d{10,15}$/, {
+    message:
+      'telefoneGerenciamentoRisco deve estar em formato E.164, ex.: +5511999998888',
+  })
+  telefoneGerenciamentoRisco?: string | null;
 }

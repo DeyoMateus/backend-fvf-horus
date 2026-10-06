@@ -37,11 +37,22 @@ export class WhatsappNotificationsProcessor extends WorkerHost {
             text: mensagem,
           }),
         },
-      );
+      ).catch((err: Error) => {
+        this.logger.error(
+          `Evolution API inacessível (${evolutionUrl}): ${err.message}`,
+        );
+        throw err;
+      });
       if (!resp.ok) {
         const texto = await resp.text();
+        this.logger.error(
+          `Evolution API respondeu ${resp.status}: ${texto}`,
+        );
         throw new Error(`Evolution API respondeu ${resp.status}: ${texto}`);
       }
+      this.logger.log(
+        `WhatsApp enviado via Evolution para ***${telefone.slice(-4)}.`,
+      );
       return;
     }
 

@@ -11,6 +11,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateEmpresaMaeDto } from './dto/create-empresa-mae.dto';
 import { UpdateGrupoDto } from './dto/update-grupo.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
+import { DestinatariosWhatsappUsuarioDto } from './dto/destinatarios-whatsapp-usuario.dto';
 import { UpdateUsuarioSuperAdminDto } from './dto/update-usuario-super-admin.dto';
 import { CreateUsuarioGrupoDto } from './dto/create-usuario-grupo.dto';
 import { AtualizarStatusUsuarioEmpresaDto } from '../usuarios-empresa/dto/atualizar-status-usuario-empresa.dto';
@@ -181,6 +182,10 @@ export class SuperAdminService {
             email: true,
             papel: true,
             ativo: true,
+            telefoneWhatsapp: true,
+            telefoneGerenciamentoRisco: true,
+            recebeWhatsappAlertas: true,
+            recebeWhatsappEquipeGr: true,
             createdAt: true,
           },
         },
@@ -361,6 +366,48 @@ export class SuperAdminService {
       entidadeId: usuarioId,
       detalhes: {
         antes: { nome: usuario.nome, email: usuario.email },
+        depois: dto,
+      },
+    });
+
+    return atualizado;
+  }
+
+  /** Rodada 164: o super admin escolhe quem recebe alerta por WhatsApp. */
+  async atualizarDestinatariosWhatsapp(
+    usuarioId: string,
+    dto: DestinatariosWhatsappUsuarioDto,
+    superAdminId: string,
+  ) {
+    const usuario = await this.prisma.usuarioEmpresa.findUnique({
+      where: { id: usuarioId },
+    });
+    if (!usuario) throw new NotFoundException('Usuário não encontrado');
+
+    const atualizado = await this.prisma.usuarioEmpresa.update({
+      where: { id: usuarioId },
+      data: {
+        recebeWhatsappAlertas: dto.recebeWhatsappAlertas ?? undefined,
+        recebeWhatsappEquipeGr: dto.recebeWhatsappEquipeGr ?? undefined,
+      },
+      select: {
+        id: true,
+        recebeWhatsappAlertas: true,
+        recebeWhatsappEquipeGr: true,
+      },
+    });
+
+    await this.audit.registrar({
+      actorType: ActorType.SUPER_ADMIN,
+      actorId: superAdminId,
+      acao: 'DESTINATARIOS_WHATSAPP_ALTERADOS_PELO_SUPER_ADMIN',
+      entidade: 'UsuarioEmpresa',
+      entidadeId: usuarioId,
+      detalhes: {
+        antes: {
+          recebeWhatsappAlertas: usuario.recebeWhatsappAlertas,
+          recebeWhatsappEquipeGr: usuario.recebeWhatsappEquipeGr,
+        },
         depois: dto,
       },
     });

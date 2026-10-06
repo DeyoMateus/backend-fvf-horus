@@ -310,6 +310,19 @@ model UsuarioEmpresa {
   /// (continua recebendo tudo pelo painel normalmente).
   telefoneWhatsapp String?
 
+  /// Rodada 163: WhatsApp da equipe de Gerenciamento de Risco da
+  /// transportadora (E.164). Só o ADMIN edita (em "Meu perfil"); os alertas
+  /// do grupo também são enviados a este número.
+  telefoneGerenciamentoRisco String?
+
+  /// Rodada 164: quem recebe alerta por WhatsApp é decisão do SUPER ADMIN.
+  /// Padrão: só o número da equipe de Gerenciamento de Risco (o gestor
+  /// já é avisado dentro da plataforma). `recebeWhatsappAlertas` liga o
+  /// WhatsApp pessoal do usuário; `recebeWhatsappEquipeGr` liga/desliga o
+  /// envio ao número de GR cadastrado por ele.
+  recebeWhatsappAlertas  Boolean @default(false)
+  recebeWhatsappEquipeGr Boolean @default(true)
+
   /// Fuso do computador do gestor (min a leste do UTC), aprendido pelo
   /// navegador (header x-fuso-offset-min). Só serve para escrever a hora
   /// das mensagens de WhatsApp na hora local dele.

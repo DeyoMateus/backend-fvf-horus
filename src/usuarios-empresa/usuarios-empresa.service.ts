@@ -53,6 +53,7 @@ export class UsuariosEmpresaService {
         papel: true,
         ativo: true,
         telefoneWhatsapp: true,
+        telefoneGerenciamentoRisco: true,
         createdAt: true,
       },
     });
@@ -80,6 +81,7 @@ export class UsuariosEmpresaService {
         papel: true,
         ativo: true,
         telefoneWhatsapp: true,
+        telefoneGerenciamentoRisco: true,
         createdAt: true,
       },
     });
@@ -119,6 +121,7 @@ export class UsuariosEmpresaService {
         papel: true,
         ativo: true,
         telefoneWhatsapp: true,
+        telefoneGerenciamentoRisco: true,
         createdAt: true,
       },
     });
@@ -153,6 +156,7 @@ export class UsuariosEmpresaService {
         papel: true,
         ativo: true,
         telefoneWhatsapp: true,
+        telefoneGerenciamentoRisco: true,
         createdAt: true,
       },
     });
@@ -170,12 +174,23 @@ export class UsuariosEmpresaService {
       }
     }
 
+    // Rodada 163: só ADMIN define o número da equipe de Gerenciamento de Risco.
+    let telefoneGr: string | null | undefined = undefined;
+    if (dto.telefoneGerenciamentoRisco !== undefined) {
+      const atual = await this.prisma.usuarioEmpresa.findUnique({
+        where: { id: usuarioId },
+        select: { papel: true },
+      });
+      if (atual?.papel === 'ADMIN') telefoneGr = dto.telefoneGerenciamentoRisco;
+    }
+
     const atualizado = await this.prisma.usuarioEmpresa.update({
       where: { id: usuarioId },
       data: {
         nome: dto.nome ?? undefined,
         email: dto.email ?? undefined,
         telefoneWhatsapp: dto.telefoneWhatsapp ?? undefined,
+        telefoneGerenciamentoRisco: telefoneGr,
       },
       select: {
         id: true,
@@ -184,6 +199,7 @@ export class UsuariosEmpresaService {
         papel: true,
         ativo: true,
         telefoneWhatsapp: true,
+        telefoneGerenciamentoRisco: true,
         createdAt: true,
       },
     });

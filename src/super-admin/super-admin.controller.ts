@@ -16,6 +16,7 @@ import { CreateEmpresaMaeDto } from './dto/create-empresa-mae.dto';
 import { UpdateGrupoDto } from './dto/update-grupo.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
 import { AtualizarStatusEmpresaDto } from './dto/atualizar-status-empresa.dto';
+import { DestinatariosWhatsappUsuarioDto } from './dto/destinatarios-whatsapp-usuario.dto';
 import { UpdateUsuarioSuperAdminDto } from './dto/update-usuario-super-admin.dto';
 import { CreateUsuarioGrupoDto } from './dto/create-usuario-grupo.dto';
 import { AtualizarStatusUsuarioEmpresaDto } from '../usuarios-empresa/dto/atualizar-status-usuario-empresa.dto';
@@ -86,6 +87,20 @@ export class SuperAdminController {
     return this.superAdminService.atualizarStatusEmpresa(
       id,
       dto.ativo,
+      superAdmin.sub,
+    );
+  }
+
+  /** Rodada 164: quem recebe alerta por WhatsApp. */
+  @Patch('usuarios/:id/whatsapp-alertas')
+  atualizarDestinatariosWhatsapp(
+    @Param('id') id: string,
+    @Body() dto: DestinatariosWhatsappUsuarioDto,
+    @CurrentSuperAdmin() superAdmin: SuperAdminAutenticado,
+  ) {
+    return this.superAdminService.atualizarDestinatariosWhatsapp(
+      id,
+      dto,
       superAdmin.sub,
     );
   }
