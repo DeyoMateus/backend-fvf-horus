@@ -61,6 +61,12 @@ const PROXIMOS_POR_ULTIMO: Record<TipoEvento, TipoEvento[]> = {
   ],
 };
 
+const ABRE_TRECHO: TipoEvento[] = [
+  'INICIO_DIRECAO',
+  'INICIO_DESCANSO',
+  'ESPERA_CARGA_DESCARGA',
+];
+
 const ROTULO: Record<TipoEvento, string> = {
   INICIO_JORNADA: 'Início de jornada',
   FIM_JORNADA: 'Fim de jornada',
@@ -129,9 +135,17 @@ export function validarSequenciaAjuste(
   // motorista já bateu). Um "Início de jornada" logo depois é aceito:
   // só significa que a jornada seguinte já começou e a atual precisa
   // ser fechada pelo gestor.
+  //
+  // Rodada 155: um evento que ABRE um trecho (início de direção/descanso/
+  // espera) lançado num intervalo vago não precisa "encaixar" no próximo
+  // ponto do motorista: o gestor ainda vai lançar o evento que o fecha
+  // (que só passa a ser permitido DEPOIS de o de abertura existir). Antes,
+  // preencher um intervalo vago com um par início/fim era impossível (o
+  // início era recusado pelo ponto seguinte, e o fim pelo ponto anterior).
   if (
     proximo !== null &&
     proximo !== 'INICIO_JORNADA' &&
+    !ABRE_TRECHO.includes(tipo) &&
     !PROXIMOS_POR_ULTIMO[tipo].includes(proximo)
   ) {
     return {

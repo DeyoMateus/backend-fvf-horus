@@ -43,4 +43,17 @@ describe('validarSequenciaAjuste', () => {
       true,
     );
   });
+
+  it('preenche um intervalo vago com um par início/fim de direção (início e depois o fim)', () => {
+    // motorista: descanso terminou às 8h e só bateu espera às 12h; a direção das 9h às 11h foi esquecida.
+    const base = [ev('INICIO_JORNADA', 6), ev('FIM_DESCANSO', 8)];
+    const espera = [ev('ESPERA_CARGA_DESCARGA', 12)];
+    const inicio = validarSequenciaAjuste('INICIO_DIRECAO', base, espera);
+    expect(inicio.ok).toBe(true);
+    // com o início já lançado, o fim passa a encaixar
+    const comInicio = [...base, ev('INICIO_DIRECAO', 9)];
+    expect(validarSequenciaAjuste('FIM_DIRECAO', comInicio, espera).ok).toBe(
+      true,
+    );
+  });
 });

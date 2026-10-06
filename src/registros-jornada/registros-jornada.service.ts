@@ -247,8 +247,21 @@ export class RegistrosJornadaService {
         //    PRÓPRIO motorista , fisicamente impossível sem mexer no
         //    relógio do aparelho entre os dois toques (mesmo offline, o
         //    tempo só anda pra frente entre dois toques do mesmo device).
+        // Rodada 152: horário IGUAL ao do último registro é legítimo em dois
+        // casos (o app fecha tudo no mesmo toque): qualquer evento seguido de
+        // FIM_JORNADA (ex.: Fim de descarregamento + Fim de jornada) e
+        // INICIO_JORNADA seguido do próximo (ex.: Início de jornada + Início
+        // de direção). Horário ANTERIOR continua sempre rejeitado, e um par
+        // início/fim do mesmo trecho com duração zero também.
+        const igualPermitido =
+          !!ultimo &&
+          timestampEventoNovo.getTime() === ultimo.timestampEvento.getTime() &&
+          (dto.tipoEvento === TipoEvento.FIM_JORNADA ||
+            (ultimo.tipoEvento === TipoEvento.INICIO_JORNADA &&
+              dto.tipoEvento !== TipoEvento.FIM_JORNADA));
         if (
           ultimo &&
+          !igualPermitido &&
           timestampEventoNovo.getTime() <= ultimo.timestampEvento.getTime()
         ) {
           await this.audit.registrar({
