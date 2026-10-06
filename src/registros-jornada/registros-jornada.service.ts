@@ -257,8 +257,7 @@ export class RegistrosJornadaService {
           !!ultimo &&
           timestampEventoNovo.getTime() === ultimo.timestampEvento.getTime() &&
           (dto.tipoEvento === TipoEvento.FIM_JORNADA ||
-            (ultimo.tipoEvento === TipoEvento.INICIO_JORNADA &&
-              dto.tipoEvento !== TipoEvento.FIM_JORNADA));
+            ultimo.tipoEvento === TipoEvento.INICIO_JORNADA);
         if (
           ultimo &&
           !igualPermitido &&
