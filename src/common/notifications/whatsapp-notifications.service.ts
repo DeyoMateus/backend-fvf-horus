@@ -37,9 +37,19 @@ export class WhatsappNotificationsService {
     private readonly prisma: PrismaService,
   ) {}
 
+  /**
+   * Rodada 160: dois provedores possíveis. Evolution API (instância própria
+   * no Easypanel, texto livre, sem template) tem prioridade; se não estiver
+   * configurada, vale a Cloud API oficial da Meta como antes.
+   */
   configurado(): boolean {
-    return !!(
-      process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID
+    return (
+      !!(
+        process.env.EVOLUTION_API_URL &&
+        process.env.EVOLUTION_API_KEY &&
+        process.env.EVOLUTION_INSTANCE
+      ) ||
+      !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID)
     );
   }
 

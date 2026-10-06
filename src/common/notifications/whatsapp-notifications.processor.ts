@@ -18,6 +18,33 @@ export class WhatsappNotificationsProcessor extends WorkerHost {
 
   async process(job: Job<JobNotificacaoWhatsapp>): Promise<void> {
     const { telefone, mensagem } = job.data;
+
+    // Rodada 160: Evolution API (instância própria) tem prioridade.
+    const evolutionUrl = process.env.EVOLUTION_API_URL;
+    const evolutionKey = process.env.EVOLUTION_API_KEY;
+    const evolutionInstancia = process.env.EVOLUTION_INSTANCE;
+    if (evolutionUrl && evolutionKey && evolutionInstancia) {
+      const resp = await fetch(
+        `${evolutionUrl.replace(/\/+$/, '')}/message/sendText/${encodeURIComponent(evolutionInstancia)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: evolutionKey,
+          },
+          body: JSON.stringify({
+            number: telefone.replace(/\D/g, ''),
+            text: mensagem,
+          }),
+        },
+      );
+      if (!resp.ok) {
+        const texto = await resp.text();
+        throw new Error(`Evolution API respondeu ${resp.status}: ${texto}`);
+      }
+      return;
+    }
+
     const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
     const token = process.env.WHATSAPP_TOKEN;
 
