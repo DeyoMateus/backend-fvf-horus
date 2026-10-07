@@ -15,7 +15,6 @@ const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 const crypto_1 = require("crypto");
 const audit_service_1 = require("../common/audit/audit.service");
-const whatsapp_notifications_service_1 = require("../common/notifications/whatsapp-notifications.service");
 const prisma_service_1 = require("../common/prisma/prisma.service");
 const storage_service_1 = require("../common/storage/storage.service");
 const tenant_context_1 = require("../common/tenant/tenant-context");
@@ -25,15 +24,13 @@ const REAVISO_MS = 24 * 60 * 60 * 1000;
 let AncoraIntegridadeService = AncoraIntegridadeService_1 = class AncoraIntegridadeService {
     prisma;
     storage;
-    whatsapp;
     audit;
     logger = new common_1.Logger(AncoraIntegridadeService_1.name);
     avisoStorageEmitido = false;
     avisados = new Map();
-    constructor(prisma, storage, whatsapp, audit) {
+    constructor(prisma, storage, audit) {
         this.prisma = prisma;
         this.storage = storage;
-        this.whatsapp = whatsapp;
         this.audit = audit;
     }
     chaveHmac() {
@@ -188,9 +185,7 @@ let AncoraIntegridadeService = AncoraIntegridadeService_1 = class AncoraIntegrid
             if (agora.getTime() - (this.avisados.get(k) ?? 0) < REAVISO_MS)
                 return;
             this.avisados.set(k, agora.getTime());
-            for (const empresaId of empresasParaAvisar) {
-                void this.whatsapp.notificarGestoresDaEmpresa(empresaId, 'Integridade: o ponto de verificação externo da cadeia de registros não confere com a assinatura (adulterado ou chave diferente). Verifique o banco e o bucket.');
-            }
+            void empresasParaAvisar;
         }
         const novas = violacoes.filter((v) => {
             const k = `${v.motorista.motoristaId}:${v.motivo}`;
@@ -264,20 +259,6 @@ let AncoraIntegridadeService = AncoraIntegridadeService_1 = class AncoraIntegrid
                 this.logger.warn(`Falha ao criar alerta da âncora (${v.motorista.motoristaId}): ${err.message}`);
             }
         }
-        const porEmpresa = new Map();
-        for (const v of novas) {
-            const l = porEmpresa.get(v.motorista.empresaId) ?? [];
-            l.push(v);
-            porEmpresa.set(v.motorista.empresaId, l);
-        }
-        for (const [empresaId, lista] of porEmpresa) {
-            const nomes = lista
-                .slice(0, 5)
-                .map((v) => `${v.motorista.nome} (${v.motivo})`)
-                .join('; ');
-            const resto = lista.length > 5 ? ` e mais ${lista.length - 5}` : '';
-            void this.whatsapp.notificarGestoresDaEmpresa(empresaId, `Integridade violada: registros ausentes ou alterados no banco em relação ao último ponto de verificação externo. ${nomes}${resto}. Possível exclusão direta no banco.`);
-        }
         if (adulterada) {
             this.logger.error('A âncora guardada no R2 não confere com a assinatura (adulterada ou chave diferente).');
         }
@@ -332,7 +313,6 @@ exports.AncoraIntegridadeService = AncoraIntegridadeService = AncoraIntegridadeS
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         storage_service_1.StorageService,
-        whatsapp_notifications_service_1.WhatsappNotificationsService,
         audit_service_1.AuditService])
 ], AncoraIntegridadeService);
 //# sourceMappingURL=ancora-integridade.service.js.map

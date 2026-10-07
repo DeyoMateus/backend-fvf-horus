@@ -29,6 +29,7 @@ let PushNotificationsProcessor = PushNotificationsProcessor_1 = class PushNotifi
                 data: dados ?? {},
                 priority: 'high',
                 sound: 'default',
+                channelId: 'alertas-jornada-v2',
             }),
         });
         if (!resposta.ok) {

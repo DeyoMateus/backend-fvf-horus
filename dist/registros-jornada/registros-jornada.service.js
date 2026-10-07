@@ -21,6 +21,7 @@ const client_1 = require("@prisma/client");
 const antifraude_service_1 = require("../common/antifraude/antifraude.service");
 const jornada_legal_service_1 = require("../common/jornada-legal/jornada-legal.service");
 const push_notifications_service_1 = require("../common/notifications/push-notifications.service");
+const whatsapp_notifications_constants_1 = require("../common/notifications/whatsapp-notifications.constants");
 const whatsapp_notifications_service_1 = require("../common/notifications/whatsapp-notifications.service");
 const audit_service_1 = require("../common/audit/audit.service");
 const envelope_encryption_service_1 = require("../common/crypto/envelope-encryption.service");
@@ -346,7 +347,8 @@ let RegistrosJornadaService = class RegistrosJornadaService {
         }, { isolationLevel: client_1.Prisma.TransactionIsolationLevel.Serializable });
         for (const alerta of alertasCriticosParaNotificar) {
             void this.pushNotifications.notificarMotorista(motoristaId, 'Alerta de jornada', alerta.mensagem, { tipo: alerta.tipo });
-            if (empresaIdParaNotificar) {
+            if (empresaIdParaNotificar &&
+                !whatsapp_notifications_constants_1.TIPOS_ALERTA_SOMENTE_PAINEL.includes(alerta.tipo)) {
                 void this.whatsapp.notificarGestoresDaEmpresa(empresaIdParaNotificar, alerta.mensagem);
             }
         }
@@ -503,7 +505,9 @@ let RegistrosJornadaService = class RegistrosJornadaService {
                     void this.pushNotifications.notificarMotorista(motoristaId, 'Alerta de jornada', alerta.mensagem, {
                         tipo: alerta.tipo,
                     });
-                    void this.whatsapp.notificarGestoresDaEmpresa(motorista.empresaId, alerta.mensagem);
+                    if (!whatsapp_notifications_constants_1.TIPOS_ALERTA_SOMENTE_PAINEL.includes(alerta.tipo)) {
+                        void this.whatsapp.notificarGestoresDaEmpresa(motorista.empresaId, alerta.mensagem);
+                    }
                 }
                 await this.agendarProximaVerificacaoSeAplicavel(motoristaId, agora);
             }
@@ -1181,7 +1185,6 @@ let RegistrosJornadaService = class RegistrosJornadaService {
                         },
                     });
                     alertasCriados++;
-                    void this.whatsapp.notificarGestoresDaEmpresa(motorista.empresaId, mensagem);
                 }
                 catch (err) {
                     this.logger.warn(`Falha ao verificar a cadeia do motorista ${motorista.id}: ${err.message}`);

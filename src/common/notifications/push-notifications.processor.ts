@@ -31,6 +31,10 @@ export class PushNotificationsProcessor extends WorkerHost {
         data: dados ?? {},
         priority: 'high',
         sound: 'default',
+        // Canal Android com som/vibração/importância máxima (criado pelo app,
+        // mobile/src/notifications/canalAlertas.ts). Sem isto o push cai no
+        // canal padrão, que pode ser silencioso e sem banner.
+        channelId: 'alertas-jornada-v2',
       }),
     });
 
