@@ -15,6 +15,36 @@ const EXPO_PUSH_API_URL = 'https://exp.host/--/api/v2/push/send';
 export class PushNotificationsProcessor extends WorkerHost {
   private readonly logger = new Logger(PushNotificationsProcessor.name);
 
+  private async conferirRecibo(ticketId: string): Promise<void> {
+    try {
+      await new Promise((r) => setTimeout(r, 15_000));
+      const r = await fetch('https://exp.host/--/api/v2/push/getReceipts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ ids: [ticketId] }),
+      });
+      const json = (await r.json()) as {
+        data?: Record<
+          string,
+          { status?: string; message?: string; details?: { error?: string } }
+        >;
+      };
+      const rec = json.data?.[ticketId];
+      if (rec?.status === 'error') {
+        this.logger.warn(
+          `Push NÃO entregue (${rec.details?.error ?? 'erro'}): ${rec.message ?? ''}`,
+        );
+      } else if (rec?.status === 'ok') {
+        this.logger.log('Push entregue ao Google/Apple (recibo ok).');
+      }
+    } catch {
+      // diagnóstico apenas
+    }
+  }
+
   async process(job: Job<JobNotificacaoPush>): Promise<void> {
     const { pushToken, titulo, corpo, dados } = job.data;
 
@@ -44,7 +74,7 @@ export class PushNotificationsProcessor extends WorkerHost {
     }
 
     const corpoResposta = (await resposta.json()) as {
-      data?: { status?: string; message?: string };
+      data?: { status?: string; message?: string; id?: string };
     };
     if (corpoResposta.data?.status === 'error') {
       // Token inválido/expirado (ex.: app desinstalado) , não vale a
@@ -52,6 +82,12 @@ export class PushNotificationsProcessor extends WorkerHost {
       this.logger.warn(
         `Expo Push API recusou o envio: ${corpoResposta.data.message}`,
       );
+    } else if (corpoResposta.data?.id) {
+      // O "ok" do envio só diz que a Expo ACEITOU a mensagem; a entrega ao
+      // Google (FCM) é confirmada depois, no recibo. Erros típicos:
+      // InvalidCredentials/MismatchSenderId (FCM não configurado no EAS) e
+      // DeviceNotRegistered (app desinstalado/token velho). Só loga.
+      void this.conferirRecibo(corpoResposta.data.id);
     }
   }
 }
