@@ -1893,6 +1893,9 @@ export class RegistrosJornadaService {
       orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
       take: 1000,
     });
+    this.logger.log(
+      `Restauração/consulta do app: motorista ${motoristaId} recebeu ${registros.length} registro(s) (desde ${desde.toISOString()}).`,
+    );
     return registros.map((r) => ({
       idLocal: r.idempotencyKey ?? r.id,
       tipoEvento: r.tipoEvento,
