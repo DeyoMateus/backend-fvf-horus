@@ -7,6 +7,6 @@ export class DecidirSolicitacaoDto {
   @IsOptional()
   @Sanitizar()
   @IsString()
-  @Length(0, 1000)
+  @Length(0, 400)
   motivoDecisao?: string;
 }

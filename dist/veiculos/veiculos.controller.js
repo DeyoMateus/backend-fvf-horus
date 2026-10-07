@@ -39,7 +39,7 @@ let VeiculosController = class VeiculosController {
 exports.VeiculosController = VeiculosController;
 __decorate([
     (0, common_1.Put)(),
-    __param(0, (0, common_1.Param)('motoristaId')),
+    __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
@@ -48,7 +48,7 @@ __decorate([
 ], VeiculosController.prototype, "atualizar", null);
 __decorate([
     (0, common_1.Get)(),
-    __param(0, (0, common_1.Param)('motoristaId')),
+    __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -56,7 +56,7 @@ __decorate([
 ], VeiculosController.prototype, "status", null);
 __decorate([
     (0, common_1.Get)('trocas'),
-    __param(0, (0, common_1.Param)('motoristaId')),
+    __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),

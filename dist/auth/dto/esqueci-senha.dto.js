@@ -17,6 +17,7 @@ class EsqueciSenhaDto {
 exports.EsqueciSenhaDto = EsqueciSenhaDto;
 __decorate([
     (0, class_validator_1.IsEmail)(),
+    (0, class_validator_1.MaxLength)(254),
     __metadata("design:type", String)
 ], EsqueciSenhaDto.prototype, "email", void 0);
 //# sourceMappingURL=esqueci-senha.dto.js.map

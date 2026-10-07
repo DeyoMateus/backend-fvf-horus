@@ -1,4 +1,17 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { PapelUsuario } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { UsuarioAutenticado } from '../common/decorators/current-user.decorator';
@@ -18,7 +31,10 @@ export class AjudantesController {
 
   @Post()
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
-  create(@Body() dto: CreateAjudanteDto, @CurrentUser() user: UsuarioAutenticado) {
+  create(
+    @Body() dto: CreateAjudanteDto,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
     return this.ajudantesService.create(dto, user.grupoId, user.sub);
   }
 
@@ -42,24 +58,41 @@ export class AjudantesController {
 
   @Get(':id')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
-  findOne(@Param('id') id: string, @CurrentUser() user: UsuarioAutenticado) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
     return this.ajudantesService.findById(id, user.grupoId);
   }
 
   @Patch(':id/status')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   atualizarStatus(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AtualizarStatusAjudanteDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
-    return this.ajudantesService.atualizarStatus(id, dto, user.sub, user.grupoId);
+    return this.ajudantesService.atualizarStatus(
+      id,
+      dto,
+      user.sub,
+      user.grupoId,
+    );
   }
 
   @Delete(':id')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
-  excluir(@Param('id') id: string, @Body() dto: ExcluirAjudanteDto, @CurrentUser() user: UsuarioAutenticado) {
-    return this.ajudantesService.excluir(id, dto.motivo, user.sub, user.grupoId);
+  excluir(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ExcluirAjudanteDto,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
+    return this.ajudantesService.excluir(
+      id,
+      dto.motivo,
+      user.sub,
+      user.grupoId,
+    );
   }
 
   // ===== Device binding =====
@@ -67,23 +100,34 @@ export class AjudantesController {
   @Post(':id/dispositivo')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   vincularDispositivo(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: VincularDispositivoAjudanteDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
-    return this.ajudantesService.vincularDispositivo(id, dto, user.sub, user.grupoId);
+    return this.ajudantesService.vincularDispositivo(
+      id,
+      dto,
+      user.sub,
+      user.grupoId,
+    );
   }
 
   @Get(':id/dispositivo')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
-  statusDispositivo(@Param('id') id: string, @CurrentUser() user: UsuarioAutenticado) {
+  statusDispositivo(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
     return this.ajudantesService.statusDispositivo(id, user.grupoId);
   }
 
   @Delete(':id/dispositivo')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   @HttpCode(HttpStatus.NO_CONTENT)
-  revogarDispositivo(@Param('id') id: string, @CurrentUser() user: UsuarioAutenticado) {
+  revogarDispositivo(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
     return this.ajudantesService.revogarDispositivo(id, user.sub, user.grupoId);
   }
 }

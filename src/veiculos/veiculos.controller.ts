@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Put, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
 import { ActorType, PapelUsuario } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { UsuarioAutenticado } from '../common/decorators/current-user.decorator';
@@ -19,7 +27,7 @@ export class VeiculosController {
 
   @Put()
   atualizar(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Body() dto: AtualizarVeiculoDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -33,7 +41,7 @@ export class VeiculosController {
 
   @Get()
   status(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.veiculosService.status(motoristaId, user.grupoId);
@@ -41,7 +49,7 @@ export class VeiculosController {
 
   @Get('trocas')
   trocas(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.veiculosService.listarTrocas(motoristaId, user.grupoId);

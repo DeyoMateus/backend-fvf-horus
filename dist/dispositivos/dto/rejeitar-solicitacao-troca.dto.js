@@ -19,8 +19,10 @@ exports.RejeitarSolicitacaoTrocaDto = RejeitarSolicitacaoTrocaDto;
 __decorate([
     (0, sanitizar_decorator_1.Sanitizar)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.MinLength)(10, { message: 'Motivo da rejeição precisa de pelo menos 10 caracteres.' }),
-    (0, class_validator_1.Length)(0, 1000),
+    (0, class_validator_1.MinLength)(10, {
+        message: 'Motivo da rejeição precisa de pelo menos 10 caracteres.',
+    }),
+    (0, class_validator_1.Length)(0, 400),
     __metadata("design:type", String)
 ], RejeitarSolicitacaoTrocaDto.prototype, "motivo", void 0);
 //# sourceMappingURL=rejeitar-solicitacao-troca.dto.js.map

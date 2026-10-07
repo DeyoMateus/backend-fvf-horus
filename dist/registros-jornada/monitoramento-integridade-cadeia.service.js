@@ -12,14 +12,17 @@ var MonitoramentoIntegridadeCadeiaService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MonitoramentoIntegridadeCadeiaService = void 0;
 const common_1 = require("@nestjs/common");
+const ancora_integridade_service_1 = require("./ancora-integridade.service");
 const registros_jornada_service_1 = require("./registros-jornada.service");
 let MonitoramentoIntegridadeCadeiaService = MonitoramentoIntegridadeCadeiaService_1 = class MonitoramentoIntegridadeCadeiaService {
     registrosJornada;
+    ancora;
     logger = new common_1.Logger(MonitoramentoIntegridadeCadeiaService_1.name);
     timer = null;
     emExecucao = false;
-    constructor(registrosJornada) {
+    constructor(registrosJornada, ancora) {
         this.registrosJornada = registrosJornada;
+        this.ancora = ancora;
     }
     onModuleInit() {
         if (process.env.NODE_ENV === 'test')
@@ -43,6 +46,18 @@ let MonitoramentoIntegridadeCadeiaService = MonitoramentoIntegridadeCadeiaServic
         catch (err) {
             this.logger.warn(`Falha na varredura de integridade: ${err.message}`);
         }
+        try {
+            const a = await this.ancora.executar();
+            this.logger.log(`Âncora de integridade: ${a.estado}` +
+                (a.motoristas !== undefined
+                    ? ` (${a.motoristas} motorista(s))`
+                    : '') +
+                (a.violacoes ? `, ${a.violacoes} violação(ões)` : '') +
+                '.');
+        }
+        catch (err) {
+            this.logger.warn(`Falha na âncora de integridade: ${err.message}`);
+        }
         finally {
             this.emExecucao = false;
         }
@@ -51,6 +66,7 @@ let MonitoramentoIntegridadeCadeiaService = MonitoramentoIntegridadeCadeiaServic
 exports.MonitoramentoIntegridadeCadeiaService = MonitoramentoIntegridadeCadeiaService;
 exports.MonitoramentoIntegridadeCadeiaService = MonitoramentoIntegridadeCadeiaService = MonitoramentoIntegridadeCadeiaService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [registros_jornada_service_1.RegistrosJornadaService])
+    __metadata("design:paramtypes", [registros_jornada_service_1.RegistrosJornadaService,
+        ancora_integridade_service_1.AncoraIntegridadeService])
 ], MonitoramentoIntegridadeCadeiaService);
 //# sourceMappingURL=monitoramento-integridade-cadeia.service.js.map

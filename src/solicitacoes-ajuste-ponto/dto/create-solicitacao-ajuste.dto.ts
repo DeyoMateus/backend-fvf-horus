@@ -21,7 +21,7 @@ export class CreateSolicitacaoAjusteDto {
 
   @Sanitizar()
   @IsString()
-  @Length(10, 1000)
+  @Length(10, 400)
   justificativa!: string;
 
   @IsOptional()

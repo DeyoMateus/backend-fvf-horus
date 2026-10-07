@@ -1,4 +1,11 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { PapelUsuario } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { UsuarioAutenticado } from '../common/decorators/current-user.decorator';
@@ -17,7 +24,7 @@ export class AutorrelatoFolgaController {
   @Get('motoristas/:id/autorrelatos-folga')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   listarPorMotorista(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.service.listarPorMotorista(id, user.grupoId);

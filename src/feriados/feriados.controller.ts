@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -44,14 +45,17 @@ export class FeriadosController {
 
   @Get(':id')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
-  findOne(@Param('id') id: string, @CurrentUser() user: UsuarioAutenticado) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
     return this.feriadosService.findById(id, user.grupoId);
   }
 
   @Patch(':id')
   @Roles(PapelUsuario.ADMIN)
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateFeriadoDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -61,7 +65,10 @@ export class FeriadosController {
   // Nunca DELETE de verdade , só desativa (ver comentário no service).
   @Delete(':id')
   @Roles(PapelUsuario.ADMIN)
-  desativar(@Param('id') id: string, @CurrentUser() user: UsuarioAutenticado) {
+  desativar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
     return this.feriadosService.desativar(id, user.grupoId, user.sub);
   }
 }

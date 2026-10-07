@@ -4,6 +4,7 @@ import {
   IsString,
   Length,
   Matches,
+  MaxLength,
   MinLength,
 } from 'class-validator';
 import {
@@ -46,6 +47,7 @@ export class CreateEmpresaMaeDto {
   nomeAdmin!: string;
 
   @IsEmail()
+  @MaxLength(254)
   emailAdmin!: string;
 
   /**
@@ -57,6 +59,7 @@ export class CreateEmpresaMaeDto {
    */
   @IsString()
   @MinLength(8)
+  @MaxLength(128)
   senhaAdmin!: string;
 
   @IsOptional()

@@ -5,6 +5,7 @@ import {
   Headers,
   Ip,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -194,7 +195,7 @@ export class RegistrosJornadaController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   list(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.registrosService.listByMotorista(motoristaId, user.grupoId);
@@ -204,7 +205,7 @@ export class RegistrosJornadaController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   verificarIntegridade(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.registrosService.verificarIntegridade(
@@ -219,7 +220,7 @@ export class RegistrosJornadaController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   analisarEventoIntegridade(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Param('sequencial') sequencial: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -235,7 +236,7 @@ export class RegistrosJornadaController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   aceitarDivergenciaIntegridade(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Param('sequencial') sequencial: string,
     @Body('motivo') motivo: string,
     @CurrentUser() user: UsuarioAutenticado,
@@ -254,7 +255,7 @@ export class RegistrosJornadaController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   viagens(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.registrosService.consolidarViagens(motoristaId, user.grupoId);
@@ -273,7 +274,7 @@ export class RegistrosJornadaController {
   // Geração de CSV é cara de IO , limite mais estrito que o global (por IP).
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async aej(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Res() res: Response,
     @CurrentUser() user: UsuarioAutenticado,
     @Query('inicio') inicio?: string,
@@ -311,7 +312,7 @@ export class RegistrosJornadaController {
   // Geração de PDF é cara de CPU , limite mais estrito que o global (por IP).
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async comprovante(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Res() res: Response,
     @CurrentUser() user: UsuarioAutenticado,
     @Query('inicio') inicio?: string,
@@ -338,7 +339,7 @@ export class RegistrosJornadaController {
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async espelhoRepP(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Res() res: Response,
     @CurrentUser() user: UsuarioAutenticado,
     @Query('inicio') inicio?: string,

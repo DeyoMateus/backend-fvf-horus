@@ -1,4 +1,10 @@
-import { IsEmail, IsOptional, IsString, Length } from 'class-validator';
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  Length,
+  MaxLength,
+} from 'class-validator';
 import { Sanitizar } from '../../common/sanitizacao/sanitizar.decorator';
 
 /**
@@ -20,5 +26,6 @@ export class UpdateUsuarioSuperAdminDto {
 
   @IsOptional()
   @IsEmail()
+  @MaxLength(254)
   email?: string;
 }

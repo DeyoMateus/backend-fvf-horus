@@ -18,11 +18,13 @@ class RedefinirSenhaDto {
 exports.RedefinirSenhaDto = RedefinirSenhaDto;
 __decorate([
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(256),
     __metadata("design:type", String)
 ], RedefinirSenhaDto.prototype, "token", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MinLength)(8),
+    (0, class_validator_1.MaxLength)(128),
     __metadata("design:type", String)
 ], RedefinirSenhaDto.prototype, "novaSenha", void 0);
 //# sourceMappingURL=redefinir-senha.dto.js.map

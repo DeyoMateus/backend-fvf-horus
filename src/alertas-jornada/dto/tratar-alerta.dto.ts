@@ -8,6 +8,6 @@ import { Sanitizar } from '../../common/sanitizacao/sanitizar.decorator';
 export class TratarAlertaDto {
   @Sanitizar()
   @IsString()
-  @Length(3, 1000)
+  @Length(3, 400)
   observacao!: string;
 }

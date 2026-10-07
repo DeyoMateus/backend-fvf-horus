@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -56,13 +57,13 @@ export class SuperAdminController {
   }
 
   @Get('grupos/:id')
-  obterGrupo(@Param('id') id: string) {
+  obterGrupo(@Param('id', ParseUUIDPipe) id: string) {
     return this.superAdminService.obterGrupo(id);
   }
 
   @Patch('grupos/:id')
   atualizarGrupo(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateGrupoDto,
     @CurrentSuperAdmin() superAdmin: SuperAdminAutenticado,
   ) {
@@ -71,7 +72,7 @@ export class SuperAdminController {
 
   @Patch('empresas/:id')
   atualizarEmpresa(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateEmpresaDto,
     @CurrentSuperAdmin() superAdmin: SuperAdminAutenticado,
   ) {
@@ -80,7 +81,7 @@ export class SuperAdminController {
 
   @Patch('empresas/:id/status')
   atualizarStatusEmpresa(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AtualizarStatusEmpresaDto,
     @CurrentSuperAdmin() superAdmin: SuperAdminAutenticado,
   ) {
@@ -94,7 +95,7 @@ export class SuperAdminController {
   /** Rodada 164: quem recebe alerta por WhatsApp. */
   @Patch('usuarios/:id/whatsapp-alertas')
   atualizarDestinatariosWhatsapp(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: DestinatariosWhatsappUsuarioDto,
     @CurrentSuperAdmin() superAdmin: SuperAdminAutenticado,
   ) {
@@ -107,7 +108,7 @@ export class SuperAdminController {
 
   @Patch('usuarios/:id')
   atualizarUsuario(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUsuarioSuperAdminDto,
     @CurrentSuperAdmin() superAdmin: SuperAdminAutenticado,
   ) {
@@ -119,7 +120,7 @@ export class SuperAdminController {
   // da própria empresa perdeu a tela de Usuários.
   @Post('grupos/:grupoId/usuarios')
   criarUsuarioParaGrupo(
-    @Param('grupoId') grupoId: string,
+    @Param('grupoId', ParseUUIDPipe) grupoId: string,
     @Body() dto: CreateUsuarioGrupoDto,
     @CurrentSuperAdmin() superAdmin: SuperAdminAutenticado,
   ) {
@@ -132,8 +133,8 @@ export class SuperAdminController {
 
   @Patch('grupos/:grupoId/usuarios/:usuarioId/status')
   atualizarStatusUsuarioGrupo(
-    @Param('grupoId') grupoId: string,
-    @Param('usuarioId') usuarioId: string,
+    @Param('grupoId', ParseUUIDPipe) grupoId: string,
+    @Param('usuarioId', ParseUUIDPipe) usuarioId: string,
     @Body() dto: AtualizarStatusUsuarioEmpresaDto,
     @CurrentSuperAdmin() superAdmin: SuperAdminAutenticado,
   ) {

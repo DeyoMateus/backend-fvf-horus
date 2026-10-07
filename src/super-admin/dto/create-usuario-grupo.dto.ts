@@ -5,6 +5,7 @@ import {
   IsString,
   Length,
   Matches,
+  MaxLength,
   MinLength,
 } from 'class-validator';
 import { PapelUsuario } from '@prisma/client';
@@ -34,10 +35,12 @@ export class CreateUsuarioGrupoDto {
   nome!: string;
 
   @IsEmail()
+  @MaxLength(254)
   email!: string;
 
   @IsString()
   @MinLength(8)
+  @MaxLength(128)
   senha!: string;
 
   @IsEnum(PapelUsuario)

@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -43,14 +44,17 @@ export class RegrasSindicaisController {
 
   @Get(':id')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
-  findOne(@Param('id') id: string, @CurrentUser() user: UsuarioAutenticado) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
     return this.regrasService.findById(id, user.grupoId);
   }
 
   @Patch(':id')
   @Roles(PapelUsuario.ADMIN)
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateRegraSindicalDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -60,7 +64,10 @@ export class RegrasSindicaisController {
   // Nunca DELETE de verdade , só desativa (ver comentário no service).
   @Delete(':id')
   @Roles(PapelUsuario.ADMIN)
-  desativar(@Param('id') id: string, @CurrentUser() user: UsuarioAutenticado) {
+  desativar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
     return this.regrasService.desativar(id, user.grupoId, user.sub);
   }
 }

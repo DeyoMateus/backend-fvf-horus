@@ -1,3 +1,4 @@
+import { AbuseGuardService } from '../common/throttler/abuse-guard.service';
 import {
   HttpException,
   HttpStatus,
@@ -53,6 +54,7 @@ export class AuthService {
     private readonly audit: AuditService,
     private readonly email: EmailService,
     private readonly lockout: AccountLockoutService,
+    private readonly abuso: AbuseGuardService,
   ) {}
 
   private static readonly LOCKOUT_NAMESPACE = 'usuario-empresa';
@@ -173,6 +175,8 @@ export class AuthService {
 
     if (!usuario || !usuario.ativo || !senhaOk) {
       await this.lockout.registrarFalha(AuthService.LOCKOUT_NAMESPACE, email);
+      await this.abuso.registrarFalhaGlobalDeLogin();
+      await this.abuso.atrasarSeEmDefesa();
       await this.audit.registrar({
         actorType: ActorType.USUARIO_EMPRESA,
         actorId: usuario?.id ?? null,
@@ -267,6 +271,18 @@ export class AuthService {
     ip?: string,
     userAgent?: string,
   ): Promise<void> {
+    // Limite por e-mail, independente do IP: evita encher a caixa da vítima
+    // (e gastar o envio) com pedidos vindos de muitos IPs. Resposta idêntica.
+    if (
+      !(await this.abuso.permitirPorIdentidade(
+        'esqueci-senha',
+        email,
+        3,
+        60 * 60_000,
+      ))
+    ) {
+      return;
+    }
     const usuario = await this.prisma.usuarioEmpresa.findUnique({
       where: { email },
     });

@@ -6,6 +6,8 @@ import {
   IsDateString,
   IsLatitude,
   IsLongitude,
+  Max,
+  Min,
   IsNumber,
   IsOptional,
   ValidateNested,
@@ -20,6 +22,8 @@ export class AmostraLocalizacaoItemDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
+  @Max(100000)
   precisaoGpsM?: number;
 
   @IsDateString()

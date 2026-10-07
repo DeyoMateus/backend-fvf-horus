@@ -4,6 +4,7 @@ import {
   IsString,
   Length,
   Matches,
+  MaxLength,
 } from 'class-validator';
 import {
   Sanitizar,
@@ -27,6 +28,7 @@ export class UpdatePerfilProprioDto {
 
   @IsOptional()
   @IsEmail()
+  @MaxLength(254)
   email?: string;
 
   @IsOptional()

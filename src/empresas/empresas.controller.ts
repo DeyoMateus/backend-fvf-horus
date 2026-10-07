@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -93,7 +94,10 @@ export class EmpresasController {
 
   @Get(':id')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
-  findOne(@Param('id') id: string, @CurrentUser() user: UsuarioAutenticado) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
     return this.empresasService.findById(id, user.grupoId);
   }
 
@@ -102,7 +106,7 @@ export class EmpresasController {
   @Patch(':id/regra-sindical')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   vincularRegraSindical(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body('regraSindicalId') regraSindicalId: string | null,
     @CurrentUser() user: UsuarioAutenticado,
   ) {

@@ -1,3 +1,4 @@
+import { grupoIdSeguro } from './grupo-id-seguro';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { TenantContext } from '../tenant/tenant-context';
@@ -226,7 +227,7 @@ export class PrismaService
           'claude/arquitetura-seguranca-controle-jornada.md, Rodada 23.',
       );
     }
-    const grupoEscapado = ctx.grupoId.replace(/'/g, "''");
+    const grupoEscapado = grupoIdSeguro(ctx.grupoId);
     const [, resultado] = await this.transactionOriginal([
       this.executeRawUnsafeOriginal(
         `SET LOCAL app.grupo_atual = '${grupoEscapado}'`,

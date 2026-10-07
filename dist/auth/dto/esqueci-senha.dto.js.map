@@ -1,1 +1,1 @@
-{"version":3,"file":"esqueci-senha.dto.js","sourceRoot":"","sources":["../../../src/auth/dto/esqueci-senha.dto.ts"],"names":[],"mappings":";;;;;;;;;;;;AAAA,qDAA0C;AAE1C,MAAa,eAAe;IAE1B,KAAK,CAAU;CAChB;AAHD,0CAGC;AADC;IADC,IAAA,yBAAO,GAAE;;8CACK"}
+{"version":3,"file":"esqueci-senha.dto.js","sourceRoot":"","sources":["../../../src/auth/dto/esqueci-senha.dto.ts"],"names":[],"mappings":";;;;;;;;;;;;AAAA,qDAAqD;AAErD,MAAa,eAAe;IAG1B,KAAK,CAAU;CAChB;AAJD,0CAIC;AADC;IAFC,IAAA,yBAAO,GAAE;IACT,IAAA,2BAAS,EAAC,GAAG,CAAC;;8CACA"}

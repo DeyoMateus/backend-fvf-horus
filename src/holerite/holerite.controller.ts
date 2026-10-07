@@ -3,6 +3,7 @@ import {
   Get,
   NotFoundException,
   Param,
+  ParseUUIDPipe,
   Query,
   Res,
   UseGuards,
@@ -38,7 +39,7 @@ export class HoleriteController {
   // JSON , usado pela tela do painel pra mostrar a prévia antes de baixar o PDF.
   @Get()
   async calcular(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Query() query: GerarHoleriteQueryDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -57,7 +58,7 @@ export class HoleriteController {
 
   @Get('pdf')
   async baixarPdf(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Query() query: GerarHoleriteQueryDto,
     @CurrentUser() user: UsuarioAutenticado,
     @Res() res: Response,

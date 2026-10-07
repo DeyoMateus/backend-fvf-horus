@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -46,7 +47,10 @@ export class SolicitacoesTrocaDispositivoController {
   @Patch(':id/aprovar')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
-  aprovar(@Param('id') id: string, @CurrentUser() user: UsuarioAutenticado) {
+  aprovar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
     return this.dispositivosService.aprovarTroca(id, user.sub, user.grupoId);
   }
 
@@ -54,7 +58,7 @@ export class SolicitacoesTrocaDispositivoController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   rejeitar(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RejeitarSolicitacaoTrocaDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {

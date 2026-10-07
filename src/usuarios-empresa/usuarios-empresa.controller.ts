@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  UseGuards,
+} from '@nestjs/common';
 import { PapelUsuario } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { UsuarioAutenticado } from '../common/decorators/current-user.decorator';
@@ -43,7 +51,7 @@ export class UsuariosEmpresaController {
   @Patch(':id/status')
   @Roles(PapelUsuario.ADMIN)
   atualizarStatus(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AtualizarStatusUsuarioEmpresaDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {

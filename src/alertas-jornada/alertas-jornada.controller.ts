@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Query,
   UseGuards,
@@ -26,7 +27,7 @@ export class AlertasJornadaController {
 
   @Get('motorista/:motoristaId')
   listByMotorista(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @CurrentUser() user: UsuarioAutenticado,
     @Query('naoVisualizados') naoVisualizados?: string,
   ) {
@@ -53,7 +54,7 @@ export class AlertasJornadaController {
 
   @Patch(':alertaId/visualizar')
   marcarVisualizado(
-    @Param('alertaId') alertaId: string,
+    @Param('alertaId', ParseUUIDPipe) alertaId: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.alertasService.marcarVisualizado(
@@ -65,7 +66,7 @@ export class AlertasJornadaController {
 
   @Patch(':alertaId/tratar')
   tratar(
-    @Param('alertaId') alertaId: string,
+    @Param('alertaId', ParseUUIDPipe) alertaId: string,
     @Body() dto: TratarAlertaDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {

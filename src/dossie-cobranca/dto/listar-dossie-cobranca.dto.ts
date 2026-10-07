@@ -1,4 +1,4 @@
-import { IsISO8601, IsOptional, IsString } from 'class-validator';
+import { IsISO8601, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class ListarDossieCobrancaDto {
   @IsISO8601()
@@ -8,6 +8,6 @@ export class ListarDossieCobrancaDto {
   fim!: string;
 
   @IsOptional()
-  @IsString()
+  @IsUUID()
   motoristaId?: string;
 }

@@ -17,6 +17,7 @@ class EsqueciSenhaSuperAdminDto {
 exports.EsqueciSenhaSuperAdminDto = EsqueciSenhaSuperAdminDto;
 __decorate([
     (0, class_validator_1.IsEmail)(),
+    (0, class_validator_1.MaxLength)(254),
     __metadata("design:type", String)
 ], EsqueciSenhaSuperAdminDto.prototype, "email", void 0);
 //# sourceMappingURL=esqueci-senha-super-admin.dto.js.map

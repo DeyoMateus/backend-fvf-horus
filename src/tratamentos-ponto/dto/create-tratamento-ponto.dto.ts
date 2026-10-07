@@ -1,4 +1,14 @@
-import { IsEnum, IsInt, IsISO8601, IsOptional, Max, Min, IsString, IsUUID, Length } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsISO8601,
+  IsOptional,
+  Max,
+  Min,
+  IsString,
+  IsUUID,
+  Length,
+} from 'class-validator';
 import { Sanitizar } from '../../common/sanitizacao/sanitizar.decorator';
 import { TipoEvento } from '@prisma/client';
 
@@ -11,7 +21,7 @@ export class CreateTratamentoPontoDto {
 
   @Sanitizar()
   @IsString()
-  @Length(10, 1000)
+  @Length(10, 400)
   motivo!: string;
 
   @IsOptional()

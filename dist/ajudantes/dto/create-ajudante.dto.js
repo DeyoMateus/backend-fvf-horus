@@ -39,6 +39,9 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, sanitizar_decorator_1.NormalizarTelefone)(),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(/^\+\d{10,15}$/, {
+        message: 'telefone deve estar em formato E.164 (ex.: +5511999998888)',
+    }),
     __metadata("design:type", String)
 ], CreateAjudanteDto.prototype, "telefone", void 0);
 //# sourceMappingURL=create-ajudante.dto.js.map

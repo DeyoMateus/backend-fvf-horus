@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Post,
   Req,
   Res,
@@ -51,7 +52,7 @@ export class SolicitacoesAjustePontoMobileController {
     }),
   )
   async anexarEvidencia(
-    @Param('solicitacaoId') solicitacaoId: string,
+    @Param('solicitacaoId', ParseUUIDPipe) solicitacaoId: string,
     @UploadedFile() arquivo: Express.Multer.File | undefined,
     @Req() req: { motorista: { id: string } },
   ) {
@@ -66,7 +67,7 @@ export class SolicitacoesAjustePontoMobileController {
 
   @Get('evidencias/:evidenciaId')
   async baixarEvidencia(
-    @Param('evidenciaId') evidenciaId: string,
+    @Param('evidenciaId', ParseUUIDPipe) evidenciaId: string,
     @Req() req: { motorista: { id: string } },
     @Res() res: Response,
   ) {
@@ -83,7 +84,7 @@ export class SolicitacoesAjustePontoMobileController {
 
   @Delete('evidencias/:evidenciaId')
   async removerEvidencia(
-    @Param('evidenciaId') evidenciaId: string,
+    @Param('evidenciaId', ParseUUIDPipe) evidenciaId: string,
     @Req() req: { motorista: { id: string } },
   ) {
     await this.solicitacoesService.removerEvidenciaDoMotorista(

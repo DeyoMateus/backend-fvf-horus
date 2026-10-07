@@ -29,11 +29,17 @@ exports.ListarAuditoriaDto = ListarAuditoriaDto;
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.Max)(100000),
     __metadata("design:type", Number)
 ], ListarAuditoriaDto.prototype, "page", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.Max)(200),
     __metadata("design:type", Number)
 ], ListarAuditoriaDto.prototype, "pageSize", void 0);
 __decorate([
@@ -46,6 +52,7 @@ __decorate([
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.ArrayMaxSize)(50),
     (0, class_validator_1.IsString)({ each: true }),
+    (0, class_validator_1.MaxLength)(100, { each: true }),
     __metadata("design:type", Array)
 ], ListarAuditoriaDto.prototype, "acoes", void 0);
 __decorate([
@@ -77,7 +84,7 @@ __decorate([
 ], ListarAuditoriaDto.prototype, "ordem", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsUUID)(),
     __metadata("design:type", String)
 ], ListarAuditoriaDto.prototype, "grupoId", void 0);
 //# sourceMappingURL=listar-auditoria.dto.js.map

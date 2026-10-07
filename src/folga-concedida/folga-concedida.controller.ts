@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { PapelUsuario } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { UsuarioAutenticado } from '../common/decorators/current-user.decorator';
@@ -18,7 +26,7 @@ export class FolgaConcedidaController {
 
   @Post()
   conceder(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Body() dto: CreateFolgaConcedidaDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -32,7 +40,7 @@ export class FolgaConcedidaController {
 
   @Get()
   listar(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.folgaConcedidaService.listarPorMotorista(

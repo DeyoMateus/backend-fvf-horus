@@ -1,3 +1,4 @@
+import { AbuseGuardService } from '../common/throttler/abuse-guard.service';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { AuditService } from '../common/audit/audit.service';
@@ -16,7 +17,8 @@ export declare class AuthService {
     private readonly audit;
     private readonly email;
     private readonly lockout;
-    constructor(prisma: PrismaService, jwt: JwtService, config: ConfigService, audit: AuditService, email: EmailService, lockout: AccountLockoutService);
+    private readonly abuso;
+    constructor(prisma: PrismaService, jwt: JwtService, config: ConfigService, audit: AuditService, email: EmailService, lockout: AccountLockoutService, abuso: AbuseGuardService);
     private static readonly LOCKOUT_NAMESPACE;
     private hashToken;
     private emitirTokens;

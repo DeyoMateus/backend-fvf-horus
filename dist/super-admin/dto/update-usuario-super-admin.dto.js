@@ -27,6 +27,7 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEmail)(),
+    (0, class_validator_1.MaxLength)(254),
     __metadata("design:type", String)
 ], UpdateUsuarioSuperAdminDto.prototype, "email", void 0);
 //# sourceMappingURL=update-usuario-super-admin.dto.js.map

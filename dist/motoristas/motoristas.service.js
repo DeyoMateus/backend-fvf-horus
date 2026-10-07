@@ -10,6 +10,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MotoristasService = void 0;
+const grupo_id_seguro_1 = require("../common/prisma/grupo-id-seguro");
 const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 const normalizar_placa_util_1 = require("../veiculos/normalizar-placa.util");
@@ -70,7 +71,7 @@ let MotoristasService = class MotoristasService {
             throw new Error('MotoristasService.create sem contexto de tenant , ver TenantContextInterceptor.');
         }
         const operacoes = [
-            this.prisma.$executeRawUnsafe(`SET LOCAL app.grupo_atual = '${ctxTenant.grupoId.replace(/'/g, "''")}'`),
+            this.prisma.$executeRawUnsafe(`SET LOCAL app.grupo_atual = '${(0, grupo_id_seguro_1.grupoIdSeguro)(ctxTenant.grupoId)}'`),
             this.prisma.cru.motorista.create({
                 data: {
                     id,

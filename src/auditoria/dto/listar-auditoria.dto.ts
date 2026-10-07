@@ -4,19 +4,30 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Length,
+  Max,
+  MaxLength,
+  Min,
 } from 'class-validator';
 import { ActorType } from '@prisma/client';
 
 export class ListarAuditoriaDto {
   @IsOptional()
   @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100000)
   page?: number;
 
   @IsOptional()
   @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
   pageSize?: number;
 
   @IsOptional()
@@ -32,6 +43,7 @@ export class ListarAuditoriaDto {
   @IsArray()
   @ArrayMaxSize(50)
   @IsString({ each: true })
+  @MaxLength(100, { each: true })
   acoes?: string[];
 
   @IsOptional()
@@ -70,6 +82,6 @@ export class ListarAuditoriaDto {
    * campo mesmo que venha na query, usando `user.grupoId` do token.
    */
   @IsOptional()
-  @IsString()
+  @IsUUID()
   grupoId?: string;
 }

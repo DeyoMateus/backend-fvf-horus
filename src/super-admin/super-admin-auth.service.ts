@@ -1,3 +1,4 @@
+import { AbuseGuardService } from '../common/throttler/abuse-guard.service';
 import {
   HttpException,
   HttpStatus,
@@ -46,6 +47,7 @@ export class SuperAdminAuthService {
     private readonly audit: AuditService,
     private readonly email: EmailService,
     private readonly lockout: AccountLockoutService,
+    private readonly abuso: AbuseGuardService,
   ) {}
 
   private static readonly LOCKOUT_NAMESPACE = 'super-admin';
@@ -126,6 +128,8 @@ export class SuperAdminAuthService {
         SuperAdminAuthService.LOCKOUT_NAMESPACE,
         email,
       );
+      await this.abuso.registrarFalhaGlobalDeLogin();
+      await this.abuso.atrasarSeEmDefesa();
       await this.audit.registrar({
         actorType: ActorType.SUPER_ADMIN,
         actorId: superAdmin?.id ?? null,
@@ -219,6 +223,16 @@ export class SuperAdminAuthService {
     ip?: string,
     userAgent?: string,
   ): Promise<void> {
+    if (
+      !(await this.abuso.permitirPorIdentidade(
+        'esqueci-senha-super-admin',
+        email,
+        3,
+        60 * 60_000,
+      ))
+    ) {
+      return;
+    }
     const superAdmin = await this.prisma.superAdminUsuario.findUnique({
       where: { email },
     });

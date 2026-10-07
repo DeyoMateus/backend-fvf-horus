@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Res,
@@ -87,7 +88,7 @@ export class DocumentosCargaController {
 
   @Get('motorista/:motoristaId')
   listByMotorista(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.service.listByMotorista(motoristaId, user.grupoId);
@@ -95,7 +96,7 @@ export class DocumentosCargaController {
 
   @Get('motorista/:motoristaId/status-atual')
   statusAtual(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.service.statusAtualPorMotorista(motoristaId, user.grupoId);
@@ -103,7 +104,7 @@ export class DocumentosCargaController {
 
   @Delete(':id')
   remover(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.service.remover(id, user.sub, user.grupoId);
@@ -111,7 +112,7 @@ export class DocumentosCargaController {
 
   @Get(':id/xml')
   async baixarXml(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Res() res: Response,
     @CurrentUser() user: UsuarioAutenticado,
     @Query('inline') inline?: string,

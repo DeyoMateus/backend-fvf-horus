@@ -31,7 +31,7 @@ __decorate([
 __decorate([
     (0, sanitizar_decorator_1.Sanitizar)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Length)(10, 1000),
+    (0, class_validator_1.Length)(10, 400),
     __metadata("design:type", String)
 ], CreateSolicitacaoAjusteDto.prototype, "justificativa", void 0);
 __decorate([

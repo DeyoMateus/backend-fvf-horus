@@ -1,4 +1,5 @@
 import { Global, Module } from '@nestjs/common';
+import { AbuseGuardService } from './abuse-guard.service';
 import { DeviceAuthLimiterService } from './device-auth-limiter.service';
 import { RedisThrottlerStorageService } from './redis-throttler-storage.service';
 
@@ -9,7 +10,15 @@ import { RedisThrottlerStorageService } from './redis-throttler-storage.service'
  */
 @Global()
 @Module({
-  providers: [RedisThrottlerStorageService, DeviceAuthLimiterService],
-  exports: [RedisThrottlerStorageService, DeviceAuthLimiterService],
+  providers: [
+    RedisThrottlerStorageService,
+    DeviceAuthLimiterService,
+    AbuseGuardService,
+  ],
+  exports: [
+    RedisThrottlerStorageService,
+    DeviceAuthLimiterService,
+    AbuseGuardService,
+  ],
 })
 export class AppThrottlerStorageModule {}

@@ -10,6 +10,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AjudantesService = void 0;
+const grupo_id_seguro_1 = require("../common/prisma/grupo-id-seguro");
 const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 const crypto_1 = require("crypto");
@@ -68,7 +69,7 @@ let AjudantesService = class AjudantesService {
             throw new Error('AjudantesService.create sem contexto de tenant , ver TenantContextInterceptor.');
         }
         const [, ajudante] = (await this.prisma.$transaction([
-            this.prisma.$executeRawUnsafe(`SET LOCAL app.grupo_atual = '${ctxTenant.grupoId.replace(/'/g, "''")}'`),
+            this.prisma.$executeRawUnsafe(`SET LOCAL app.grupo_atual = '${(0, grupo_id_seguro_1.grupoIdSeguro)(ctxTenant.grupoId)}'`),
             this.prisma.cru.ajudante.create({
                 data: {
                     id,

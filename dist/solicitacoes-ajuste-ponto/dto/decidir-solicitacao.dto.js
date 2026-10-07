@@ -20,7 +20,7 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, sanitizar_decorator_1.Sanitizar)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Length)(0, 1000),
+    (0, class_validator_1.Length)(0, 400),
     __metadata("design:type", String)
 ], DecidirSolicitacaoDto.prototype, "motivoDecisao", void 0);
 //# sourceMappingURL=decidir-solicitacao.dto.js.map

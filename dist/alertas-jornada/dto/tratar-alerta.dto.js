@@ -19,7 +19,7 @@ exports.TratarAlertaDto = TratarAlertaDto;
 __decorate([
     (0, sanitizar_decorator_1.Sanitizar)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Length)(3, 1000),
+    (0, class_validator_1.Length)(3, 400),
     __metadata("design:type", String)
 ], TratarAlertaDto.prototype, "observacao", void 0);
 //# sourceMappingURL=tratar-alerta.dto.js.map

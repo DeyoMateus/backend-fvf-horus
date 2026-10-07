@@ -1,3 +1,4 @@
+import { grupoIdSeguro } from '../common/prisma/grupo-id-seguro';
 import {
   ConflictException,
   ForbiddenException,
@@ -105,7 +106,7 @@ export class MotoristasService {
     }
     const operacoes: Prisma.PrismaPromise<unknown>[] = [
       this.prisma.$executeRawUnsafe(
-        `SET LOCAL app.grupo_atual = '${ctxTenant.grupoId.replace(/'/g, "''")}'`,
+        `SET LOCAL app.grupo_atual = '${grupoIdSeguro(ctxTenant.grupoId)}'`,
       ),
       this.prisma.cru.motorista.create({
         data: {

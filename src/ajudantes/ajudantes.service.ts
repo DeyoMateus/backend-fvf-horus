@@ -1,3 +1,4 @@
+import { grupoIdSeguro } from '../common/prisma/grupo-id-seguro';
 import {
   ConflictException,
   Injectable,
@@ -81,7 +82,7 @@ export class AjudantesService {
 
     const [, ajudante] = (await this.prisma.$transaction([
       this.prisma.$executeRawUnsafe(
-        `SET LOCAL app.grupo_atual = '${ctxTenant.grupoId.replace(/'/g, "''")}'`,
+        `SET LOCAL app.grupo_atual = '${grupoIdSeguro(ctxTenant.grupoId)}'`,
       ),
       this.prisma.cru.ajudante.create({
         data: {

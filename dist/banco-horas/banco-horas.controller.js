@@ -45,7 +45,7 @@ let BancoHorasController = class BancoHorasController {
 exports.BancoHorasController = BancoHorasController;
 __decorate([
     (0, common_1.Get)(),
-    __param(0, (0, common_1.Param)('motoristaId')),
+    __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Query)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
@@ -54,7 +54,7 @@ __decorate([
 ], BancoHorasController.prototype, "saldo", null);
 __decorate([
     (0, common_1.Get)('ajustes'),
-    __param(0, (0, common_1.Param)('motoristaId')),
+    __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -62,7 +62,7 @@ __decorate([
 ], BancoHorasController.prototype, "ajustes", null);
 __decorate([
     (0, common_1.Post)('ajustes'),
-    __param(0, (0, common_1.Param)('motoristaId')),
+    __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),

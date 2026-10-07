@@ -67,6 +67,26 @@ export class WhatsappNotificationsService {
     return false;
   }
 
+  /**
+   * Moldura formal comum a todos os alertas por WhatsApp: identifica o
+   * remetente (FVF Hórus), deixa claro que é um alerta automático e indica
+   * a transportadora a que se refere. O texto específico do alerta vai no meio.
+   */
+  private formatarMensagemFormal(corpo: string, razaoSocial?: string): string {
+    const empresa = razaoSocial ? `Transportadora: ${razaoSocial}\n\n` : '';
+    return (
+      '*FVF Hórus | Alerta do Sistema de Controle de Jornada*\n\n' +
+      'Prezado(a) gestor(a),\n\n' +
+      'Informamos que o sistema FVF Hórus identificou a seguinte ocorrência, que requer a sua atenção:\n\n' +
+      empresa +
+      `${corpo}\n\n` +
+      'Recomendamos acessar o painel do FVF Hórus para consultar os detalhes e tomar as providências cabíveis.\n\n' +
+      'Atenciosamente,\n' +
+      'Equipe FVF Hórus\n' +
+      '_Mensagem automática, por favor não responda._'
+    );
+  }
+
   private async enfileirar(telefone: string, mensagem: string): Promise<void> {
     await this.fila.add(
       'enviar',
@@ -94,7 +114,7 @@ export class WhatsappNotificationsService {
     try {
       const empresa = await this.prisma.empresa.findUnique({
         where: { id: empresaId },
-        select: { grupoId: true, fusoHorario: true },
+        select: { grupoId: true, fusoHorario: true, razaoSocial: true },
       });
       if (!empresa) return;
 
@@ -133,7 +153,13 @@ export class WhatsappNotificationsService {
           jaEnfileirados.add(telefone);
           // Rodada 148: a hora vai no fuso de QUEM recebe (07h em Brasília
           // é 06h em Cuiabá); sem fuso aprendido, o da transportadora.
-          await this.enfileirar(telefone, renderizarHorarios(mensagem, fuso));
+          await this.enfileirar(
+            telefone,
+            this.formatarMensagemFormal(
+              renderizarHorarios(mensagem, fuso),
+              empresa.razaoSocial,
+            ),
+          );
         }
       }
       if (jaEnfileirados.size === 0) {

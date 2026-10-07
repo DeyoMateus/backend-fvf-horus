@@ -33,7 +33,13 @@ describe('AuthService', () => {
       registrarSucesso: jest.fn().mockResolvedValue(undefined),
     } as any;
 
-    const service = new AuthService(prismaMock, jwtMock, configMock, auditMock, emailMock, lockoutMock);
+    const abusoMock = {
+      permitirPorIdentidade: jest.fn().mockResolvedValue(true),
+      registrarFalhaGlobalDeLogin: jest.fn().mockResolvedValue(undefined),
+      atrasarSeEmDefesa: jest.fn().mockResolvedValue(undefined),
+    } as any;
+
+    const service = new AuthService(prismaMock, jwtMock, configMock, auditMock, emailMock, lockoutMock, abusoMock);
     return { service, prismaMock, auditMock, emailMock, lockoutMock };
   }
 

@@ -44,6 +44,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var SuperAdminAuthService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SuperAdminAuthService = void 0;
+const abuse_guard_service_1 = require("../common/throttler/abuse-guard.service");
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const jwt_1 = require("@nestjs/jwt");
@@ -63,13 +64,15 @@ let SuperAdminAuthService = class SuperAdminAuthService {
     audit;
     email;
     lockout;
-    constructor(prisma, jwt, config, audit, email, lockout) {
+    abuso;
+    constructor(prisma, jwt, config, audit, email, lockout, abuso) {
         this.prisma = prisma;
         this.jwt = jwt;
         this.config = config;
         this.audit = audit;
         this.email = email;
         this.lockout = lockout;
+        this.abuso = abuso;
     }
     static LOCKOUT_NAMESPACE = 'super-admin';
     hashToken(token) {
@@ -108,6 +111,8 @@ let SuperAdminAuthService = class SuperAdminAuthService {
         const senhaOk = await bcrypt.compare(senha, superAdmin?.senhaHash ?? HASH_DUMMY_TEMPO_CONSTANTE);
         if (!superAdmin || !superAdmin.ativo || !senhaOk) {
             await this.lockout.registrarFalha(SuperAdminAuthService_1.LOCKOUT_NAMESPACE, email);
+            await this.abuso.registrarFalhaGlobalDeLogin();
+            await this.abuso.atrasarSeEmDefesa();
             await this.audit.registrar({
                 actorType: client_1.ActorType.SUPER_ADMIN,
                 actorId: superAdmin?.id ?? null,
@@ -169,6 +174,9 @@ let SuperAdminAuthService = class SuperAdminAuthService {
         });
     }
     async esqueciSenha(email, ip, userAgent) {
+        if (!(await this.abuso.permitirPorIdentidade('esqueci-senha-super-admin', email, 3, 60 * 60_000))) {
+            return;
+        }
         const superAdmin = await this.prisma.superAdminUsuario.findUnique({
             where: { email },
         });
@@ -245,6 +253,7 @@ exports.SuperAdminAuthService = SuperAdminAuthService = SuperAdminAuthService_1 
         config_1.ConfigService,
         audit_service_1.AuditService,
         email_service_1.EmailService,
-        account_lockout_service_1.AccountLockoutService])
+        account_lockout_service_1.AccountLockoutService,
+        abuse_guard_service_1.AbuseGuardService])
 ], SuperAdminAuthService);
 //# sourceMappingURL=super-admin-auth.service.js.map

@@ -94,7 +94,7 @@ __decorate([
 ], DocumentosCargaController.prototype, "list", null);
 __decorate([
     (0, common_1.Get)('motorista/:motoristaId'),
-    __param(0, (0, common_1.Param)('motoristaId')),
+    __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -102,7 +102,7 @@ __decorate([
 ], DocumentosCargaController.prototype, "listByMotorista", null);
 __decorate([
     (0, common_1.Get)('motorista/:motoristaId/status-atual'),
-    __param(0, (0, common_1.Param)('motoristaId')),
+    __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -110,7 +110,7 @@ __decorate([
 ], DocumentosCargaController.prototype, "statusAtual", null);
 __decorate([
     (0, common_1.Delete)(':id'),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -118,7 +118,7 @@ __decorate([
 ], DocumentosCargaController.prototype, "remover", null);
 __decorate([
     (0, common_1.Get)(':id/xml'),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Res)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __param(3, (0, common_1.Query)('inline')),

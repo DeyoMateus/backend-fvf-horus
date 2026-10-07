@@ -99,14 +99,14 @@ __decorate([
 ], SuperAdminController.prototype, "listarGrupos", null);
 __decorate([
     (0, common_1.Get)('grupos/:id'),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], SuperAdminController.prototype, "obterGrupo", null);
 __decorate([
     (0, common_1.Patch)('grupos/:id'),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentSuperAdmin)()),
     __metadata("design:type", Function),
@@ -115,7 +115,7 @@ __decorate([
 ], SuperAdminController.prototype, "atualizarGrupo", null);
 __decorate([
     (0, common_1.Patch)('empresas/:id'),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentSuperAdmin)()),
     __metadata("design:type", Function),
@@ -124,7 +124,7 @@ __decorate([
 ], SuperAdminController.prototype, "atualizarEmpresa", null);
 __decorate([
     (0, common_1.Patch)('empresas/:id/status'),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentSuperAdmin)()),
     __metadata("design:type", Function),
@@ -133,7 +133,7 @@ __decorate([
 ], SuperAdminController.prototype, "atualizarStatusEmpresa", null);
 __decorate([
     (0, common_1.Patch)('usuarios/:id/whatsapp-alertas'),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentSuperAdmin)()),
     __metadata("design:type", Function),
@@ -142,7 +142,7 @@ __decorate([
 ], SuperAdminController.prototype, "atualizarDestinatariosWhatsapp", null);
 __decorate([
     (0, common_1.Patch)('usuarios/:id'),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentSuperAdmin)()),
     __metadata("design:type", Function),
@@ -151,7 +151,7 @@ __decorate([
 ], SuperAdminController.prototype, "atualizarUsuario", null);
 __decorate([
     (0, common_1.Post)('grupos/:grupoId/usuarios'),
-    __param(0, (0, common_1.Param)('grupoId')),
+    __param(0, (0, common_1.Param)('grupoId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentSuperAdmin)()),
     __metadata("design:type", Function),
@@ -160,8 +160,8 @@ __decorate([
 ], SuperAdminController.prototype, "criarUsuarioParaGrupo", null);
 __decorate([
     (0, common_1.Patch)('grupos/:grupoId/usuarios/:usuarioId/status'),
-    __param(0, (0, common_1.Param)('grupoId')),
-    __param(1, (0, common_1.Param)('usuarioId')),
+    __param(0, (0, common_1.Param)('grupoId', common_1.ParseUUIDPipe)),
+    __param(1, (0, common_1.Param)('usuarioId', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Body)()),
     __param(3, (0, current_user_decorator_1.CurrentSuperAdmin)()),
     __metadata("design:type", Function),

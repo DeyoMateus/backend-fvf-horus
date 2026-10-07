@@ -51,6 +51,12 @@ describe('SuperAdminAuthService', () => {
       registrarSucesso: jest.fn().mockResolvedValue(undefined),
     } as any;
 
+    const abusoMock = {
+      permitirPorIdentidade: jest.fn().mockResolvedValue(true),
+      registrarFalhaGlobalDeLogin: jest.fn().mockResolvedValue(undefined),
+      atrasarSeEmDefesa: jest.fn().mockResolvedValue(undefined),
+    } as any;
+
     const service = new SuperAdminAuthService(
       prismaMock,
       jwtMock,
@@ -58,6 +64,7 @@ describe('SuperAdminAuthService', () => {
       auditMock,
       emailMock,
       lockoutMock,
+      abusoMock,
     );
     return { service, prismaMock, auditMock, emailMock, lockoutMock };
   }

@@ -8,6 +8,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppThrottlerStorageModule = void 0;
 const common_1 = require("@nestjs/common");
+const abuse_guard_service_1 = require("./abuse-guard.service");
 const device_auth_limiter_service_1 = require("./device-auth-limiter.service");
 const redis_throttler_storage_service_1 = require("./redis-throttler-storage.service");
 let AppThrottlerStorageModule = class AppThrottlerStorageModule {
@@ -16,8 +17,16 @@ exports.AppThrottlerStorageModule = AppThrottlerStorageModule;
 exports.AppThrottlerStorageModule = AppThrottlerStorageModule = __decorate([
     (0, common_1.Global)(),
     (0, common_1.Module)({
-        providers: [redis_throttler_storage_service_1.RedisThrottlerStorageService, device_auth_limiter_service_1.DeviceAuthLimiterService],
-        exports: [redis_throttler_storage_service_1.RedisThrottlerStorageService, device_auth_limiter_service_1.DeviceAuthLimiterService],
+        providers: [
+            redis_throttler_storage_service_1.RedisThrottlerStorageService,
+            device_auth_limiter_service_1.DeviceAuthLimiterService,
+            abuse_guard_service_1.AbuseGuardService,
+        ],
+        exports: [
+            redis_throttler_storage_service_1.RedisThrottlerStorageService,
+            device_auth_limiter_service_1.DeviceAuthLimiterService,
+            abuse_guard_service_1.AbuseGuardService,
+        ],
     })
 ], AppThrottlerStorageModule);
 //# sourceMappingURL=throttler.module.js.map

@@ -44,6 +44,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var AuthService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
+const abuse_guard_service_1 = require("../common/throttler/abuse-guard.service");
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const jwt_1 = require("@nestjs/jwt");
@@ -63,13 +64,15 @@ let AuthService = class AuthService {
     audit;
     email;
     lockout;
-    constructor(prisma, jwt, config, audit, email, lockout) {
+    abuso;
+    constructor(prisma, jwt, config, audit, email, lockout, abuso) {
         this.prisma = prisma;
         this.jwt = jwt;
         this.config = config;
         this.audit = audit;
         this.email = email;
         this.lockout = lockout;
+        this.abuso = abuso;
     }
     static LOCKOUT_NAMESPACE = 'usuario-empresa';
     hashToken(token) {
@@ -119,6 +122,8 @@ let AuthService = class AuthService {
         const senhaOk = await bcrypt.compare(senha, usuario?.senhaHash ?? HASH_DUMMY_TEMPO_CONSTANTE);
         if (!usuario || !usuario.ativo || !senhaOk) {
             await this.lockout.registrarFalha(AuthService_1.LOCKOUT_NAMESPACE, email);
+            await this.abuso.registrarFalhaGlobalDeLogin();
+            await this.abuso.atrasarSeEmDefesa();
             await this.audit.registrar({
                 actorType: client_1.ActorType.USUARIO_EMPRESA,
                 actorId: usuario?.id ?? null,
@@ -180,6 +185,9 @@ let AuthService = class AuthService {
         });
     }
     async esqueciSenha(email, ip, userAgent) {
+        if (!(await this.abuso.permitirPorIdentidade('esqueci-senha', email, 3, 60 * 60_000))) {
+            return;
+        }
         const usuario = await this.prisma.usuarioEmpresa.findUnique({
             where: { email },
         });
@@ -256,6 +264,7 @@ exports.AuthService = AuthService = AuthService_1 = __decorate([
         config_1.ConfigService,
         audit_service_1.AuditService,
         email_service_1.EmailService,
-        account_lockout_service_1.AccountLockoutService])
+        account_lockout_service_1.AccountLockoutService,
+        abuse_guard_service_1.AbuseGuardService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

@@ -1,3 +1,8 @@
+import {
+  arredondarCoordenadaGps,
+  arredondarPrecisaoGps,
+} from '../common/hash-chain/precisao-gps.util';
+import { grupoIdSeguro } from '../common/prisma/grupo-id-seguro';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ActorType } from '@prisma/client';
 import { AuditService } from '../common/audit/audit.service';
@@ -46,7 +51,7 @@ export class RegistrosJornadaAjudanteService {
           );
         }
         await tx.$executeRawUnsafe(
-          `SET LOCAL app.grupo_atual = '${ctxTenant.grupoId.replace(/'/g, "''")}'`,
+          `SET LOCAL app.grupo_atual = '${grupoIdSeguro(ctxTenant.grupoId)}'`,
         );
 
         if (dto.idempotencyKey) {
@@ -86,7 +91,7 @@ export class RegistrosJornadaAjudanteService {
             timestampEvento: dto.timestampEvento,
             latitude: latitude ?? null,
             longitude: longitude ?? null,
-            precisaoGpsM: dto.precisaoGpsM ?? null,
+            precisaoGpsM: arredondarPrecisaoGps(dto.precisaoGpsM),
             observacao: dto.observacao ?? null,
             sequencial,
             deviceUuidUsado,
@@ -119,7 +124,7 @@ export class RegistrosJornadaAjudanteService {
             timestampEvento: new Date(dto.timestampEvento),
             latitude,
             longitude,
-            precisaoGpsM: dto.precisaoGpsM,
+            precisaoGpsM: arredondarPrecisaoGps(dto.precisaoGpsM),
             observacao: dto.observacao,
             sequencial,
             hashAnterior,
@@ -159,7 +164,6 @@ export class RegistrosJornadaAjudanteService {
   private arredondarCoordenada(
     valor: number | undefined | null,
   ): number | null {
-    if (valor === undefined || valor === null) return null;
-    return Math.round(valor * 1e7) / 1e7;
+    return arredondarCoordenadaGps(valor);
   }
 }

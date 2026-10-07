@@ -50,11 +50,13 @@ __decorate([
 ], CreateEmpresaMaeDto.prototype, "nomeAdmin", void 0);
 __decorate([
     (0, class_validator_1.IsEmail)(),
+    (0, class_validator_1.MaxLength)(254),
     __metadata("design:type", String)
 ], CreateEmpresaMaeDto.prototype, "emailAdmin", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MinLength)(8),
+    (0, class_validator_1.MaxLength)(128),
     __metadata("design:type", String)
 ], CreateEmpresaMaeDto.prototype, "senhaAdmin", void 0);
 __decorate([

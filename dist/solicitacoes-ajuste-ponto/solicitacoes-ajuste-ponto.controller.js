@@ -33,7 +33,7 @@ let SolicitacoesAjustePontoPorMotoristaController = class SolicitacoesAjustePont
 exports.SolicitacoesAjustePontoPorMotoristaController = SolicitacoesAjustePontoPorMotoristaController;
 __decorate([
     (0, common_1.Get)(),
-    __param(0, (0, common_1.Param)('motoristaId')),
+    __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -95,7 +95,7 @@ __decorate([
 ], SolicitacoesAjustePontoGeralController.prototype, "historico", null);
 __decorate([
     (0, common_1.Patch)(':id/aprovar'),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
@@ -104,7 +104,7 @@ __decorate([
 ], SolicitacoesAjustePontoGeralController.prototype, "aprovar", null);
 __decorate([
     (0, common_1.Patch)(':id/rejeitar'),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
@@ -113,7 +113,7 @@ __decorate([
 ], SolicitacoesAjustePontoGeralController.prototype, "rejeitar", null);
 __decorate([
     (0, common_1.Get)('evidencias/:evidenciaId'),
-    __param(0, (0, common_1.Param)('evidenciaId')),
+    __param(0, (0, common_1.Param)('evidenciaId', common_1.ParseUUIDPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __param(2, (0, common_1.Res)()),
     __metadata("design:type", Function),
@@ -122,7 +122,7 @@ __decorate([
 ], SolicitacoesAjustePontoGeralController.prototype, "baixarEvidencia", null);
 __decorate([
     (0, common_1.Delete)('evidencias/:evidenciaId'),
-    __param(0, (0, common_1.Param)('evidenciaId')),
+    __param(0, (0, common_1.Param)('evidenciaId', common_1.ParseUUIDPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),

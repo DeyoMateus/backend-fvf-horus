@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -28,7 +29,7 @@ export class DispositivosController {
 
   @Post()
   vincular(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Body() dto: VincularDispositivoDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -42,7 +43,7 @@ export class DispositivosController {
 
   @Get()
   status(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.dispositivosService.status(motoristaId, user.grupoId);
@@ -51,7 +52,7 @@ export class DispositivosController {
   @Delete()
   @HttpCode(HttpStatus.NO_CONTENT)
   revogar(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.dispositivosService.revogar(

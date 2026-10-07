@@ -1,4 +1,10 @@
-import { IsISO8601, IsOptional, IsString } from 'class-validator';
+import {
+  IsISO8601,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 
 // Mesmo padrão de FechamentoHoleriteQueryDto , chega por querystring
 // (GET, pra abrir/baixar o PDF direto do navegador). `motoristaIds`
@@ -12,5 +18,9 @@ export class FechamentoFiscalQueryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(5000)
+  @Matches(/^[0-9a-fA-F-]{36}(,[0-9a-fA-F-]{36})*$/, {
+    message: 'motoristaIds deve ser uma lista de UUIDs separados por vírgula',
+  })
   motoristaIds?: string;
 }

@@ -13,6 +13,7 @@ import {
   IsUUID,
   Length,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { Sanitizar } from '../../common/sanitizacao/sanitizar.decorator';
@@ -38,12 +39,14 @@ export class CreateRegistroJornadaDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(0)
+  @Max(100000)
   precisaoGpsM?: number;
 
   @IsOptional()
   @Sanitizar()
   @IsString()
-  @Length(0, 500)
+  @Length(0, 400)
   observacao?: string;
 
   /**
@@ -67,6 +70,7 @@ export class CreateRegistroJornadaDto {
   @IsArray()
   @ArrayMaxSize(10)
   @IsString({ each: true })
+  @MaxLength(100, { each: true })
   flagsIntegridadeDispositivo?: string[];
 
   /**
@@ -82,6 +86,8 @@ export class CreateRegistroJornadaDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(0)
+  @Max(Number.MAX_SAFE_INTEGER)
   elapsedRealtimeMs?: number;
 
   /**

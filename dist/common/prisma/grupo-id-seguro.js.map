@@ -1,0 +1,1 @@
+{"version":3,"file":"grupo-id-seguro.js","sourceRoot":"","sources":["../../../src/common/prisma/grupo-id-seguro.ts"],"names":[],"mappings":";;AASA,sCAGC;AAZD,MAAM,UAAU,GACd,+EAA+E,CAAC;AAQlF,SAAgB,aAAa,CAAC,OAAe;IAC3C,IAAI,OAAO,KAAK,aAAa,IAAI,UAAU,CAAC,IAAI,CAAC,OAAO,CAAC;QAAE,OAAO,OAAO,CAAC;IAC1E,MAAM,IAAI,KAAK,CAAC,0CAA0C,CAAC,CAAC;AAC9D,CAAC"}

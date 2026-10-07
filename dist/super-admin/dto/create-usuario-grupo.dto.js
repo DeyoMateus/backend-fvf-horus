@@ -29,11 +29,13 @@ __decorate([
 ], CreateUsuarioGrupoDto.prototype, "nome", void 0);
 __decorate([
     (0, class_validator_1.IsEmail)(),
+    (0, class_validator_1.MaxLength)(254),
     __metadata("design:type", String)
 ], CreateUsuarioGrupoDto.prototype, "email", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MinLength)(8),
+    (0, class_validator_1.MaxLength)(128),
     __metadata("design:type", String)
 ], CreateUsuarioGrupoDto.prototype, "senha", void 0);
 __decorate([

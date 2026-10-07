@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Res,
@@ -34,7 +35,7 @@ export class TratamentosPontoController {
 
   @Post()
   create(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Body() dto: CreateTratamentoPontoDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -50,7 +51,7 @@ export class TratamentosPontoController {
   // num horário (o painel usa pra só oferecer opções válidas).
   @Get('contexto')
   contexto(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Query('timestamp') timestamp: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -66,7 +67,7 @@ export class TratamentosPontoController {
 
   @Get()
   list(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.tratamentosService.listByMotorista(motoristaId, user.grupoId);
@@ -82,7 +83,7 @@ export class TratamentosPontoController {
     }),
   )
   async anexarEvidencia(
-    @Param('tratamentoId') tratamentoId: string,
+    @Param('tratamentoId', ParseUUIDPipe) tratamentoId: string,
     @UploadedFile() arquivo: Express.Multer.File | undefined,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -98,7 +99,7 @@ export class TratamentosPontoController {
 
   @Get('evidencias/:evidenciaId')
   async baixarEvidencia(
-    @Param('evidenciaId') evidenciaId: string,
+    @Param('evidenciaId', ParseUUIDPipe) evidenciaId: string,
     @Res() res: Response,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -121,7 +122,7 @@ export class TratamentosPontoController {
   // apontando pra ele).
   @Delete('evidencias/:evidenciaId')
   async removerEvidencia(
-    @Param('evidenciaId') evidenciaId: string,
+    @Param('evidenciaId', ParseUUIDPipe) evidenciaId: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     await this.tratamentosService.removerEvidencia(

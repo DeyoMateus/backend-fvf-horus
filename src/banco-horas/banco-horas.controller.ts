@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   UseGuards,
@@ -27,7 +28,7 @@ export class BancoHorasController {
 
   @Get()
   saldo(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Query() query: SaldoBancoHorasQueryDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -41,7 +42,7 @@ export class BancoHorasController {
 
   @Get('ajustes')
   ajustes(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.bancoHorasService.listarAjustes(motoristaId, user.grupoId);
@@ -49,7 +50,7 @@ export class BancoHorasController {
 
   @Post('ajustes')
   registrarAjuste(
-    @Param('motoristaId') motoristaId: string,
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Body() dto: CriarAjusteBancoHorasDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {

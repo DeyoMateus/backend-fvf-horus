@@ -9,6 +9,8 @@ import {
   IsString,
   IsUUID,
   Length,
+  Max,
+  Min,
 } from 'class-validator';
 import { Sanitizar } from '../../common/sanitizacao/sanitizar.decorator';
 import { TipoEvento } from '@prisma/client';
@@ -48,12 +50,14 @@ export class CreateRegistroJornadaAjudanteDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(0)
+  @Max(100000)
   precisaoGpsM?: number;
 
   @IsOptional()
   @Sanitizar()
   @IsString()
-  @Length(0, 500)
+  @Length(0, 400)
   observacao?: string;
 
   @IsOptional()

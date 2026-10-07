@@ -1,4 +1,9 @@
 import {
+  arredondarCoordenadaGps,
+  arredondarPrecisaoGps,
+} from '../common/hash-chain/precisao-gps.util';
+import { grupoIdSeguro } from '../common/prisma/grupo-id-seguro';
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -17,6 +22,7 @@ import {
 import { AntifraudeService } from '../common/antifraude/antifraude.service';
 import { JornadaLegalService } from '../common/jornada-legal/jornada-legal.service';
 import { PushNotificationsService } from '../common/notifications/push-notifications.service';
+import { TIPOS_ALERTA_SOMENTE_PAINEL } from '../common/notifications/whatsapp-notifications.constants';
 import { WhatsappNotificationsService } from '../common/notifications/whatsapp-notifications.service';
 import { AuditService } from '../common/audit/audit.service';
 import { EnvelopeEncryptionService } from '../common/crypto/envelope-encryption.service';
@@ -201,7 +207,7 @@ export class RegistrosJornadaService {
           );
         }
         await tx.$executeRawUnsafe(
-          `SET LOCAL app.grupo_atual = '${ctxTenant.grupoId.replace(/'/g, "''")}'`,
+          `SET LOCAL app.grupo_atual = '${grupoIdSeguro(ctxTenant.grupoId)}'`,
         );
 
         if (dto.idempotencyKey) {
@@ -498,7 +504,7 @@ export class RegistrosJornadaService {
             timestampEvento: dto.timestampEvento,
             latitude: latitude ?? null,
             longitude: longitude ?? null,
-            precisaoGpsM: dto.precisaoGpsM ?? null,
+            precisaoGpsM: arredondarPrecisaoGps(dto.precisaoGpsM),
             observacao: dto.observacao ?? null,
             sequencial,
             deviceUuidUsado,
@@ -527,7 +533,7 @@ export class RegistrosJornadaService {
             timestampEvento: new Date(dto.timestampEvento),
             latitude,
             longitude,
-            precisaoGpsM: dto.precisaoGpsM,
+            precisaoGpsM: arredondarPrecisaoGps(dto.precisaoGpsM),
             observacao: dto.observacao,
             sequencial,
             hashAnterior,
@@ -665,7 +671,10 @@ export class RegistrosJornadaService {
         alerta.mensagem,
         { tipo: alerta.tipo },
       );
-      if (empresaIdParaNotificar) {
+      if (
+        empresaIdParaNotificar &&
+        !TIPOS_ALERTA_SOMENTE_PAINEL.includes(alerta.tipo)
+      ) {
         void this.whatsapp.notificarGestoresDaEmpresa(
           empresaIdParaNotificar,
           alerta.mensagem,
@@ -1093,10 +1102,12 @@ export class RegistrosJornadaService {
               tipo: alerta.tipo,
             },
           );
-          void this.whatsapp.notificarGestoresDaEmpresa(
-            motorista.empresaId,
-            alerta.mensagem,
-          );
+          if (!TIPOS_ALERTA_SOMENTE_PAINEL.includes(alerta.tipo)) {
+            void this.whatsapp.notificarGestoresDaEmpresa(
+              motorista.empresaId,
+              alerta.mensagem,
+            );
+          }
         }
 
         await this.agendarProximaVerificacaoSeAplicavel(motoristaId, agora);
@@ -1934,9 +1945,7 @@ export class RegistrosJornadaService {
                 ...(inicio
                   ? { gte: inicioDePeriodoBrt(inicio, offsetEmpresaMin) }
                   : {}),
-                ...(fim
-                  ? { lte: fimDePeriodoBrt(fim, offsetEmpresaMin) }
-                  : {}),
+                ...(fim ? { lte: fimDePeriodoBrt(fim, offsetEmpresaMin) } : {}),
               },
             }
           : {}),
@@ -2196,10 +2205,7 @@ export class RegistrosJornadaService {
             },
           });
           alertasCriados++;
-          void this.whatsapp.notificarGestoresDaEmpresa(
-            motorista.empresaId,
-            mensagem,
-          );
+          // Integridade/fraude: só no sininho do painel (sem WhatsApp).
         } catch (err) {
           this.logger.warn(
             `Falha ao verificar a cadeia do motorista ${motorista.id}: ${(err as Error).message}`,
@@ -2464,7 +2470,6 @@ export class RegistrosJornadaService {
   private arredondarCoordenada(
     valor: number | undefined | null,
   ): number | null {
-    if (valor === undefined || valor === null) return null;
-    return Math.round(valor * 1e7) / 1e7;
+    return arredondarCoordenadaGps(valor);
   }
 }

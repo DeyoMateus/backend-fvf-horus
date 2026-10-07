@@ -46,7 +46,7 @@ __decorate([
 ], TratamentosPontoMobileController.prototype, "listarMeusAjustes", null);
 __decorate([
     (0, common_1.Patch)(':tratamentoId/ciencia'),
-    __param(0, (0, common_1.Param)('tratamentoId')),
+    __param(0, (0, common_1.Param)('tratamentoId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -54,7 +54,7 @@ __decorate([
 ], TratamentosPontoMobileController.prototype, "darCiencia", null);
 __decorate([
     (0, common_1.Get)('evidencias/:evidenciaId'),
-    __param(0, (0, common_1.Param)('evidenciaId')),
+    __param(0, (0, common_1.Param)('evidenciaId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Req)()),
     __param(2, (0, common_1.Res)()),
     __metadata("design:type", Function),

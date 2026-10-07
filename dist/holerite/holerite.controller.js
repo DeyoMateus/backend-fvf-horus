@@ -65,7 +65,7 @@ let HoleriteController = class HoleriteController {
 exports.HoleriteController = HoleriteController;
 __decorate([
     (0, common_1.Get)(),
-    __param(0, (0, common_1.Param)('motoristaId')),
+    __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Query)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
@@ -74,7 +74,7 @@ __decorate([
 ], HoleriteController.prototype, "calcular", null);
 __decorate([
     (0, common_1.Get)('pdf'),
-    __param(0, (0, common_1.Param)('motoristaId')),
+    __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Query)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __param(3, (0, common_1.Res)()),

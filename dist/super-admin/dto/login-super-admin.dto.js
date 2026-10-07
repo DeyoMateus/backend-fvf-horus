@@ -18,11 +18,13 @@ class LoginSuperAdminDto {
 exports.LoginSuperAdminDto = LoginSuperAdminDto;
 __decorate([
     (0, class_validator_1.IsEmail)(),
+    (0, class_validator_1.MaxLength)(254),
     __metadata("design:type", String)
 ], LoginSuperAdminDto.prototype, "email", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MinLength)(8),
+    (0, class_validator_1.MaxLength)(128),
     __metadata("design:type", String)
 ], LoginSuperAdminDto.prototype, "senha", void 0);
 //# sourceMappingURL=login-super-admin.dto.js.map

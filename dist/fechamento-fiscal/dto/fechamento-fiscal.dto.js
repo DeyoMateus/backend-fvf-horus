@@ -28,6 +28,10 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(5000),
+    (0, class_validator_1.Matches)(/^[0-9a-fA-F-]{36}(,[0-9a-fA-F-]{36})*$/, {
+        message: 'motoristaIds deve ser uma lista de UUIDs separados por vírgula',
+    }),
     __metadata("design:type", String)
 ], FechamentoFiscalQueryDto.prototype, "motoristaIds", void 0);
 //# sourceMappingURL=fechamento-fiscal.dto.js.map

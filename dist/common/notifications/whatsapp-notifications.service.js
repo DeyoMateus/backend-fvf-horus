@@ -44,6 +44,18 @@ let WhatsappNotificationsService = WhatsappNotificationsService_1 = class Whatsa
         }
         return false;
     }
+    formatarMensagemFormal(corpo, razaoSocial) {
+        const empresa = razaoSocial ? `Transportadora: ${razaoSocial}\n\n` : '';
+        return ('*FVF Hórus | Alerta do Sistema de Controle de Jornada*\n\n' +
+            'Prezado(a) gestor(a),\n\n' +
+            'Informamos que o sistema FVF Hórus identificou a seguinte ocorrência, que requer a sua atenção:\n\n' +
+            empresa +
+            `${corpo}\n\n` +
+            'Recomendamos acessar o painel do FVF Hórus para consultar os detalhes e tomar as providências cabíveis.\n\n' +
+            'Atenciosamente,\n' +
+            'Equipe FVF Hórus\n' +
+            '_Mensagem automática, por favor não responda._');
+    }
     async enfileirar(telefone, mensagem) {
         await this.fila.add('enviar', { telefone, mensagem }, {
             attempts: 3,
@@ -58,7 +70,7 @@ let WhatsappNotificationsService = WhatsappNotificationsService_1 = class Whatsa
         try {
             const empresa = await this.prisma.empresa.findUnique({
                 where: { id: empresaId },
-                select: { grupoId: true, fusoHorario: true },
+                select: { grupoId: true, fusoHorario: true, razaoSocial: true },
             });
             if (!empresa)
                 return;
@@ -90,7 +102,7 @@ let WhatsappNotificationsService = WhatsappNotificationsService_1 = class Whatsa
                     if (!telefone || jaEnfileirados.has(telefone))
                         continue;
                     jaEnfileirados.add(telefone);
-                    await this.enfileirar(telefone, (0, fuso_brasil_util_1.renderizarHorarios)(mensagem, fuso));
+                    await this.enfileirar(telefone, this.formatarMensagemFormal((0, fuso_brasil_util_1.renderizarHorarios)(mensagem, fuso), empresa.razaoSocial));
                 }
             }
             if (jaEnfileirados.size === 0) {

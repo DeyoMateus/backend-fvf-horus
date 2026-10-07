@@ -4,6 +4,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
+import { AncoraIntegridadeService } from './ancora-integridade.service';
 import { RegistrosJornadaService } from './registros-jornada.service';
 
 /**
@@ -25,7 +26,10 @@ export class MonitoramentoIntegridadeCadeiaService
   private timer: NodeJS.Timeout | null = null;
   private emExecucao = false;
 
-  constructor(private readonly registrosJornada: RegistrosJornadaService) {}
+  constructor(
+    private readonly registrosJornada: RegistrosJornadaService,
+    private readonly ancora: AncoraIntegridadeService,
+  ) {}
 
   onModuleInit() {
     if (process.env.NODE_ENV === 'test') return;
@@ -52,6 +56,22 @@ export class MonitoramentoIntegridadeCadeiaService
     } catch (err) {
       this.logger.warn(
         `Falha na varredura de integridade: ${(err as Error).message}`,
+      );
+    }
+    // Rodada 167: compara com a âncora guardada fora do banco (R2).
+    try {
+      const a = await this.ancora.executar();
+      this.logger.log(
+        `Âncora de integridade: ${a.estado}` +
+          (a.motoristas !== undefined
+            ? ` (${a.motoristas} motorista(s))`
+            : '') +
+          (a.violacoes ? `, ${a.violacoes} violação(ões)` : '') +
+          '.',
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Falha na âncora de integridade: ${(err as Error).message}`,
       );
     } finally {
       this.emExecucao = false;

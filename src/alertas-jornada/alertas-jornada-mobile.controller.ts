@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Query,
   Req,
@@ -39,7 +40,7 @@ export class AlertasJornadaMobileController {
   // esconde o alerta (ele sempre permanece na listagem).
   @Patch(':alertaId/visualizar')
   marcarVisualizado(
-    @Param('alertaId') alertaId: string,
+    @Param('alertaId', ParseUUIDPipe) alertaId: string,
     @Req() req: { motorista: { id: string } },
   ) {
     return this.alertasService.marcarVisualizadoPeloMotorista(

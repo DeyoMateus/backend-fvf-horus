@@ -69,7 +69,7 @@ __decorate([
     (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('arquivo', {
         limits: { fileSize: TAMANHO_MAXIMO_EVIDENCIA_BYTES },
     })),
-    __param(0, (0, common_1.Param)('solicitacaoId')),
+    __param(0, (0, common_1.Param)('solicitacaoId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.UploadedFile)()),
     __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
@@ -78,7 +78,7 @@ __decorate([
 ], SolicitacoesAjustePontoMobileController.prototype, "anexarEvidencia", null);
 __decorate([
     (0, common_1.Get)('evidencias/:evidenciaId'),
-    __param(0, (0, common_1.Param)('evidenciaId')),
+    __param(0, (0, common_1.Param)('evidenciaId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Req)()),
     __param(2, (0, common_1.Res)()),
     __metadata("design:type", Function),
@@ -87,7 +87,7 @@ __decorate([
 ], SolicitacoesAjustePontoMobileController.prototype, "baixarEvidencia", null);
 __decorate([
     (0, common_1.Delete)('evidencias/:evidenciaId'),
-    __param(0, (0, common_1.Param)('evidenciaId')),
+    __param(0, (0, common_1.Param)('evidenciaId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),

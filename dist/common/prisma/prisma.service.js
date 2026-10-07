@@ -10,6 +10,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PrismaService = void 0;
+const grupo_id_seguro_1 = require("./grupo-id-seguro");
 const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 const tenant_context_1 = require("../tenant/tenant-context");
@@ -114,7 +115,7 @@ let PrismaService = class PrismaService extends client_1.PrismaClient {
                 'HTTP) ou de TenantContext.paraSistema() (job interno). Ver ' +
                 'claude/arquitetura-seguranca-controle-jornada.md, Rodada 23.');
         }
-        const grupoEscapado = ctx.grupoId.replace(/'/g, "''");
+        const grupoEscapado = (0, grupo_id_seguro_1.grupoIdSeguro)(ctx.grupoId);
         const [, resultado] = await this.transactionOriginal([
             this.executeRawUnsafeOriginal(`SET LOCAL app.grupo_atual = '${grupoEscapado}'`),
             chamar(),

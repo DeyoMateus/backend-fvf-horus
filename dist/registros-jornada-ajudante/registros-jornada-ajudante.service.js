@@ -10,6 +10,8 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RegistrosJornadaAjudanteService = void 0;
+const precisao_gps_util_1 = require("../common/hash-chain/precisao-gps.util");
+const grupo_id_seguro_1 = require("../common/prisma/grupo-id-seguro");
 const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 const audit_service_1 = require("../common/audit/audit.service");
@@ -40,7 +42,7 @@ let RegistrosJornadaAjudanteService = class RegistrosJornadaAjudanteService {
             if (!ctxTenant) {
                 throw new Error('create() de RegistroJornadaAjudante sem contexto de tenant , ver TenantContextInterceptor.');
             }
-            await tx.$executeRawUnsafe(`SET LOCAL app.grupo_atual = '${ctxTenant.grupoId.replace(/'/g, "''")}'`);
+            await tx.$executeRawUnsafe(`SET LOCAL app.grupo_atual = '${(0, grupo_id_seguro_1.grupoIdSeguro)(ctxTenant.grupoId)}'`);
             if (dto.idempotencyKey) {
                 const existente = await tx.registroJornadaAjudante.findUnique({
                     where: { idempotencyKey: dto.idempotencyKey },
@@ -67,7 +69,7 @@ let RegistrosJornadaAjudanteService = class RegistrosJornadaAjudanteService {
                 timestampEvento: dto.timestampEvento,
                 latitude: latitude ?? null,
                 longitude: longitude ?? null,
-                precisaoGpsM: dto.precisaoGpsM ?? null,
+                precisaoGpsM: (0, precisao_gps_util_1.arredondarPrecisaoGps)(dto.precisaoGpsM),
                 observacao: dto.observacao ?? null,
                 sequencial,
                 deviceUuidUsado,
@@ -87,7 +89,7 @@ let RegistrosJornadaAjudanteService = class RegistrosJornadaAjudanteService {
                     timestampEvento: new Date(dto.timestampEvento),
                     latitude,
                     longitude,
-                    precisaoGpsM: dto.precisaoGpsM,
+                    precisaoGpsM: (0, precisao_gps_util_1.arredondarPrecisaoGps)(dto.precisaoGpsM),
                     observacao: dto.observacao,
                     sequencial,
                     hashAnterior,
@@ -118,9 +120,7 @@ let RegistrosJornadaAjudanteService = class RegistrosJornadaAjudanteService {
         });
     }
     arredondarCoordenada(valor) {
-        if (valor === undefined || valor === null)
-            return null;
-        return Math.round(valor * 1e7) / 1e7;
+        return (0, precisao_gps_util_1.arredondarCoordenadaGps)(valor);
     }
 };
 exports.RegistrosJornadaAjudanteService = RegistrosJornadaAjudanteService;

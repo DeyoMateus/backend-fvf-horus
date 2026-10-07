@@ -12,6 +12,7 @@ export declare class WhatsappNotificationsService {
     configurado(): boolean;
     private avisoNaoConfiguradoEmitido;
     private avisarSeNaoConfigurado;
+    private formatarMensagemFormal;
     private enfileirar;
     notificarGestoresDaEmpresa(empresaId: string, mensagem: string): Promise<void>;
 }

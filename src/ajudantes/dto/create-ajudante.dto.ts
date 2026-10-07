@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUUID, Length } from 'class-validator';
+import { IsOptional, IsString, IsUUID, Length, Matches } from 'class-validator';
 import {
   Sanitizar,
   SomenteDigitos,
@@ -26,5 +26,8 @@ export class CreateAjudanteDto {
   @IsOptional()
   @NormalizarTelefone()
   @IsString()
+  @Matches(/^\+\d{10,15}$/, {
+    message: 'telefone deve estar em formato E.164 (ex.: +5511999998888)',
+  })
   telefone?: string;
 }

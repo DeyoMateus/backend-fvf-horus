@@ -1,11 +1,12 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
-  Body,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -62,7 +63,10 @@ export class MotoristasController {
 
   @Get(':id')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
-  findOne(@Param('id') id: string, @CurrentUser() user: UsuarioAutenticado) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
     return this.motoristasService.findById(id, user.grupoId);
   }
 
@@ -76,7 +80,7 @@ export class MotoristasController {
   @Patch(':id')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   atualizarCadastro(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AtualizarCadastroMotoristaDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -91,7 +95,7 @@ export class MotoristasController {
   @Patch(':id/status')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   atualizarStatus(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AtualizarStatusMotoristaDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -113,7 +117,7 @@ export class MotoristasController {
   @Delete(':id')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   excluir(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ExcluirMotoristaDto,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
@@ -128,7 +132,7 @@ export class MotoristasController {
   @Get(':id/alertas-integridade-dispositivo')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   alertasIntegridadeDispositivo(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.motoristasService.listarAlertasIntegridadeDispositivo(

@@ -42,7 +42,7 @@ let AlertasJornadaController = class AlertasJornadaController {
 exports.AlertasJornadaController = AlertasJornadaController;
 __decorate([
     (0, common_1.Get)('motorista/:motoristaId'),
-    __param(0, (0, common_1.Param)('motoristaId')),
+    __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __param(2, (0, common_1.Query)('naoVisualizados')),
     __metadata("design:type", Function),
@@ -59,7 +59,7 @@ __decorate([
 ], AlertasJornadaController.prototype, "listByEmpresa", null);
 __decorate([
     (0, common_1.Patch)(':alertaId/visualizar'),
-    __param(0, (0, common_1.Param)('alertaId')),
+    __param(0, (0, common_1.Param)('alertaId', common_1.ParseUUIDPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -67,7 +67,7 @@ __decorate([
 ], AlertasJornadaController.prototype, "marcarVisualizado", null);
 __decorate([
     (0, common_1.Patch)(':alertaId/tratar'),
-    __param(0, (0, common_1.Param)('alertaId')),
+    __param(0, (0, common_1.Param)('alertaId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),

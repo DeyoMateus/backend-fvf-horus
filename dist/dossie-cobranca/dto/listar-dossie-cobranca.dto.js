@@ -27,7 +27,7 @@ __decorate([
 ], ListarDossieCobrancaDto.prototype, "fim", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsUUID)(),
     __metadata("design:type", String)
 ], ListarDossieCobrancaDto.prototype, "motoristaId", void 0);
 //# sourceMappingURL=listar-dossie-cobranca.dto.js.map

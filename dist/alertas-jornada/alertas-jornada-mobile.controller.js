@@ -39,7 +39,7 @@ __decorate([
 ], AlertasJornadaMobileController.prototype, "listarMeusAlertas", null);
 __decorate([
     (0, common_1.Patch)(':alertaId/visualizar'),
-    __param(0, (0, common_1.Param)('alertaId')),
+    __param(0, (0, common_1.Param)('alertaId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),

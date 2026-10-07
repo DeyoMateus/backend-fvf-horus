@@ -30,6 +30,6 @@ export class CriarAjusteBancoHorasDto {
   @IsOptional()
   @Sanitizar()
   @IsString()
-  @Length(0, 500)
+  @Length(0, 400)
   observacao?: string;
 }

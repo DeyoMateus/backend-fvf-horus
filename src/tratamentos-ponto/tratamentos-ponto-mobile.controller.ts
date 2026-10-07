@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Req,
   Res,
@@ -29,7 +30,7 @@ export class TratamentosPontoMobileController {
 
   @Patch(':tratamentoId/ciencia')
   darCiencia(
-    @Param('tratamentoId') tratamentoId: string,
+    @Param('tratamentoId', ParseUUIDPipe) tratamentoId: string,
     @Req() req: { motorista: { id: string } },
   ) {
     return this.tratamentosService.darCiencia(tratamentoId, req.motorista.id);
@@ -37,7 +38,7 @@ export class TratamentosPontoMobileController {
 
   @Get('evidencias/:evidenciaId')
   async baixarEvidencia(
-    @Param('evidenciaId') evidenciaId: string,
+    @Param('evidenciaId', ParseUUIDPipe) evidenciaId: string,
     @Req() req: { motorista: { id: string } },
     @Res() res: Response,
   ) {
