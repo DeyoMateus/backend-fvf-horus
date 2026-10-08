@@ -20,7 +20,11 @@ import {
   TipoEvento,
 } from '@prisma/client';
 import { AntifraudeService } from '../common/antifraude/antifraude.service';
-import { JornadaLegalService } from '../common/jornada-legal/jornada-legal.service';
+import {
+  JornadaLegalService,
+  LIMITES_ESPERA_PADRAO,
+  type LimitesEspera,
+} from '../common/jornada-legal/jornada-legal.service';
 import { PushNotificationsService } from '../common/notifications/push-notifications.service';
 import { TIPOS_ALERTA_SOMENTE_PAINEL } from '../common/notifications/whatsapp-notifications.constants';
 import { WhatsappNotificationsService } from '../common/notifications/whatsapp-notifications.service';
@@ -817,6 +821,38 @@ export class RegistrosJornadaService {
   }
 
   /**
+   * Rodada 174: limites de espera configurados pelo gestor no grupo do
+   * motorista (null no banco = padrão 180/285/300).
+   */
+  private async obterLimitesEspera(
+    cliente: Prisma.TransactionClient | PrismaService,
+    motoristaId: string,
+  ): Promise<LimitesEspera> {
+    const m = await cliente.motorista.findUnique({
+      where: { id: motoristaId },
+      select: {
+        empresa: {
+          select: {
+            grupo: {
+              select: {
+                limiteEsperaInfoMin: true,
+                limiteEsperaAtencaoMin: true,
+                limiteEsperaCriticoMin: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    const g = m?.empresa?.grupo;
+    return {
+      infoMin: g?.limiteEsperaInfoMin ?? LIMITES_ESPERA_PADRAO.infoMin,
+      atencaoMin: g?.limiteEsperaAtencaoMin ?? LIMITES_ESPERA_PADRAO.atencaoMin,
+      criticoMin: g?.limiteEsperaCriticoMin ?? LIMITES_ESPERA_PADRAO.criticoMin,
+    };
+  }
+
+  /**
    * Roda o motor de limites legais (Lei do Motorista + espera em
    * carga/descarga) dentro da mesma transação do registro recém-criado
    * e persiste os alertas calculados. Falha aqui não deve derrubar o
@@ -877,6 +913,7 @@ export class RegistrosJornadaService {
         registroRecemCriado,
         tiposExistentes,
         agoraOverride,
+        await this.obterLimitesEspera(tx, motoristaId),
       );
 
       for (const alerta of alertas) {
@@ -1146,7 +1183,11 @@ export class RegistrosJornadaService {
         where: { motoristaId },
         orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
       });
-      const proximo = this.jornadaLegal.calcularProximoLimiar(historico, agora);
+      const proximo = this.jornadaLegal.calcularProximoLimiar(
+        historico,
+        agora,
+        await this.obterLimitesEspera(this.prisma, motoristaId),
+      );
       if (proximo) {
         await this.verificacaoAgendada.agendar(motoristaId, proximo.emMs);
       } else {

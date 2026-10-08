@@ -129,6 +129,12 @@ model Grupo {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  /// Rodada 174: limites de espera em carga/descarga (minutos), ajustáveis
+  /// pelo gestor. null = padrão (180 / 285 / 300).
+  limiteEsperaInfoMin    Int?
+  limiteEsperaAtencaoMin Int?
+  limiteEsperaCriticoMin Int?
+
   empresas Empresa[]
   usuarios UsuarioEmpresa[]
   regrasSindicais RegraSindical[]

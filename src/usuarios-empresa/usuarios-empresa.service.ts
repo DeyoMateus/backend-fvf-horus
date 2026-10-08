@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -10,6 +11,8 @@ import { AuditService } from '../common/audit/audit.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateUsuarioEmpresaDto } from './dto/create-usuario-empresa.dto';
 import { AtualizarStatusUsuarioEmpresaDto } from './dto/atualizar-status-usuario-empresa.dto';
+import { AtualizarLimitesEsperaDto } from './dto/atualizar-limites-espera.dto';
+import { LIMITES_ESPERA_PADRAO } from '../common/jornada-legal/jornada-legal.service';
 import { UpdatePerfilProprioDto } from './dto/update-perfil-proprio.dto';
 
 /**
@@ -213,5 +216,61 @@ export class UsuariosEmpresaService {
     });
 
     return atualizado;
+  }
+
+  /** Rodada 174: limites de espera do grupo (null no banco = padrão). */
+  async obterLimitesEspera(grupoId: string) {
+    const g = await this.prisma.grupo.findUnique({
+      where: { id: grupoId },
+      select: {
+        limiteEsperaInfoMin: true,
+        limiteEsperaAtencaoMin: true,
+        limiteEsperaCriticoMin: true,
+      },
+    });
+    if (!g) throw new NotFoundException('Grupo não encontrado');
+    return {
+      infoMin: g.limiteEsperaInfoMin ?? LIMITES_ESPERA_PADRAO.infoMin,
+      atencaoMin: g.limiteEsperaAtencaoMin ?? LIMITES_ESPERA_PADRAO.atencaoMin,
+      criticoMin: g.limiteEsperaCriticoMin ?? LIMITES_ESPERA_PADRAO.criticoMin,
+      padrao: LIMITES_ESPERA_PADRAO,
+    };
+  }
+
+  async atualizarLimitesEspera(
+    grupoId: string,
+    usuarioId: string,
+    dto: AtualizarLimitesEsperaDto,
+  ) {
+    if (!(dto.infoMin < dto.atencaoMin && dto.atencaoMin < dto.criticoMin)) {
+      throw new BadRequestException(
+        'Os limites devem estar em ordem crescente: informativo < próximo do limite < limite.',
+      );
+    }
+    const anterior = await this.obterLimitesEspera(grupoId);
+    await this.prisma.grupo.update({
+      where: { id: grupoId },
+      data: {
+        limiteEsperaInfoMin: dto.infoMin,
+        limiteEsperaAtencaoMin: dto.atencaoMin,
+        limiteEsperaCriticoMin: dto.criticoMin,
+      },
+    });
+    await this.audit.registrar({
+      actorType: ActorType.USUARIO_EMPRESA,
+      actorId: usuarioId,
+      acao: 'USUARIO_ATUALIZOU_LIMITES_ESPERA',
+      entidade: 'Grupo',
+      entidadeId: grupoId,
+      detalhes: {
+        antes: {
+          infoMin: anterior.infoMin,
+          atencaoMin: anterior.atencaoMin,
+          criticoMin: anterior.criticoMin,
+        },
+        depois: dto,
+      },
+    });
+    return this.obterLimitesEspera(grupoId);
   }
 }

@@ -13,6 +13,7 @@ import type { UsuarioAutenticado } from '../common/decorators/current-user.decor
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { AtualizarLimitesEsperaDto } from './dto/atualizar-limites-espera.dto';
 import { AtualizarStatusUsuarioEmpresaDto } from './dto/atualizar-status-usuario-empresa.dto';
 import { UpdatePerfilProprioDto } from './dto/update-perfil-proprio.dto';
 import { UsuariosEmpresaService } from './usuarios-empresa.service';
@@ -60,6 +61,25 @@ export class UsuariosEmpresaController {
       dto,
       user.grupoId,
       user.sub,
+    );
+  }
+
+  @Get('limites-espera')
+  @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
+  obterLimitesEspera(@CurrentUser() user: UsuarioAutenticado) {
+    return this.usuariosEmpresaService.obterLimitesEspera(user.grupoId);
+  }
+
+  @Patch('limites-espera')
+  @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
+  atualizarLimitesEspera(
+    @Body() dto: AtualizarLimitesEsperaDto,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
+    return this.usuariosEmpresaService.atualizarLimitesEspera(
+      user.grupoId,
+      user.sub,
+      dto,
     );
   }
 

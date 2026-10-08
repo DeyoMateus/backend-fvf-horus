@@ -102,6 +102,19 @@ const EVENTOS_ABERTURA_TEMPO_INDEFINIDO = new Set<TipoEvento>([
   TipoEvento.FIM_DESCARREGAMENTO,
 ]);
 
+/** Rodada 174: limites de espera configuráveis por grupo (minutos). */
+export interface LimitesEspera {
+  infoMin: number;
+  atencaoMin: number;
+  criticoMin: number;
+}
+
+export const LIMITES_ESPERA_PADRAO: LimitesEspera = {
+  infoMin: LIMITE_ESPERA_INFO_MIN,
+  atencaoMin: LIMITE_ESPERA_ATENCAO_MIN,
+  criticoMin: LIMITE_ESPERA_CRITICO_MIN,
+};
+
 @Injectable()
 export class JornadaLegalService {
   /**
@@ -126,6 +139,7 @@ export class JornadaLegalService {
      * evento era criado , sem evento novo, sem avaliação.
      */
     agoraOverride?: Date,
+    limitesEspera: LimitesEspera = LIMITES_ESPERA_PADRAO,
   ): AlertaCalculado[] {
     const agora = agoraOverride ?? registroRecemCriado.timestampEvento;
     const jornada = this.recortarJornadaCorrente(registros, agora);
@@ -209,7 +223,7 @@ export class JornadaLegalService {
     const totalEsperaMin = this.somarMinutos(esperaIntervalos);
 
     if (
-      totalEsperaMin >= LIMITE_ESPERA_CRITICO_MIN &&
+      totalEsperaMin >= limitesEspera.criticoMin &&
       !alertasExistentesTipos.has(
         TipoAlertaJornada.ESPERA_LIMITE_LEGAL_ATINGIDO,
       )
@@ -217,7 +231,7 @@ export class JornadaLegalService {
       alertas.push({
         tipo: TipoAlertaJornada.ESPERA_LIMITE_LEGAL_ATINGIDO,
         severidade: SeveridadeAlerta.CRITICO,
-        mensagem: `Tempo de espera em carga/descarga de ${this.formatarHoras(totalEsperaMin)} , atingiu o limiar legal de 05:00. Dossiê de cobrança disponível.`,
+        mensagem: `Tempo de espera em carga/descarga de ${this.formatarHoras(totalEsperaMin)} , atingiu o limite configurado de ${this.formatarHoras(limitesEspera.criticoMin)}. Dossiê de cobrança disponível.`,
         janelaInicio,
         janelaFim: agora,
         minutosAcumulados: Math.round(totalEsperaMin),
@@ -238,7 +252,7 @@ export class JornadaLegalService {
         },
       });
     } else if (
-      totalEsperaMin >= LIMITE_ESPERA_ATENCAO_MIN &&
+      totalEsperaMin >= limitesEspera.atencaoMin &&
       !alertasExistentesTipos.has(TipoAlertaJornada.ESPERA_PROXIMA_LIMITE) &&
       !alertasExistentesTipos.has(
         TipoAlertaJornada.ESPERA_LIMITE_LEGAL_ATINGIDO,
@@ -247,13 +261,13 @@ export class JornadaLegalService {
       alertas.push({
         tipo: TipoAlertaJornada.ESPERA_PROXIMA_LIMITE,
         severidade: SeveridadeAlerta.ATENCAO,
-        mensagem: `Tempo de espera em carga/descarga de ${this.formatarHoras(totalEsperaMin)} , próximo do limiar legal de 05:00.`,
+        mensagem: `Tempo de espera em carga/descarga de ${this.formatarHoras(totalEsperaMin)} , próximo do limite configurado de ${this.formatarHoras(limitesEspera.criticoMin)}.`,
         janelaInicio,
         janelaFim: agora,
         minutosAcumulados: Math.round(totalEsperaMin),
       });
     } else if (
-      totalEsperaMin >= LIMITE_ESPERA_INFO_MIN &&
+      totalEsperaMin >= limitesEspera.infoMin &&
       !alertasExistentesTipos.has(TipoAlertaJornada.ESPERA_PROXIMA_LIMITE) &&
       !alertasExistentesTipos.has(
         TipoAlertaJornada.ESPERA_LIMITE_LEGAL_ATINGIDO,
@@ -324,6 +338,7 @@ export class JornadaLegalService {
   calcularProximoLimiar(
     registros: RegistroJornada[],
     agora: Date,
+    limitesEspera: LimitesEspera = LIMITES_ESPERA_PADRAO,
   ): { emMs: number } | null {
     const jornada = this.recortarJornadaCorrente(registros, agora);
     if (jornada.length === 0) return null;
@@ -358,9 +373,9 @@ export class JornadaLegalService {
         ),
       );
       for (const limite of [
-        LIMITE_ESPERA_INFO_MIN,
-        LIMITE_ESPERA_ATENCAO_MIN,
-        LIMITE_ESPERA_CRITICO_MIN,
+        limitesEspera.infoMin,
+        limitesEspera.atencaoMin,
+        limitesEspera.criticoMin,
       ]) {
         if (totalEsperaMin < limite)
           candidatosMin.push(limite - totalEsperaMin);
