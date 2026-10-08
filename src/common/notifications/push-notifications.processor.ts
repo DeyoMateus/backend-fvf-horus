@@ -4,6 +4,37 @@ import { Job } from 'bullmq';
 import { FILA_NOTIFICACOES_PUSH } from './push-notifications.constants';
 import type { JobNotificacaoPush } from './push-notifications.service';
 
+/**
+ * Canal Android com a VOZ de cada tipo de alerta (mp3 falado dentro do
+ * app; mobile/src/notifications/sonsAlerta.ts , manter em sincronia).
+ * O som é do canal no Android; o app cria todos na abertura. Tipos sem
+ * voz própria usam a frase genérica.
+ */
+const SOM_POR_TIPO: Record<string, string> = {
+  DIRECAO_CONTINUA_PROXIMA_LIMITE: 'direcao_300',
+  DIRECAO_CONTINUA_EXCEDIDA: 'direcao_330',
+  JORNADA_DIRECAO_PROXIMA_LIMITE: 'jornada_proxima',
+  JORNADA_DIRECAO_EXCEDIDA: 'jornada_excedida',
+  ESPERA_PROXIMA_LIMITE: 'espera_proxima',
+  ESPERA_LIMITE_LEGAL_ATINGIDO: 'espera_limite',
+  TEMPO_INDEFINIDO_PROXIMO_LIMITE: 'indefinido_15',
+  TEMPO_INDEFINIDO_PROLONGADO: 'indefinido_30',
+};
+
+function canalDoPush(dados?: Record<string, unknown>): string {
+  const tipo = typeof dados?.tipo === 'string' ? dados.tipo : undefined;
+  // Avisos que não são alerta de jornada (ajuste de ponto, tratamento)
+  // ficam no canal padrão, sem voz de alerta.
+  if (
+    !tipo ||
+    tipo.startsWith('SOLICITACAO_') ||
+    tipo === 'TRATAMENTO_PONTO'
+  ) {
+    return 'alertas-jornada-v2';
+  }
+  return `alerta-voz-${SOM_POR_TIPO[tipo] ?? 'generico'}-v1`;
+}
+
 const EXPO_PUSH_API_URL = 'https://exp.host/--/api/v2/push/send';
 
 /**
@@ -64,7 +95,7 @@ export class PushNotificationsProcessor extends WorkerHost {
         // Canal Android com som/vibração/importância máxima (criado pelo app,
         // mobile/src/notifications/canalAlertas.ts). Sem isto o push cai no
         // canal padrão, que pode ser silencioso e sem banner.
-        channelId: 'alertas-jornada-v2',
+        channelId: canalDoPush(dados),
       }),
     });
 
