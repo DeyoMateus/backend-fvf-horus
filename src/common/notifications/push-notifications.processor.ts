@@ -13,6 +13,7 @@ import type { JobNotificacaoPush } from './push-notifications.service';
 const SOM_POR_TIPO: Record<string, string> = {
   DIRECAO_CONTINUA_PROXIMA_LIMITE: 'direcao_300',
   DIRECAO_CONTINUA_EXCEDIDA: 'direcao_330',
+  DIRECAO_RETOMADA_SEM_PAUSA: 'direcao_330',
   JORNADA_DIRECAO_PROXIMA_LIMITE: 'jornada_proxima',
   JORNADA_DIRECAO_EXCEDIDA: 'jornada_excedida',
   ESPERA_PROXIMA_LIMITE: 'espera_proxima',

@@ -974,6 +974,10 @@ model AuditLog {
 enum TipoAlertaJornada {
   DIRECAO_CONTINUA_PROXIMA_LIMITE
   DIRECAO_CONTINUA_EXCEDIDA
+  /// Rodada 175: motorista retomou a direção (novo INICIO_DIRECAO) com 5h30
+  /// ou mais de direção contínua acumulada e sem pausa de 30 min. Gera
+  /// alerta crítico a cada retomada (sem deduplicar por jornada).
+  DIRECAO_RETOMADA_SEM_PAUSA
   JORNADA_DIRECAO_PROXIMA_LIMITE
   JORNADA_DIRECAO_EXCEDIDA
   ESPERA_PROXIMA_LIMITE

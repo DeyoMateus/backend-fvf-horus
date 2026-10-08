@@ -181,6 +181,25 @@ export class JornadaLegalService {
       });
     }
 
+    // Rodada 175: retomou a direção (novo INICIO_DIRECAO) já com 5h30 ou
+    // mais de direção contínua e sem pausa qualificada de 30 min. Só no
+    // caminho reativo (agoraOverride ausente) e sem deduplicar por
+    // jornada: cada retomada indevida é um alerta crítico novo.
+    if (
+      !agoraOverride &&
+      registroRecemCriado.tipoEvento === TipoEvento.INICIO_DIRECAO &&
+      direcaoContinuaMin >= LIMITE_DIRECAO_CONTINUA_CRITICO_MIN
+    ) {
+      alertas.push({
+        tipo: TipoAlertaJornada.DIRECAO_RETOMADA_SEM_PAUSA,
+        severidade: SeveridadeAlerta.CRITICO,
+        mensagem: `Motorista retomou a direção após ${this.formatarHoras(direcaoContinuaMin)} de direção contínua, sem a pausa de 30 minutos exigida (limite legal: 05:30).`,
+        janelaInicio: corteContinuo,
+        janelaFim: agora,
+        minutosAcumulados: Math.round(direcaoContinuaMin),
+      });
+    }
+
     if (
       totalDirecaoMin >= LIMITE_JORNADA_DIRECAO_CRITICO_MIN &&
       !alertasExistentesTipos.has(TipoAlertaJornada.JORNADA_DIRECAO_EXCEDIDA)
