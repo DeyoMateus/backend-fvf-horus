@@ -19,6 +19,7 @@ const current_user_decorator_1 = require("../common/decorators/current-user.deco
 const roles_decorator_1 = require("../common/decorators/roles.decorator");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../common/guards/roles.guard");
+const atualizar_limites_espera_dto_1 = require("./dto/atualizar-limites-espera.dto");
 const atualizar_status_usuario_empresa_dto_1 = require("./dto/atualizar-status-usuario-empresa.dto");
 const update_perfil_proprio_dto_1 = require("./dto/update-perfil-proprio.dto");
 const usuarios_empresa_service_1 = require("./usuarios-empresa.service");
@@ -32,6 +33,12 @@ let UsuariosEmpresaController = class UsuariosEmpresaController {
     }
     atualizarStatus(id, dto, user) {
         return this.usuariosEmpresaService.atualizarStatus(id, dto, user.grupoId, user.sub);
+    }
+    obterLimitesEspera(user) {
+        return this.usuariosEmpresaService.obterLimitesEspera(user.grupoId);
+    }
+    atualizarLimitesEspera(dto, user) {
+        return this.usuariosEmpresaService.atualizarLimitesEspera(user.grupoId, user.sub, dto);
     }
     obterMeuPerfil(user) {
         return this.usuariosEmpresaService.obterMeuPerfil(user.sub);
@@ -59,6 +66,23 @@ __decorate([
     __metadata("design:paramtypes", [String, atualizar_status_usuario_empresa_dto_1.AtualizarStatusUsuarioEmpresaDto, Object]),
     __metadata("design:returntype", void 0)
 ], UsuariosEmpresaController.prototype, "atualizarStatus", null);
+__decorate([
+    (0, common_1.Get)('limites-espera'),
+    (0, roles_decorator_1.Roles)(client_1.PapelUsuario.ADMIN, client_1.PapelUsuario.GESTOR),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], UsuariosEmpresaController.prototype, "obterLimitesEspera", null);
+__decorate([
+    (0, common_1.Patch)('limites-espera'),
+    (0, roles_decorator_1.Roles)(client_1.PapelUsuario.ADMIN, client_1.PapelUsuario.GESTOR),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [atualizar_limites_espera_dto_1.AtualizarLimitesEsperaDto, Object]),
+    __metadata("design:returntype", void 0)
+], UsuariosEmpresaController.prototype, "atualizarLimitesEspera", null);
 __decorate([
     (0, common_1.Get)('me'),
     (0, roles_decorator_1.Roles)(client_1.PapelUsuario.ADMIN, client_1.PapelUsuario.GESTOR),

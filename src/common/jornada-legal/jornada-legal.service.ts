@@ -505,6 +505,21 @@ export class JornadaLegalService {
   }
 
   /**
+   * Rodada 176: instante em que a direção contínua atual começou a contar
+   * (fim da última pausa qualificada de 30 min+, ou o início da jornada).
+   * Usado para deduplicar os alertas de direção contínua POR TRECHO
+   * contínuo, e não por jornada inteira.
+   */
+  inicioDaDirecaoContinua(
+    registros: RegistroJornada[],
+    agora: Date,
+  ): Date | null {
+    const jornada = this.recortarJornadaCorrente(registros, agora);
+    if (jornada.length === 0) return null;
+    return this.calcularAcumuladosDirecao(jornada, agora).corteContinuo;
+  }
+
+  /**
    * Soma de direção total e de direção contínua (desde a última pausa
    * qualificada de 30min+) até `agora` , extraído de `avaliar()` pra
    * ser reaproveitado também por `calcularProximoLimiar` (Rodada 21),

@@ -48,6 +48,7 @@ const client_1 = require("@prisma/client");
 const bcrypt = __importStar(require("bcryptjs"));
 const audit_service_1 = require("../common/audit/audit.service");
 const prisma_service_1 = require("../common/prisma/prisma.service");
+const jornada_legal_service_1 = require("../common/jornada-legal/jornada-legal.service");
 let UsuariosEmpresaService = class UsuariosEmpresaService {
     prisma;
     audit;
@@ -206,6 +207,54 @@ let UsuariosEmpresaService = class UsuariosEmpresaService {
             entidadeId: usuarioId,
         });
         return atualizado;
+    }
+    async obterLimitesEspera(grupoId) {
+        const g = await this.prisma.grupo.findUnique({
+            where: { id: grupoId },
+            select: {
+                limiteEsperaInfoMin: true,
+                limiteEsperaAtencaoMin: true,
+                limiteEsperaCriticoMin: true,
+            },
+        });
+        if (!g)
+            throw new common_1.NotFoundException('Grupo não encontrado');
+        return {
+            infoMin: g.limiteEsperaInfoMin ?? jornada_legal_service_1.LIMITES_ESPERA_PADRAO.infoMin,
+            atencaoMin: g.limiteEsperaAtencaoMin ?? jornada_legal_service_1.LIMITES_ESPERA_PADRAO.atencaoMin,
+            criticoMin: g.limiteEsperaCriticoMin ?? jornada_legal_service_1.LIMITES_ESPERA_PADRAO.criticoMin,
+            padrao: jornada_legal_service_1.LIMITES_ESPERA_PADRAO,
+        };
+    }
+    async atualizarLimitesEspera(grupoId, usuarioId, dto) {
+        if (!(dto.infoMin < dto.atencaoMin && dto.atencaoMin < dto.criticoMin)) {
+            throw new common_1.BadRequestException('Os limites devem estar em ordem crescente: informativo < próximo do limite < limite.');
+        }
+        const anterior = await this.obterLimitesEspera(grupoId);
+        await this.prisma.grupo.update({
+            where: { id: grupoId },
+            data: {
+                limiteEsperaInfoMin: dto.infoMin,
+                limiteEsperaAtencaoMin: dto.atencaoMin,
+                limiteEsperaCriticoMin: dto.criticoMin,
+            },
+        });
+        await this.audit.registrar({
+            actorType: client_1.ActorType.USUARIO_EMPRESA,
+            actorId: usuarioId,
+            acao: 'USUARIO_ATUALIZOU_LIMITES_ESPERA',
+            entidade: 'Grupo',
+            entidadeId: grupoId,
+            detalhes: {
+                antes: {
+                    infoMin: anterior.infoMin,
+                    atencaoMin: anterior.atencaoMin,
+                    criticoMin: anterior.criticoMin,
+                },
+                depois: dto,
+            },
+        });
+        return this.obterLimitesEspera(grupoId);
     }
 };
 exports.UsuariosEmpresaService = UsuariosEmpresaService;

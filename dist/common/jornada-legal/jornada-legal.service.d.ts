@@ -8,13 +8,20 @@ interface AlertaCalculado {
     minutosAcumulados: number;
     detalhes?: Record<string, unknown>;
 }
+export interface LimitesEspera {
+    infoMin: number;
+    atencaoMin: number;
+    criticoMin: number;
+}
+export declare const LIMITES_ESPERA_PADRAO: LimitesEspera;
 export declare class JornadaLegalService {
-    avaliar(registros: RegistroJornada[], registroRecemCriado: RegistroJornada, alertasExistentesTipos: Set<TipoAlertaJornada>, agoraOverride?: Date): AlertaCalculado[];
-    calcularProximoLimiar(registros: RegistroJornada[], agora: Date): {
+    avaliar(registros: RegistroJornada[], registroRecemCriado: RegistroJornada, alertasExistentesTipos: Set<TipoAlertaJornada>, agoraOverride?: Date, limitesEspera?: LimitesEspera): AlertaCalculado[];
+    calcularProximoLimiar(registros: RegistroJornada[], agora: Date, limitesEspera?: LimitesEspera): {
         emMs: number;
     } | null;
     private avaliarOciosidadeDirecao;
     private distanciaHaversineMetros;
+    inicioDaDirecaoContinua(registros: RegistroJornada[], agora: Date): Date | null;
     private calcularAcumuladosDirecao;
     private avaliarDescansoInterjornada;
     private recortarJornadaCorrente;

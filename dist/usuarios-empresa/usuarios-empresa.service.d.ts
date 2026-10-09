@@ -2,6 +2,7 @@ import { AuditService } from '../common/audit/audit.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateUsuarioEmpresaDto } from './dto/create-usuario-empresa.dto';
 import { AtualizarStatusUsuarioEmpresaDto } from './dto/atualizar-status-usuario-empresa.dto';
+import { AtualizarLimitesEsperaDto } from './dto/atualizar-limites-espera.dto';
 import { UpdatePerfilProprioDto } from './dto/update-perfil-proprio.dto';
 export declare class UsuariosEmpresaService {
     private readonly prisma;
@@ -56,5 +57,17 @@ export declare class UsuariosEmpresaService {
         ativo: boolean;
         telefoneWhatsapp: string | null;
         telefoneGerenciamentoRisco: string | null;
+    }>;
+    obterLimitesEspera(grupoId: string): Promise<{
+        infoMin: number;
+        atencaoMin: number;
+        criticoMin: number;
+        padrao: import("../common/jornada-legal/jornada-legal.service").LimitesEspera;
+    }>;
+    atualizarLimitesEspera(grupoId: string, usuarioId: string, dto: AtualizarLimitesEsperaDto): Promise<{
+        infoMin: number;
+        atencaoMin: number;
+        criticoMin: number;
+        padrao: import("../common/jornada-legal/jornada-legal.service").LimitesEspera;
     }>;
 }

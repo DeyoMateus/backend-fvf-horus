@@ -6,7 +6,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.JornadaLegalService = void 0;
+exports.JornadaLegalService = exports.LIMITES_ESPERA_PADRAO = void 0;
 const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 const ordenacao_temporal_util_1 = require("../ordenacao-temporal.util");
@@ -30,8 +30,13 @@ const EVENTOS_ABERTURA_TEMPO_INDEFINIDO = new Set([
     client_1.TipoEvento.FIM_ESPERA_CARGA_DESCARGA,
     client_1.TipoEvento.FIM_DESCARREGAMENTO,
 ]);
+exports.LIMITES_ESPERA_PADRAO = {
+    infoMin: LIMITE_ESPERA_INFO_MIN,
+    atencaoMin: LIMITE_ESPERA_ATENCAO_MIN,
+    criticoMin: LIMITE_ESPERA_CRITICO_MIN,
+};
 let JornadaLegalService = class JornadaLegalService {
-    avaliar(registros, registroRecemCriado, alertasExistentesTipos, agoraOverride) {
+    avaliar(registros, registroRecemCriado, alertasExistentesTipos, agoraOverride, limitesEspera = exports.LIMITES_ESPERA_PADRAO) {
         const agora = agoraOverride ?? registroRecemCriado.timestampEvento;
         const jornada = this.recortarJornadaCorrente(registros, agora);
         if (jornada.length === 0)
@@ -62,6 +67,18 @@ let JornadaLegalService = class JornadaLegalService {
                 minutosAcumulados: Math.round(direcaoContinuaMin),
             });
         }
+        if (!agoraOverride &&
+            registroRecemCriado.tipoEvento === client_1.TipoEvento.INICIO_DIRECAO &&
+            direcaoContinuaMin >= LIMITE_DIRECAO_CONTINUA_CRITICO_MIN) {
+            alertas.push({
+                tipo: client_1.TipoAlertaJornada.DIRECAO_RETOMADA_SEM_PAUSA,
+                severidade: client_1.SeveridadeAlerta.CRITICO,
+                mensagem: `Motorista retomou a direção após ${this.formatarHoras(direcaoContinuaMin)} de direção contínua, sem a pausa de 30 minutos exigida (limite legal: 05:30).`,
+                janelaInicio: corteContinuo,
+                janelaFim: agora,
+                minutosAcumulados: Math.round(direcaoContinuaMin),
+            });
+        }
         if (totalDirecaoMin >= LIMITE_JORNADA_DIRECAO_CRITICO_MIN &&
             !alertasExistentesTipos.has(client_1.TipoAlertaJornada.JORNADA_DIRECAO_EXCEDIDA)) {
             alertas.push({
@@ -87,12 +104,12 @@ let JornadaLegalService = class JornadaLegalService {
         }
         const esperaIntervalos = this.construirIntervalos(jornada, 'ESPERA_CARGA_DESCARGA', ['FIM_ESPERA_CARGA_DESCARGA', 'FIM_DESCARREGAMENTO'], agora);
         const totalEsperaMin = this.somarMinutos(esperaIntervalos);
-        if (totalEsperaMin >= LIMITE_ESPERA_CRITICO_MIN &&
+        if (totalEsperaMin >= limitesEspera.criticoMin &&
             !alertasExistentesTipos.has(client_1.TipoAlertaJornada.ESPERA_LIMITE_LEGAL_ATINGIDO)) {
             alertas.push({
                 tipo: client_1.TipoAlertaJornada.ESPERA_LIMITE_LEGAL_ATINGIDO,
                 severidade: client_1.SeveridadeAlerta.CRITICO,
-                mensagem: `Tempo de espera em carga/descarga de ${this.formatarHoras(totalEsperaMin)} , atingiu o limiar legal de 05:00. Dossiê de cobrança disponível.`,
+                mensagem: `Tempo de espera em carga/descarga de ${this.formatarHoras(totalEsperaMin)} , atingiu o limite configurado de ${this.formatarHoras(limitesEspera.criticoMin)}. Dossiê de cobrança disponível.`,
                 janelaInicio,
                 janelaFim: agora,
                 minutosAcumulados: Math.round(totalEsperaMin),
@@ -112,19 +129,19 @@ let JornadaLegalService = class JornadaLegalService {
                 },
             });
         }
-        else if (totalEsperaMin >= LIMITE_ESPERA_ATENCAO_MIN &&
+        else if (totalEsperaMin >= limitesEspera.atencaoMin &&
             !alertasExistentesTipos.has(client_1.TipoAlertaJornada.ESPERA_PROXIMA_LIMITE) &&
             !alertasExistentesTipos.has(client_1.TipoAlertaJornada.ESPERA_LIMITE_LEGAL_ATINGIDO)) {
             alertas.push({
                 tipo: client_1.TipoAlertaJornada.ESPERA_PROXIMA_LIMITE,
                 severidade: client_1.SeveridadeAlerta.ATENCAO,
-                mensagem: `Tempo de espera em carga/descarga de ${this.formatarHoras(totalEsperaMin)} , próximo do limiar legal de 05:00.`,
+                mensagem: `Tempo de espera em carga/descarga de ${this.formatarHoras(totalEsperaMin)} , próximo do limite configurado de ${this.formatarHoras(limitesEspera.criticoMin)}.`,
                 janelaInicio,
                 janelaFim: agora,
                 minutosAcumulados: Math.round(totalEsperaMin),
             });
         }
-        else if (totalEsperaMin >= LIMITE_ESPERA_INFO_MIN &&
+        else if (totalEsperaMin >= limitesEspera.infoMin &&
             !alertasExistentesTipos.has(client_1.TipoAlertaJornada.ESPERA_PROXIMA_LIMITE) &&
             !alertasExistentesTipos.has(client_1.TipoAlertaJornada.ESPERA_LIMITE_LEGAL_ATINGIDO)) {
             alertas.push({
@@ -147,7 +164,7 @@ let JornadaLegalService = class JornadaLegalService {
             alertas.push(descansoInterjornada);
         return alertas;
     }
-    calcularProximoLimiar(registros, agora) {
+    calcularProximoLimiar(registros, agora, limitesEspera = exports.LIMITES_ESPERA_PADRAO) {
         const jornada = this.recortarJornadaCorrente(registros, agora);
         if (jornada.length === 0)
             return null;
@@ -173,9 +190,9 @@ let JornadaLegalService = class JornadaLegalService {
         else if (ultimoEvento === client_1.TipoEvento.ESPERA_CARGA_DESCARGA) {
             const totalEsperaMin = this.somarMinutos(this.construirIntervalos(jornada, 'ESPERA_CARGA_DESCARGA', ['FIM_ESPERA_CARGA_DESCARGA', 'FIM_DESCARREGAMENTO'], agora));
             for (const limite of [
-                LIMITE_ESPERA_INFO_MIN,
-                LIMITE_ESPERA_ATENCAO_MIN,
-                LIMITE_ESPERA_CRITICO_MIN,
+                limitesEspera.infoMin,
+                limitesEspera.atencaoMin,
+                limitesEspera.criticoMin,
             ]) {
                 if (totalEsperaMin < limite)
                     candidatosMin.push(limite - totalEsperaMin);
@@ -242,6 +259,12 @@ let JornadaLegalService = class JornadaLegalService {
         const a = Math.sin(dLat / 2) ** 2 +
             Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
         return RAIO_TERRA_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+    inicioDaDirecaoContinua(registros, agora) {
+        const jornada = this.recortarJornadaCorrente(registros, agora);
+        if (jornada.length === 0)
+            return null;
+        return this.calcularAcumuladosDirecao(jornada, agora).corteContinuo;
     }
     calcularAcumuladosDirecao(jornada, agora) {
         const janelaInicio = jornada[0].timestampEvento;

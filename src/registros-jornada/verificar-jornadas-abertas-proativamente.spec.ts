@@ -246,6 +246,7 @@ describe('RegistrosJornadaService.verificarJornadasAbertasProativamente (Rodada 
         entidadeId: 'motorista-1',
       }),
     );
-    expect(prismaMock.motorista.findUnique).toHaveBeenCalledTimes(2);
+    // Rodada 174: o motorista-2 faz uma consulta a mais (limites de espera do grupo).
+    expect(prismaMock.motorista.findUnique).toHaveBeenCalledTimes(3);
   });
 });

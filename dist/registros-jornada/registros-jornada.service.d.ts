@@ -72,6 +72,7 @@ export declare class RegistrosJornadaService {
     }>;
     processarLoteSequencial(motoristaId: string, deviceUuid: string, eventos: CreateRegistroJornadaDto[], ip?: string, userAgent?: string): Promise<ResultadoItemLote[]>;
     processarLote(motoristaId: string, deviceUuid: string, eventos: CreateRegistroJornadaDto[], ip?: string, userAgent?: string): Promise<ResultadoItemLote[]>;
+    private obterLimitesEspera;
     private avaliarLimitesLegais;
     verificarJornadasAbertasProativamente(): Promise<number>;
     verificarEAgendarProximoMotorista(motoristaId: string): Promise<void>;

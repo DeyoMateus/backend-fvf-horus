@@ -389,6 +389,35 @@ let RegistrosJornadaService = class RegistrosJornadaService {
             return this.processarLoteSequencial(motoristaId, deviceUuid, eventos, ip, userAgent);
         }
     }
+    async obterLimitesEspera(cliente, motoristaId) {
+        try {
+            const m = await cliente.motorista.findUnique({
+                where: { id: motoristaId },
+                select: {
+                    empresa: {
+                        select: {
+                            grupo: {
+                                select: {
+                                    limiteEsperaInfoMin: true,
+                                    limiteEsperaAtencaoMin: true,
+                                    limiteEsperaCriticoMin: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+            const g = m?.empresa?.grupo;
+            return {
+                infoMin: g?.limiteEsperaInfoMin ?? jornada_legal_service_1.LIMITES_ESPERA_PADRAO.infoMin,
+                atencaoMin: g?.limiteEsperaAtencaoMin ?? jornada_legal_service_1.LIMITES_ESPERA_PADRAO.atencaoMin,
+                criticoMin: g?.limiteEsperaCriticoMin ?? jornada_legal_service_1.LIMITES_ESPERA_PADRAO.criticoMin,
+            };
+        }
+        catch {
+            return jornada_legal_service_1.LIMITES_ESPERA_PADRAO;
+        }
+    }
     async avaliarLimitesLegais(tx, motoristaId, registroRecemCriado, agoraOverride) {
         try {
             const historico = await tx.registroJornada.findMany({
@@ -398,6 +427,11 @@ let RegistrosJornadaService = class RegistrosJornadaService {
             const ultimoInicioJornada = [...historico]
                 .filter((r) => r.tipoEvento === client_1.TipoEvento.INICIO_JORNADA)
                 .pop();
+            const inicioContinuo = this.jornadaLegal.inicioDaDirecaoContinua(historico, agoraOverride ?? registroRecemCriado.timestampEvento);
+            const TIPOS_DIRECAO_CONTINUA = [
+                client_1.TipoAlertaJornada.DIRECAO_CONTINUA_PROXIMA_LIMITE,
+                client_1.TipoAlertaJornada.DIRECAO_CONTINUA_EXCEDIDA,
+            ];
             const tiposExistentes = new Set((await tx.alertaJornada.findMany({
                 where: {
                     motoristaId,
@@ -407,9 +441,13 @@ let RegistrosJornadaService = class RegistrosJornadaService {
                             registroRecemCriado.timestampEvento,
                     },
                 },
-                select: { tipo: true },
-            })).map((a) => a.tipo));
-            const alertas = this.jornadaLegal.avaliar(historico, registroRecemCriado, tiposExistentes, agoraOverride);
+                select: { tipo: true, createdAt: true },
+            }))
+                .filter((a) => !inicioContinuo ||
+                !TIPOS_DIRECAO_CONTINUA.includes(a.tipo) ||
+                a.createdAt.getTime() >= inicioContinuo.getTime())
+                .map((a) => a.tipo));
+            const alertas = this.jornadaLegal.avaliar(historico, registroRecemCriado, tiposExistentes, agoraOverride, await this.obterLimitesEspera(tx, motoristaId));
             for (const alerta of alertas) {
                 await tx.alertaJornada.create({
                     data: {
@@ -530,7 +568,7 @@ let RegistrosJornadaService = class RegistrosJornadaService {
                 where: { motoristaId },
                 orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
             });
-            const proximo = this.jornadaLegal.calcularProximoLimiar(historico, agora);
+            const proximo = this.jornadaLegal.calcularProximoLimiar(historico, agora, await this.obterLimitesEspera(this.prisma, motoristaId));
             if (proximo) {
                 await this.verificacaoAgendada.agendar(motoristaId, proximo.emMs);
             }

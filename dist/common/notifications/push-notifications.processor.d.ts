@@ -3,5 +3,6 @@ import { Job } from 'bullmq';
 import type { JobNotificacaoPush } from './push-notifications.service';
 export declare class PushNotificationsProcessor extends WorkerHost {
     private readonly logger;
+    private conferirRecibo;
     process(job: Job<JobNotificacaoPush>): Promise<void>;
 }

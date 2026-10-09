@@ -828,28 +828,32 @@ export class RegistrosJornadaService {
     cliente: Prisma.TransactionClient | PrismaService,
     motoristaId: string,
   ): Promise<LimitesEspera> {
-    const m = await cliente.motorista.findUnique({
-      where: { id: motoristaId },
-      select: {
-        empresa: {
-          select: {
-            grupo: {
-              select: {
-                limiteEsperaInfoMin: true,
-                limiteEsperaAtencaoMin: true,
-                limiteEsperaCriticoMin: true,
+    try {
+      const m = await cliente.motorista.findUnique({
+        where: { id: motoristaId },
+        select: {
+          empresa: {
+            select: {
+              grupo: {
+                select: {
+                  limiteEsperaInfoMin: true,
+                  limiteEsperaAtencaoMin: true,
+                  limiteEsperaCriticoMin: true,
+                },
               },
             },
           },
         },
-      },
-    });
-    const g = m?.empresa?.grupo;
-    return {
-      infoMin: g?.limiteEsperaInfoMin ?? LIMITES_ESPERA_PADRAO.infoMin,
-      atencaoMin: g?.limiteEsperaAtencaoMin ?? LIMITES_ESPERA_PADRAO.atencaoMin,
-      criticoMin: g?.limiteEsperaCriticoMin ?? LIMITES_ESPERA_PADRAO.criticoMin,
-    };
+      });
+      const g = m?.empresa?.grupo;
+      return {
+        infoMin: g?.limiteEsperaInfoMin ?? LIMITES_ESPERA_PADRAO.infoMin,
+        atencaoMin: g?.limiteEsperaAtencaoMin ?? LIMITES_ESPERA_PADRAO.atencaoMin,
+        criticoMin: g?.limiteEsperaCriticoMin ?? LIMITES_ESPERA_PADRAO.criticoMin,
+      };
+    } catch {
+      return LIMITES_ESPERA_PADRAO; // falha ao ler a configuração nunca derruba o alerta
+    }
   }
 
   /**
@@ -891,6 +895,19 @@ export class RegistrosJornadaService {
         .filter((r) => r.tipoEvento === TipoEvento.INICIO_JORNADA)
         .pop();
 
+      // Rodada 176: os alertas de DIREÇÃO CONTÍNUA só contam como "já
+      // alertado" se foram gerados dentro do trecho contínuo atual (depois
+      // da última pausa de 30 min). Antes valia a jornada inteira, então
+      // depois de uma pausa o segundo estouro de 5h30 na mesma jornada
+      // nunca gerava alerta.
+      const inicioContinuo = this.jornadaLegal.inicioDaDirecaoContinua(
+        historico,
+        agoraOverride ?? registroRecemCriado.timestampEvento,
+      );
+      const TIPOS_DIRECAO_CONTINUA: string[] = [
+        TipoAlertaJornada.DIRECAO_CONTINUA_PROXIMA_LIMITE,
+        TipoAlertaJornada.DIRECAO_CONTINUA_EXCEDIDA,
+      ];
       const tiposExistentes = new Set(
         (
           await tx.alertaJornada.findMany({
@@ -903,9 +920,16 @@ export class RegistrosJornadaService {
                   registroRecemCriado.timestampEvento,
               },
             },
-            select: { tipo: true },
+            select: { tipo: true, createdAt: true },
           })
-        ).map((a) => a.tipo),
+        )
+          .filter(
+            (a) =>
+              !inicioContinuo ||
+              !TIPOS_DIRECAO_CONTINUA.includes(a.tipo) ||
+              a.createdAt.getTime() >= inicioContinuo.getTime(),
+          )
+          .map((a) => a.tipo),
       );
 
       const alertas = this.jornadaLegal.avaliar(

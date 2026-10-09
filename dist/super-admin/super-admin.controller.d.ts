@@ -74,6 +74,9 @@ export declare class SuperAdminController {
         createdAt: Date;
         updatedAt: Date;
         razaoSocial: string;
+        limiteEsperaInfoMin: number | null;
+        limiteEsperaAtencaoMin: number | null;
+        limiteEsperaCriticoMin: number | null;
     }>;
     atualizarEmpresa(id: string, dto: UpdateEmpresaDto, superAdmin: SuperAdminAutenticado): Promise<{
         id: string;
