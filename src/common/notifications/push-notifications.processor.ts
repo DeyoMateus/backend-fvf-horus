@@ -31,9 +31,9 @@ function canalDoPush(dados?: Record<string, unknown>): string {
     tipo.startsWith('SOLICITACAO_') ||
     tipo === 'TRATAMENTO_PONTO'
   ) {
-    return 'alertas-jornada-v2';
+    return 'alertas-jornada-v3';
   }
-  return `alerta-voz-${SOM_POR_TIPO[tipo] ?? 'generico'}-v1`;
+  return `alerta-voz-${SOM_POR_TIPO[tipo] ?? 'generico'}-v2`;
 }
 
 const EXPO_PUSH_API_URL = 'https://exp.host/--/api/v2/push/send';
