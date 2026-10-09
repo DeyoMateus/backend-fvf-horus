@@ -62,6 +62,40 @@ const LIMITE_ESPERA_INFO_MIN = 180; // 3h
 const LIMITE_ESPERA_ATENCAO_MIN = 285; // 4h45
 const LIMITE_ESPERA_CRITICO_MIN = 300; // 5h (limiar legal de diária de espera)
 const PAUSA_QUALIFICADA_MIN = 30;
+// Rodada 184: jornada sem FIM_JORNADA há mais que isto vira alerta de
+// "provável esquecimento de encerrar".
+const LIMITE_JORNADA_ABERTA_MIN = 840; // 14h
+
+// Rodada 184: transições permitidas entre eventos, espelha
+// mobile/src/domain/regrasJornada.ts (PROXIMOS_POR_ULTIMO). O servidor
+// NÃO bloqueia (a lei não deve impedir o registro), só avisa o gestor.
+const _FECHADO: TipoEvento[] = [
+  TipoEvento.INICIO_DIRECAO,
+  TipoEvento.INICIO_DESCANSO,
+  TipoEvento.ESPERA_CARGA_DESCARGA,
+  TipoEvento.OUTRO,
+  TipoEvento.FIM_JORNADA,
+];
+const TRANSICOES_PERMITIDAS: Partial<Record<TipoEvento, TipoEvento[]>> = {
+  [TipoEvento.INICIO_JORNADA]: _FECHADO,
+  [TipoEvento.FIM_DIRECAO]: _FECHADO,
+  [TipoEvento.FIM_DESCANSO]: _FECHADO,
+  [TipoEvento.FIM_ESPERA_CARGA_DESCARGA]: _FECHADO,
+  [TipoEvento.FIM_DESCARREGAMENTO]: _FECHADO,
+  [TipoEvento.INICIO_DIRECAO]: [TipoEvento.FIM_DIRECAO],
+  [TipoEvento.INICIO_DESCANSO]: [TipoEvento.FIM_DESCANSO],
+  [TipoEvento.ESPERA_CARGA_DESCARGA]: [
+    TipoEvento.FIM_ESPERA_CARGA_DESCARGA,
+    TipoEvento.FIM_DESCARREGAMENTO,
+  ],
+  [TipoEvento.FIM_JORNADA]: [TipoEvento.INICIO_JORNADA],
+  [TipoEvento.OUTRO]: [
+    TipoEvento.INICIO_DIRECAO,
+    TipoEvento.INICIO_DESCANSO,
+    TipoEvento.ESPERA_CARGA_DESCARGA,
+    TipoEvento.FIM_JORNADA,
+  ],
+};
 const OCIOSIDADE_TEMPO_MINIMO_MIN = 20; // só avalia se passou tempo suficiente entre as duas conferências
 const OCIOSIDADE_DISTANCIA_MAXIMA_M = 500; // margem generosa pra deriva normal de GPS
 
@@ -148,9 +182,66 @@ export class JornadaLegalService {
     const janelaInicio = jornada[0].timestampEvento;
     const alertas: AlertaCalculado[] = [];
 
+    // Rodada 184: sequência de eventos fora da ordem permitida (só no
+    // caminho reativo, no momento em que o evento chega). Aceita o ponto,
+    // mas avisa o gestor.
+    if (!agoraOverride) {
+      const todos = [...registros].sort(compararPorTimestampEvento);
+      const idxNovo = todos.findIndex((r) => r.id === registroRecemCriado.id);
+      if (idxNovo !== -1) {
+        const anterior = idxNovo > 0 ? todos[idxNovo - 1] : null;
+        const permitidos = anterior
+          ? TRANSICOES_PERMITIDAS[anterior.tipoEvento]
+          : [TipoEvento.INICIO_JORNADA];
+        if (permitidos && !permitidos.includes(registroRecemCriado.tipoEvento)) {
+          alertas.push({
+            tipo: TipoAlertaJornada.SEQUENCIA_EVENTOS_INCONSISTENTE,
+            severidade: SeveridadeAlerta.ATENCAO,
+            mensagem: anterior
+              ? `Sequência de eventos inconsistente: "${registroRecemCriado.tipoEvento}" registrado logo após "${anterior.tipoEvento}". O ponto foi aceito, mas confira se algum registro ficou faltando.`
+              : `Primeiro registro do motorista não é um início de jornada ("${registroRecemCriado.tipoEvento}"). O ponto foi aceito, mas confira o histórico.`,
+            janelaInicio: anterior?.timestampEvento ?? agora,
+            janelaFim: agora,
+            minutosAcumulados: 0,
+          });
+        }
+      }
+    }
+
+    // Rodada 184: jornada aberta há tempo demais (provável esquecimento
+    // de bater "Fim de jornada"). Roda também na varredura proativa.
+    if (
+      jornada[0].tipoEvento === TipoEvento.INICIO_JORNADA &&
+      jornada[jornada.length - 1].tipoEvento !== TipoEvento.FIM_JORNADA
+    ) {
+      const abertaMin = this.minutosEntre(jornada[0].timestampEvento, agora);
+      if (
+        abertaMin >= LIMITE_JORNADA_ABERTA_MIN &&
+        !alertasExistentesTipos.has(TipoAlertaJornada.JORNADA_ABERTA_PROLONGADA)
+      ) {
+        alertas.push({
+          tipo: TipoAlertaJornada.JORNADA_ABERTA_PROLONGADA,
+          // Rodada 186: o sistema NUNCA encerra sozinho; o gestor é
+          // obrigado a fechar (ajuste com justificativa), então é crítico.
+          severidade: SeveridadeAlerta.CRITICO,
+          mensagem: `Jornada aberta há ${this.formatarHoras(abertaMin)} sem "Fim de jornada". Se você já terminou, encerre a jornada no app; caso contrário, o gestor precisará encerrá-la no painel com justificativa.`,
+          janelaInicio: jornada[0].timestampEvento,
+          janelaFim: agora,
+          minutosAcumulados: Math.round(abertaMin),
+        });
+      }
+    }
+
     // --- Direção ---
+    // Rodada 182: a direção é somada ao longo da JORNADA LEGAL (jornadas
+    // encadeadas sem descanso de 11h entre elas), não só da jornada
+    // corrente. Fecha a brecha de encerrar e reabrir a jornada para
+    // "zerar" as 8h/10h e as 5h30 contínuas.
     const { direcaoContinuaMin, totalDirecaoMin, corteContinuo } =
-      this.calcularAcumuladosDirecao(jornada, agora);
+      this.calcularAcumuladosDirecao(
+        this.recortarJornadaLegal(registros, agora),
+        agora,
+      );
 
     if (
       direcaoContinuaMin >= LIMITE_DIRECAO_CONTINUA_CRITICO_MIN &&
@@ -367,7 +458,10 @@ export class JornadaLegalService {
 
     if (ultimoEvento === TipoEvento.INICIO_DIRECAO) {
       const { direcaoContinuaMin, totalDirecaoMin } =
-        this.calcularAcumuladosDirecao(jornada, agora);
+        this.calcularAcumuladosDirecao(
+          this.recortarJornadaLegal(registros, agora),
+          agora,
+        );
       for (const limite of [
         LIMITE_DIRECAO_CONTINUA_ATENCAO_MIN,
         LIMITE_DIRECAO_CONTINUA_CRITICO_MIN,
@@ -514,7 +608,7 @@ export class JornadaLegalService {
     registros: RegistroJornada[],
     agora: Date,
   ): Date | null {
-    const jornada = this.recortarJornadaCorrente(registros, agora);
+    const jornada = this.recortarJornadaLegal(registros, agora);
     if (jornada.length === 0) return null;
     return this.calcularAcumuladosDirecao(jornada, agora).corteContinuo;
   }
@@ -534,23 +628,29 @@ export class JornadaLegalService {
     corteContinuo: Date;
   } {
     const janelaInicio = jornada[0].timestampEvento;
-    const direcaoIntervalos = this.construirIntervalos(
-      jornada,
-      'INICIO_DIRECAO',
-      ['FIM_DIRECAO'],
-      agora,
-    );
+    const direcaoIntervalos = this.intervalosDeDirecao(jornada, agora);
     const totalDirecaoMin = this.somarMinutos(direcaoIntervalos);
 
     // INICIO_REFEICAO/FIM_REFEICAO existiu como tipo de evento separado,
     // mas foi removido do enum (refeição passou a ser registrada como
     // um descanso comum) , pausa qualificada agora é só descanso.
-    const pausasQualificadas = this.construirIntervalos(
-      jornada,
-      'INICIO_DESCANSO',
-      ['FIM_DESCANSO'],
-      agora,
-    )
+    // Rodada 182: o intervalo entre um FIM_JORNADA e o INICIO_JORNADA
+    // seguinte (jornadas encadeadas) também conta como pausa se tiver
+    // 30 min ou mais; menos que isso NÃO zera a direção contínua.
+    const pausasQualificadas = [
+      ...this.construirIntervalos(
+        jornada,
+        'INICIO_DESCANSO',
+        ['FIM_DESCANSO'],
+        agora,
+      ),
+      ...this.construirIntervalos(
+        jornada,
+        'FIM_JORNADA',
+        ['INICIO_JORNADA'],
+        agora,
+      ).filter((p) => p.fim.getTime() > p.inicio.getTime()),
+    ]
       .filter(
         (p) => this.minutosEntre(p.inicio, p.fim) >= PAUSA_QUALIFICADA_MIN,
       )
@@ -644,9 +744,15 @@ export class JornadaLegalService {
         idxInicioJornadaAnterior,
         idxAtual, // até `anterior` (idxAtual - 1), exclusive de registroRecemCriado
       );
+      // Rodada 185: a "jornada anterior" é o ciclo legal inteiro (jornadas
+      // encadeadas sem 11h de descanso), não só a última jornada isolada.
+      void jornadaAnterior;
       const { totalDirecaoMin: direcaoJornadaAnteriorMin } =
         this.calcularAcumuladosDirecao(
-          jornadaAnterior,
+          this.recortarJornadaLegal(
+            ordenados.slice(0, idxAtual),
+            anterior.timestampEvento,
+          ),
           anterior.timestampEvento,
         );
       if (direcaoJornadaAnteriorMin < LIMITE_JORNADA_DIRECAO_ATENCAO_MIN) {
@@ -669,6 +775,100 @@ export class JornadaLegalService {
       janelaFim: registroRecemCriado.timestampEvento,
       minutosAcumulados: Math.round(descansoMin),
     };
+  }
+
+  /**
+   * Rodada 182: "jornada legal" para fins de direção. Parte do último
+   * INICIO_JORNADA e recua enquanto o intervalo entre o FIM_JORNADA de
+   * uma jornada e o INICIO_JORNADA da seguinte for MENOR que o
+   * descanso interjornada (11h). Ex.: 5h30 + pausa de 30 min + 5h30 e
+   * então 11h de descanso encerram o ciclo; sem as 11h, as jornadas
+   * continuam somando direção.
+   */
+  private recortarJornadaLegal(
+    registros: RegistroJornada[],
+    agora: Date,
+  ): RegistroJornada[] {
+    const ordenados = [...registros]
+      .filter((r) => r.timestampEvento.getTime() <= agora.getTime())
+      .sort(compararPorTimestampEvento);
+    let inicioIdx = ordenados
+      .map((r) => r.tipoEvento)
+      .lastIndexOf(TipoEvento.INICIO_JORNADA);
+    if (inicioIdx === -1) return ordenados;
+    while (inicioIdx > 0) {
+      const anteriorIdx = inicioIdx - 1;
+      const anterior = ordenados[anteriorIdx];
+      if (anterior.tipoEvento !== TipoEvento.FIM_JORNADA) break;
+      const gapMin = this.minutosEntre(
+        anterior.timestampEvento,
+        ordenados[inicioIdx].timestampEvento,
+      );
+      if (gapMin >= DESCANSO_INTERJORNADA_MINIMO_MIN) break;
+      const inicioAnterior = ordenados
+        .slice(0, anteriorIdx)
+        .map((r) => r.tipoEvento)
+        .lastIndexOf(TipoEvento.INICIO_JORNADA);
+      if (inicioAnterior === -1) break;
+      inicioIdx = inicioAnterior;
+    }
+    return this.cortarPorDescansoImplicito(ordenados.slice(inicioIdx));
+  }
+
+  /**
+   * Rodada 184: se dentro da janela existe um intervalo de 11h ou mais
+   * sem NENHUM evento e o evento anterior ao intervalo não é uma direção
+   * em curso (ex.: motorista dormiu em "descanso" e esqueceu o fim da
+   * jornada), o ciclo de direção recomeça depois dele. Evita somar a
+   * direção de dias diferentes numa jornada esquecida aberta.
+   */
+  private cortarPorDescansoImplicito(
+    janela: RegistroJornada[],
+  ): RegistroJornada[] {
+    for (let i = janela.length - 2; i >= 0; i--) {
+      const gap = this.minutosEntre(
+        janela[i].timestampEvento,
+        janela[i + 1].timestampEvento,
+      );
+      if (
+        gap >= DESCANSO_INTERJORNADA_MINIMO_MIN &&
+        janela[i].tipoEvento !== TipoEvento.INICIO_DIRECAO
+      ) {
+        return janela.slice(i + 1);
+      }
+    }
+    return janela;
+  }
+
+  /**
+   * Rodada 184: trechos de direção. Um INICIO_DIRECAO aberto fecha em
+   * FIM_DIRECAO, FIM_JORNADA ou, se o motorista esqueceu o fim da
+   * direção, quando ele inicia descanso/espera/aguardando documentação
+   * (fechamento implícito). Em sequências válidas, nada muda.
+   */
+  private intervalosDeDirecao(
+    registros: RegistroJornada[],
+    agora: Date,
+  ): Intervalo[] {
+    const fechamentos = new Set<TipoEvento>([
+      TipoEvento.FIM_DIRECAO,
+      TipoEvento.FIM_JORNADA,
+      TipoEvento.INICIO_DESCANSO,
+      TipoEvento.ESPERA_CARGA_DESCARGA,
+      TipoEvento.OUTRO,
+    ]);
+    const intervalos: Intervalo[] = [];
+    let aberto: Date | null = null;
+    for (const r of registros) {
+      if (r.tipoEvento === TipoEvento.INICIO_DIRECAO) {
+        if (!aberto) aberto = r.timestampEvento;
+      } else if (fechamentos.has(r.tipoEvento) && aberto) {
+        intervalos.push({ inicio: aberto, fim: r.timestampEvento });
+        aberto = null;
+      }
+    }
+    if (aberto) intervalos.push({ inicio: aberto, fim: agora });
+    return intervalos;
   }
 
   /** Registros desde o último INICIO_JORNADA (inclusive), ou todo o histórico se não houver nenhum. */
@@ -699,7 +899,9 @@ export class JornadaLegalService {
     let aberto: Date | null = null;
     for (const r of registros) {
       if (r.tipoEvento === TipoEvento[tipoInicio]) {
-        aberto = r.timestampEvento;
+        // Rodada 184: um novo início com o anterior ainda aberto (sequência
+        // inconsistente) não descarta o trecho aberto: vale o primeiro início.
+        if (!aberto) aberto = r.timestampEvento;
       } else if (valoresFim.has(r.tipoEvento) && aberto) {
         intervalos.push({ inicio: aberto, fim: r.timestampEvento });
         aberto = null;

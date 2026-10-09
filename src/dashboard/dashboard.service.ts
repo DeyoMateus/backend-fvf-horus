@@ -37,7 +37,7 @@ export const TIPOS_ALERTA_RISCO_FRAUDE: TipoAlertaJornada[] = [
 // esqueceu de encerrar, ou turno anormalmente longo. 16h é folgado de
 // propósito (jornada+espera prolongada é legal em cenários de espera
 // de carga/descarga), só pega os casos claramente fora do padrão.
-const HORAS_JORNADA_ABERTA_ALERTA = 16;
+const HORAS_JORNADA_ABERTA_ALERTA = 14; // Rodada 186: mesmo limite do alerta JORNADA_ABERTA_PROLONGADA
 
 /** Chaves dos indicadores do gráfico "Evolução ao longo do tempo" que o gestor pode clicar pra ver o detalhe do dia (mesmo espírito do CardPainel, mas por dia+indicador em vez de estado atual). */
 export type ChaveIndicadorTendencia =
@@ -192,7 +192,32 @@ export class DashboardService {
     // cada motorista cuja jornada segue aberta (não tem FIM_JORNADA
     // depois), pra medir há quanto tempo está aberta.
     const jornadasEmAberto = await this.jornadasEmAbertoComInicio(grupoId);
+    // Rodada 186: o gestor encerra a jornada esquecida lançando um ajuste de
+    // FIM_JORNADA (TratamentoPonto) a partir do início dela; o ledger
+    // continua "aberto" (WORM), então essas jornadas saem desta lista.
+    const encerradasPeloGestor = new Set<string>();
+    if (jornadasEmAberto.length > 0) {
+      const ajustesFim = await this.prisma.tratamentoPonto.findMany({
+        where: {
+          tipoEvento: 'FIM_JORNADA',
+          motoristaId: { in: jornadasEmAberto.map((j) => j.motoristaId) },
+        },
+        select: { motoristaId: true, timestampEvento: true },
+      });
+      for (const j of jornadasEmAberto) {
+        if (
+          ajustesFim.some(
+            (a) =>
+              a.motoristaId === j.motoristaId &&
+              a.timestampEvento.getTime() >= j.inicioJornada.getTime(),
+          )
+        ) {
+          encerradasPeloGestor.add(j.motoristaId);
+        }
+      }
+    }
     for (const j of jornadasEmAberto) {
+      if (encerradasPeloGestor.has(j.motoristaId)) continue;
       const horasAberta =
         (agora.getTime() - j.inicioJornada.getTime()) / 3_600_000;
       if (horasAberta >= HORAS_JORNADA_ABERTA_ALERTA) {

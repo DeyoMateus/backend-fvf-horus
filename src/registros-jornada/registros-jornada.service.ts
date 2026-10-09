@@ -79,6 +79,11 @@ export interface ViagemConsolidada {
   ctesRelacionados: { id: string; numero: string | null }[];
 }
 
+type HistoricoDb = Pick<
+  Prisma.TransactionClient,
+  'registroJornada' | 'tratamentoPonto'
+>;
+
 @Injectable()
 export class RegistrosJornadaService {
   // Mesmo valor de DESVIO_RELOGIO_FUTURO_MAXIMO_MIN em AntifraudeService ,
@@ -870,10 +875,13 @@ export class RegistrosJornadaService {
     agoraOverride?: Date,
   ): Promise<{ tipo: string; severidade: string; mensagem: string }[]> {
     try {
-      const historico = await tx.registroJornada.findMany({
-        where: { motoristaId },
-        orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
-      });
+      // Rodada 186: o motor de alertas enxerga também os ajustes do gestor
+      // (TratamentoPonto), como se fossem eventos, para não alertar sobre
+      // jornada que o gestor já corrigiu/encerrou.
+      const historico = await this.historicoParaMotorDeAlertas(
+        tx as unknown as HistoricoDb,
+        motoristaId,
+      );
 
       // Achado real (Rodada 129): a janela de "já alertei esse tipo,
       // não repete" usava `historico[0]` , o PRIMEIRO registro de toda
@@ -1197,16 +1205,51 @@ export class RegistrosJornadaService {
    * já foram todos cruzados), cancela qualquer job pendente em vez de
    * agendar , não há por que verificar de novo sem um evento novo.
    */
+  /**
+   * Rodada 186: histórico do motorista para o motor de alertas = registros
+   * reais + ajustes do gestor (TratamentoPonto) tratados como eventos,
+   * ordenados por horário. Mesma ideia de HoleriteService.unificarEventos.
+   */
+  private async historicoParaMotorDeAlertas(
+    db: HistoricoDb,
+    motoristaId: string,
+  ): Promise<RegistroJornada[]> {
+    const [registros, tratamentos] = await Promise.all([
+      db.registroJornada.findMany({
+        where: { motoristaId },
+        orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
+      }),
+      // `?.` só por causa de mocks de teste sem esse modelo.
+      db.tratamentoPonto?.findMany?.({
+        where: { motoristaId },
+        orderBy: { timestampEvento: 'asc' },
+      }) ?? Promise.resolve([]),
+    ]);
+    const virtuais = tratamentos.map((t) => ({
+      id: `tratamento:${t.id}`,
+      motoristaId: t.motoristaId,
+      tipoEvento: t.tipoEvento,
+      timestampEvento: t.timestampEvento,
+      sequencial: 0,
+      createdAt: t.createdAt,
+    })) as unknown as RegistroJornada[];
+    return [...registros, ...virtuais].sort(
+      (a, b) =>
+        a.timestampEvento.getTime() - b.timestampEvento.getTime() ||
+        a.sequencial - b.sequencial,
+    );
+  }
+
   private async agendarProximaVerificacaoSeAplicavel(
     motoristaId: string,
     agora: Date,
   ): Promise<void> {
     if (!this.verificacaoAgendada) return; // instanciação manual em teste, sem o produtor da fila , comportamento antigo preservado
     try {
-      const historico = await this.prisma.registroJornada.findMany({
-        where: { motoristaId },
-        orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
-      });
+      const historico = await this.historicoParaMotorDeAlertas(
+        this.prisma as unknown as HistoricoDb,
+        motoristaId,
+      );
       const proximo = this.jornadaLegal.calcularProximoLimiar(
         historico,
         agora,

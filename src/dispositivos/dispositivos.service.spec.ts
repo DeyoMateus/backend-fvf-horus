@@ -138,15 +138,15 @@ describe('DispositivosService , isolamento entre grupos', () => {
         status: 'PENDENTE',
         motoristaId: 'motorista-1',
         deviceUuidSolicitado: 'device-novo',
-        motorista: { empresa: { grupoId: 'grupo-A' } },
+        motorista: { empresa: { grupoId: '00000000-0000-4000-8000-00000000000a' } },
       });
       // TenantContext (Rodada 23): em produção o TenantContextInterceptor
       // já estabelece isso antes de qualquer controller/service rodar;
       // aqui, fora de uma requisição HTTP de verdade, o teste estabelece
       // o mesmo contexto manualmente.
-      await TenantContext.paraGrupo('grupo-A', async () => {
+      await TenantContext.paraGrupo('00000000-0000-4000-8000-00000000000a', async () => {
         await expect(
-          service.aprovarTroca('sol-1', 'usuario-1', 'grupo-A'),
+          service.aprovarTroca('sol-1', 'usuario-1', '00000000-0000-4000-8000-00000000000a'),
         ).resolves.toMatchObject({
           motoristaId: 'motorista-1',
         });

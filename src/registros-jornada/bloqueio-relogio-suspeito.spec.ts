@@ -102,7 +102,7 @@ describe('RegistrosJornadaService.create , bloqueio de relógio de aparelho susp
     // "Fim de jornada" batido com horário ANTERIOR ao último evento já
     // gravado (mesmo caso relatado pelo usuário: "Fim de descanso"
     // gravado às 21:39, seguido de "Fim de jornada" às 16:40).
-    await TenantContext.paraGrupo('grupo-A', () =>
+    await TenantContext.paraGrupo('00000000-0000-4000-8000-00000000000a', () =>
       expect(
         service.create(
           'motorista-1',
@@ -125,7 +125,7 @@ describe('RegistrosJornadaService.create , bloqueio de relógio de aparelho susp
 
     const daqui30min = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
-    await TenantContext.paraGrupo('grupo-A', () =>
+    await TenantContext.paraGrupo('00000000-0000-4000-8000-00000000000a', () =>
       expect(
         service.create('motorista-1', 'device-1', dto(daqui30min)),
       ).rejects.toThrow(BadRequestException),
@@ -181,7 +181,7 @@ describe('RegistrosJornadaService.create , bloqueio de relógio de aparelho susp
     });
 
     const agora = new Date().toISOString();
-    await TenantContext.paraGrupo('grupo-A', () =>
+    await TenantContext.paraGrupo('00000000-0000-4000-8000-00000000000a', () =>
       service.create('motorista-1', 'device-1', dto(agora)),
     );
 
@@ -211,7 +211,7 @@ describe('RegistrosJornadaService.create , bloqueio de relógio de aparelho susp
     // mas o monotônico só avançou 1 minuto (60_000ms) , divergência de
     // quase 8h, muito além da tolerância de 5min. Aparelho não
     // reiniciou (elapsedRealtimeMs novo > anterior).
-    await TenantContext.paraGrupo('grupo-A', () =>
+    await TenantContext.paraGrupo('00000000-0000-4000-8000-00000000000a', () =>
       expect(
         service.create(
           'motorista-1',
@@ -275,7 +275,7 @@ describe('RegistrosJornadaService.create , bloqueio de relógio de aparelho susp
     // através de um reboot). A checagem deve ser pulada, mesmo o app
     // trazendo um valor.
     const agora = new Date().toISOString();
-    await TenantContext.paraGrupo('grupo-A', () =>
+    await TenantContext.paraGrupo('00000000-0000-4000-8000-00000000000a', () =>
       service.create('motorista-1', 'device-1', dto(agora, 1_000)),
     );
 

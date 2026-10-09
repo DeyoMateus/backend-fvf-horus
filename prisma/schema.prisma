@@ -978,6 +978,12 @@ enum TipoAlertaJornada {
   /// ou mais de direção contínua acumulada e sem pausa de 30 min. Gera
   /// alerta crítico a cada retomada (sem deduplicar por jornada).
   DIRECAO_RETOMADA_SEM_PAUSA
+  /// Rodada 184: o servidor recebeu um evento fora da ordem permitida (ex.:
+  /// dois INICIO_DIRECAO seguidos). O ponto é aceito, mas o gestor é avisado.
+  SEQUENCIA_EVENTOS_INCONSISTENTE
+  /// Rodada 184: jornada aberta (sem FIM_JORNADA) há mais de 14h, provável
+  /// esquecimento de encerrar.
+  JORNADA_ABERTA_PROLONGADA
   JORNADA_DIRECAO_PROXIMA_LIMITE
   JORNADA_DIRECAO_EXCEDIDA
   ESPERA_PROXIMA_LIMITE
