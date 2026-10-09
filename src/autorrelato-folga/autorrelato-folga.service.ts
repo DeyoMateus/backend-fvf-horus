@@ -242,11 +242,12 @@ export class AutorrelatoFolgaService {
       diasSemInteracao: string[];
     }[] = [];
     for (const motorista of motoristas) {
+      // Rodada 178: o radar só vale a partir do DIA SEGUINTE ao cadastro
+      // (no dia do cadastro o motorista ainda nem tinha o app/vínculo).
+      const diaSeguinteAoCadastro =
+        paraDiaUtc(paraParedeBrt(motorista.createdAt)).getTime() + 86_400_000;
       const inicioMotorista = new Date(
-        Math.max(
-          inicioUtc.getTime(),
-          paraDiaUtc(paraParedeBrt(motorista.createdAt)).getTime(),
-        ),
+        Math.max(inicioUtc.getTime(), diaSeguinteAoCadastro),
       );
       const diasFaltando: string[] = [];
       for (
