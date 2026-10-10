@@ -10,6 +10,7 @@ import { TenantService } from '../common/tenant/tenant.service';
  */
 describe('TratamentosPontoService , createJornada', () => {
   function criar() {
+    const gravados: { tipoEvento: string; timestampEvento: Date }[] = [];
     const prismaMock = {
       motorista: {
         findUnique: jest.fn().mockResolvedValue({
@@ -30,9 +31,25 @@ describe('TratamentosPontoService , createJornada', () => {
         findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([]),
       },
+      // Banco em memória: o que já foi gravado precisa aparecer na linha do
+      // tempo dos eventos seguintes (como no Postgres de verdade).
       tratamentoPonto: {
-        create: jest.fn().mockResolvedValue({ id: 'trat-1' }),
-        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockImplementation(async ({ data }: any) => {
+          gravados.push({
+            tipoEvento: data.tipoEvento,
+            timestampEvento: data.timestampEvento,
+          });
+          return { id: `trat-${gravados.length}` };
+        }),
+        findMany: jest.fn().mockImplementation(async ({ where }: any) => {
+          const f = where?.timestampEvento ?? {};
+          return gravados.filter((g) => {
+            const t = g.timestampEvento.getTime();
+            if (f.lte && t > f.lte.getTime()) return false;
+            if (f.gt && t <= f.gt.getTime()) return false;
+            return true;
+          });
+        }),
       },
     } as any;
     const tenant = new TenantService(prismaMock);
