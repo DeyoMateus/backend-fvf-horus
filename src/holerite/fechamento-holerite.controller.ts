@@ -11,6 +11,7 @@ import { FechamentoHoleriteQueryDto } from './dto/fechamento-holerite.dto';
 import { gerarPdfHolerite } from './holerite-pdf.util';
 import { HoleriteService } from './holerite.service';
 import { criarZip } from '../common/zip/zip.util';
+import { contentDispositionAnexo } from '../common/arquivos/arquivo-seguro.util';
 
 /**
  * "Janela de fechamento" (Rodada 36) , pedido explícito do usuário:
@@ -79,7 +80,7 @@ export class FechamentoHoleriteController {
       );
       res.set({
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="holerite-${itens[0].motorista.nome.replace(/\s+/g, '-')}-${sufixoPeriodo}.pdf"`,
+        'Content-Disposition': contentDispositionAnexo(`holerite-${itens[0].motorista.nome.replace(/\s+/g, '-')}-${sufixoPeriodo}.pdf`),
         'Content-Length': pdf.length,
       });
       res.send(pdf);

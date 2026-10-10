@@ -11,6 +11,7 @@ import {
 import type { Response } from 'express';
 import { MotoristaDeviceGuard } from '../common/guards/motorista-device.guard';
 import { TratamentosPontoService } from './tratamentos-ponto.service';
+import { contentDispositionAnexo } from '../common/arquivos/arquivo-seguro.util';
 
 // Usado pelo app do motorista: ele vê os ajustes que a empresa lançou no
 // próprio ponto (fechamentos, correções), baixa os comprovantes/evidências
@@ -48,7 +49,7 @@ export class TratamentosPontoMobileController {
     );
     res.set({
       'Content-Type': evidencia.contentType,
-      'Content-Disposition': `attachment; filename="${evidencia.nomeArquivo}"`,
+      'Content-Disposition': contentDispositionAnexo(evidencia.nomeArquivo),
     });
     res.send(evidencia.conteudo);
   }

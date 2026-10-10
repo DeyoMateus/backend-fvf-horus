@@ -14,6 +14,11 @@ import { TenantService } from '../common/tenant/tenant.service';
 import { TratamentosPontoService } from '../tratamentos-ponto/tratamentos-ponto.service';
 import { CreateSolicitacaoAjusteDto } from './dto/create-solicitacao-ajuste.dto';
 import { normalizarPaginacao } from '../common/pagination/pagination.util';
+import {
+  MENSAGEM_SO_IMAGEM,
+  detectarTipoImagem,
+  nomeComExtensaoDoTipo,
+} from '../common/arquivos/arquivo-seguro.util';
 
 // Rodada 73 , mesma política nova de TratamentosPontoService: até 4
 // evidências por solicitação, 25MB cada, sempre no R2 (nunca cai pro
@@ -419,6 +424,12 @@ export class SolicitacoesAjustePontoService {
     solicitacaoId: string,
     arquivo: Express.Multer.File,
   ) {
+    // Rodada 192: só imagem, validada pelo CONTEÚDO (não pelo mimetype do cliente).
+    const tipoImagem = detectarTipoImagem(arquivo.buffer);
+    if (!tipoImagem) {
+      throw new BadRequestException(MENSAGEM_SO_IMAGEM);
+    }
+    const nomeSeguro = nomeComExtensaoDoTipo(arquivo.originalname, tipoImagem);
     if (arquivo.size > TAMANHO_MAXIMO_EVIDENCIA_BYTES) {
       throw new BadRequestException('Arquivo maior que o limite de 25MB');
     }
@@ -441,9 +452,9 @@ export class SolicitacoesAjustePontoService {
       );
     }
 
-    const chaveR2 = `solicitacoes-ajuste-ponto/${solicitacaoId}/${randomUUID()}-${arquivo.originalname}`;
+    const chaveR2 = `solicitacoes-ajuste-ponto/${solicitacaoId}/${randomUUID()}-${nomeSeguro}`;
     try {
-      await this.storage.subirObjeto(chaveR2, arquivo.buffer, arquivo.mimetype);
+      await this.storage.subirObjeto(chaveR2, arquivo.buffer, tipoImagem.mime);
     } catch (erro) {
       this.storage.logFalhaUpload(chaveR2, erro);
       throw new BadRequestException(
@@ -454,8 +465,8 @@ export class SolicitacoesAjustePontoService {
     return this.prisma.solicitacaoAjustePontoEvidencia.create({
       data: {
         solicitacaoId,
-        nomeArquivo: arquivo.originalname,
-        contentType: arquivo.mimetype,
+        nomeArquivo: nomeSeguro,
+        contentType: tipoImagem.mime,
         tamanhoBytes: arquivo.size,
         chaveStorage: chaveR2,
         conteudo: null,

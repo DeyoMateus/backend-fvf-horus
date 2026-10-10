@@ -19,6 +19,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { DecidirSolicitacaoDto } from './dto/decidir-solicitacao.dto';
 import { SolicitacoesAjustePontoService } from './solicitacoes-ajuste-ponto.service';
+import { contentDispositionAnexo } from '../common/arquivos/arquivo-seguro.util';
 
 // Painel (RH/gestor): ver e decidir os pedidos de ajuste que os
 // motoristas mandaram pelo app. Só ADMIN/GESTOR , nunca o motorista.
@@ -119,7 +120,7 @@ export class SolicitacoesAjustePontoGeralController {
     );
     res.set({
       'Content-Type': evidencia.contentType,
-      'Content-Disposition': `attachment; filename="${evidencia.nomeArquivo}"`,
+      'Content-Disposition': contentDispositionAnexo(evidencia.nomeArquivo),
     });
     res.send(evidencia.conteudo);
   }

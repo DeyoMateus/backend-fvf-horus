@@ -21,6 +21,11 @@ import {
   EventoLinhaDoTempo,
   validarSequenciaAjuste,
 } from './validacao-sequencia-ajuste';
+import {
+  MENSAGEM_SO_IMAGEM,
+  detectarTipoImagem,
+  nomeComExtensaoDoTipo,
+} from '../common/arquivos/arquivo-seguro.util';
 
 // Rodada 73 , pedido do usuário: até 4 imagens de até 25MB cada por
 // tratamento, e elas NUNCA podem ser gravadas no Postgres , sempre
@@ -377,6 +382,12 @@ export class TratamentosPontoService {
     usuarioId: string,
     grupoIdSolicitante: string,
   ) {
+    // Rodada 192: só imagem, validada pelo CONTEÚDO (não pelo mimetype do cliente).
+    const tipoImagem = detectarTipoImagem(arquivo.buffer);
+    if (!tipoImagem) {
+      throw new BadRequestException(MENSAGEM_SO_IMAGEM);
+    }
+    const nomeSeguro = nomeComExtensaoDoTipo(arquivo.originalname, tipoImagem);
     if (arquivo.size > TAMANHO_MAXIMO_EVIDENCIA_BYTES) {
       throw new BadRequestException('Arquivo maior que o limite de 25MB');
     }
@@ -410,9 +421,9 @@ export class TratamentosPontoService {
       );
     }
 
-    const chaveR2 = `tratamentos-ponto/${tratamentoId}/${randomUUID()}-${arquivo.originalname}`;
+    const chaveR2 = `tratamentos-ponto/${tratamentoId}/${randomUUID()}-${nomeSeguro}`;
     try {
-      await this.storage.subirObjeto(chaveR2, arquivo.buffer, arquivo.mimetype);
+      await this.storage.subirObjeto(chaveR2, arquivo.buffer, tipoImagem.mime);
     } catch (erro) {
       this.storage.logFalhaUpload(chaveR2, erro);
       throw new BadRequestException(
@@ -423,8 +434,8 @@ export class TratamentosPontoService {
     const evidencia = await this.prisma.tratamentoPontoEvidencia.create({
       data: {
         tratamentoId,
-        nomeArquivo: arquivo.originalname,
-        contentType: arquivo.mimetype,
+        nomeArquivo: nomeSeguro,
+        contentType: tipoImagem.mime,
         tamanhoBytes: arquivo.size,
         chaveStorage: chaveR2,
         conteudo: null,
@@ -439,7 +450,7 @@ export class TratamentosPontoService {
       entidadeId: evidencia.id,
       detalhes: {
         tratamentoId,
-        nomeArquivo: arquivo.originalname,
+        nomeArquivo: nomeSeguro,
         tamanhoBytes: arquivo.size,
       },
     });

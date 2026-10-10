@@ -18,6 +18,7 @@ import type { Response } from 'express';
 import { MotoristaDeviceGuard } from '../common/guards/motorista-device.guard';
 import { CreateSolicitacaoAjusteDto } from './dto/create-solicitacao-ajuste.dto';
 import { SolicitacoesAjustePontoService } from './solicitacoes-ajuste-ponto.service';
+import { contentDispositionAnexo } from '../common/arquivos/arquivo-seguro.util';
 
 const TAMANHO_MAXIMO_EVIDENCIA_BYTES = 25 * 1024 * 1024;
 
@@ -77,7 +78,7 @@ export class SolicitacoesAjustePontoMobileController {
     );
     res.set({
       'Content-Type': evidencia.contentType,
-      'Content-Disposition': `attachment; filename="${evidencia.nomeArquivo}"`,
+      'Content-Disposition': contentDispositionAnexo(evidencia.nomeArquivo),
     });
     res.send(evidencia.conteudo);
   }
