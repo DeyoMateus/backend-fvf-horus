@@ -17,6 +17,7 @@ import { StorageService } from '../common/storage/storage.service';
 import { TenantService } from '../common/tenant/tenant.service';
 import { RegistrosJornadaService } from '../registros-jornada/registros-jornada.service';
 import { CreateTratamentoPontoDto } from './dto/create-tratamento-ponto.dto';
+import { CreateJornadaTratamentoDto } from './dto/create-jornada-tratamento.dto';
 import {
   EventoLinhaDoTempo,
   validarSequenciaAjuste,
@@ -169,6 +170,9 @@ export class TratamentosPontoService {
     motoristaId: string,
     tipoEvento: CreateTratamentoPontoDto['tipoEvento'],
     timestampEvento: Date,
+    // Rodada 193: eventos de uma jornada inteira que AINDA não foram
+    // gravados, considerados na linha do tempo (pré-validação do lote).
+    extras: EventoLinhaDoTempo[] = [],
   ) {
     const [regAnt, tratAnt, regPost, tratPost] = await Promise.all([
       this.prisma.registroJornada.findMany({
@@ -198,9 +202,134 @@ export class TratamentosPontoService {
     ]);
     const porHorario = (a: EventoLinhaDoTempo, b: EventoLinhaDoTempo) =>
       a.timestampEvento.getTime() - b.timestampEvento.getTime();
-    const anteriores = [...regAnt, ...tratAnt].sort(porHorario);
-    const posteriores = [...regPost, ...tratPost].sort(porHorario);
+    const extrasAnt = extras.filter(
+      (e) => e.timestampEvento.getTime() <= timestampEvento.getTime(),
+    );
+    const extrasPost = extras.filter(
+      (e) => e.timestampEvento.getTime() > timestampEvento.getTime(),
+    );
+    const anteriores = [...regAnt, ...tratAnt, ...extrasAnt].sort(porHorario);
+    const posteriores = [...regPost, ...tratPost, ...extrasPost].sort(
+      porHorario,
+    );
     return validarSequenciaAjuste(tipoEvento, anteriores, posteriores);
+  }
+
+  /**
+   * Rodada 193 , lança uma JORNADA INTEIRA de uma vez. Regras:
+   *  - os horários precisam estar em ordem crescente, começar em "Início
+   *    de jornada" e terminar em "Fim de jornada", dentro de 48 h;
+   *  - TODOS os eventos são validados antes de gravar qualquer um (cada
+   *    um contra os pontos existentes do motorista E contra os outros do
+   *    lote), então erro de sequência não deixa jornada pela metade;
+   *  - cada evento vira um TratamentoPonto comum (mesma ancoragem em hash,
+   *    mesmo formato), então holerite, espelho e demais relatórios não
+   *    mudam; um único aviso é enviado ao motorista.
+   */
+  async createJornada(
+    motoristaId: string,
+    dto: CreateJornadaTratamentoDto,
+    usuarioId: string,
+    grupoIdSolicitante: string,
+  ) {
+    await this.tenant.verificarMotoristaNoGrupo(
+      motoristaId,
+      grupoIdSolicitante,
+    );
+    await this.tenant.verificarMotoristaAtivo(motoristaId);
+
+    const eventos = dto.eventos.map((e) => ({
+      tipoEvento: e.tipoEvento,
+      timestampEvento: new Date(e.timestampEvento),
+    }));
+    if (eventos.some((e) => Number.isNaN(e.timestampEvento.getTime()))) {
+      throw new BadRequestException('Há um horário inválido na jornada.');
+    }
+    for (let i = 1; i < eventos.length; i++) {
+      if (
+        eventos[i].timestampEvento.getTime() <=
+        eventos[i - 1].timestampEvento.getTime()
+      ) {
+        throw new BadRequestException(
+          `O evento ${i + 1} precisa ter horário depois do evento ${i}. Confira a ordem e os horários.`,
+        );
+      }
+    }
+    if (eventos[0].tipoEvento !== 'INICIO_JORNADA') {
+      throw new BadRequestException(
+        'A jornada precisa começar com "Início de jornada".',
+      );
+    }
+    if (eventos[eventos.length - 1].tipoEvento !== 'FIM_JORNADA') {
+      throw new BadRequestException(
+        'A jornada precisa terminar com "Fim de jornada".',
+      );
+    }
+    const spanMs =
+      eventos[eventos.length - 1].timestampEvento.getTime() -
+      eventos[0].timestampEvento.getTime();
+    if (spanMs > 48 * 3_600_000) {
+      throw new BadRequestException(
+        'Uma jornada lançada de uma vez não pode passar de 48 horas. Confira as datas e horários.',
+      );
+    }
+
+    // Pré-validação de TODOS os eventos antes de gravar o primeiro.
+    for (let i = 0; i < eventos.length; i++) {
+      const outros = eventos.filter((_, j) => j !== i);
+      const r = await this.validarEncaixeNaJornada(
+        motoristaId,
+        eventos[i].tipoEvento,
+        eventos[i].timestampEvento,
+        outros,
+      );
+      if (!r.ok) {
+        throw new BadRequestException(
+          `Evento ${i + 1} da jornada: ${r.mensagem}`,
+        );
+      }
+    }
+
+    const criados = [];
+    for (const e of eventos) {
+      criados.push(
+        await this.criarRegistroAncorado(
+          motoristaId,
+          e.tipoEvento,
+          e.timestampEvento,
+          dto.motivo,
+          usuarioId,
+          undefined,
+          dto.fusoOffsetMin,
+        ),
+      );
+    }
+
+    await this.audit.registrar({
+      actorType: ActorType.USUARIO_EMPRESA,
+      actorId: usuarioId,
+      acao: 'TRATAMENTO_PONTO_JORNADA_CRIADA',
+      entidade: 'TratamentoPonto',
+      entidadeId: criados[0].id,
+      detalhes: {
+        motoristaId,
+        motivo: dto.motivo,
+        tratamentoIds: criados.map((c) => c.id),
+        eventos: eventos.map((e) => ({
+          tipoEvento: e.tipoEvento,
+          timestampEvento: e.timestampEvento.toISOString(),
+        })),
+      },
+    });
+
+    await this.push.notificarMotorista(
+      motoristaId,
+      'Ajuste no seu ponto',
+      `A empresa lançou uma jornada inteira (${eventos.length} registros) referente a ${marcarHorario(eventos[0].timestampEvento)}. Toque para ver o motivo e os comprovantes.`,
+      { tipo: 'TRATAMENTO_PONTO', tratamentoId: criados[0].id },
+    );
+
+    return criados;
   }
 
   /** Rodada 139 , pra o painel saber o que pode ser lançado num horário. */

@@ -21,6 +21,7 @@ import type { UsuarioAutenticado } from '../common/decorators/current-user.decor
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { CreateJornadaTratamentoDto } from './dto/create-jornada-tratamento.dto';
 import { CreateTratamentoPontoDto } from './dto/create-tratamento-ponto.dto';
 import { TratamentosPontoService } from './tratamentos-ponto.service';
 import { contentDispositionAnexo } from '../common/arquivos/arquivo-seguro.util';
@@ -41,6 +42,21 @@ export class TratamentosPontoController {
     @CurrentUser() user: UsuarioAutenticado,
   ) {
     return this.tratamentosService.create(
+      motoristaId,
+      dto,
+      user.sub,
+      user.grupoId,
+    );
+  }
+
+  // Rodada 193 , lança a jornada inteira (início ao fim) de uma vez.
+  @Post('jornada')
+  createJornada(
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
+    @Body() dto: CreateJornadaTratamentoDto,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
+    return this.tratamentosService.createJornada(
       motoristaId,
       dto,
       user.sub,

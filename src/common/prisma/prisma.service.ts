@@ -30,6 +30,7 @@ const MODELOS_COM_RLS = [
   'solicitacaoTrocaDispositivo',
   'autorrelatoFolga',
   'folgaConcedida',
+  'diaSemInteracaoTratado',
   'documentoCarga',
   'tratamentoPontoEvidencia',
   'regraSindical',

@@ -352,6 +352,7 @@ model UsuarioEmpresa {
   solicitacoesTrocaRevisadas SolicitacaoTrocaDispositivo[]
   documentosCargaEnviados    DocumentoCarga[]
   folgasConcedidas           FolgaConcedida[]
+  diasSemInteracaoTratados   DiaSemInteracaoTratado[]
   solicitacoesAjusteDecididas SolicitacaoAjustePonto[]
   feriadosCriados            Feriado[]
   ajustesBancoHorasRegistrados AjusteBancoHoras[]
@@ -448,6 +449,7 @@ model Motorista {
   solicitacoesTrocaDispositivo SolicitacaoTrocaDispositivo[]
   autorrelatosFolga            AutorrelatoFolga[]
   folgasConcedidas             FolgaConcedida[]
+  diasSemInteracaoTratados     DiaSemInteracaoTratado[]
   veiculoVinculado              VeiculoVinculado?
   documentosCarga              DocumentoCarga[]
   solicitacoesAjustePonto       SolicitacaoAjustePonto[]
@@ -1390,6 +1392,41 @@ model FolgaConcedida {
 
   @@unique([motoristaId, data])
   @@map("folgas_concedidas")
+}
+
+// ==========================================
+// RADAR "DIAS SEM INTERAÇÃO" , TRATAMENTO DO DIA (Rodada 193)
+//  - O gestor apura um dia sem ponto e sem folga e registra o que foi
+//    (folga, falta, atestado, outro). "Sem sinal/esquecimento" NÃO grava
+//    aqui: leva ao tratamento de ponto, e o dia sai do radar quando o
+//    ponto é lançado. Não altera nenhum RegistroJornada (WORM).
+// ==========================================
+enum TipoTratamentoDiaSemInteracao {
+  FOLGA
+  FALTA
+  ATESTADO
+  OUTRO
+}
+
+model DiaSemInteracaoTratado {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  /// Dia calendário (sem horário) que foi tratado.
+  data DateTime @db.Date
+
+  tipo       TipoTratamentoDiaSemInteracao
+  observacao String
+
+  tratadoPorUsuarioId String
+  tratadoPorUsuario   UsuarioEmpresa @relation(fields: [tratadoPorUsuarioId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([motoristaId, data])
+  @@map("dias_sem_interacao_tratados")
 }
 
 // ==========================================

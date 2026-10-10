@@ -1,8 +1,10 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
   ParseUUIDPipe,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -13,6 +15,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AutorrelatoFolgaService } from './autorrelato-folga.service';
+import { TratarDiaSemInteracaoDto } from './dto/tratar-dia-sem-interacao.dto';
 
 // Leitura pelo painel (empresa). O motorista só CRIA (ver
 // AutorrelatoFolgaMobileController) , quem consulta é sempre a empresa.
@@ -44,6 +47,25 @@ export class AutorrelatoFolgaController {
     return this.service.diasSemInteracao(
       user.grupoId,
       dias ? Number(dias) : undefined,
+    );
+  }
+
+  /**
+   * Trata um dia do radar (folga, falta, atestado ou outro). "Sem
+   * sinal/esquecimento" é resolvido no tratamento de ponto, não aqui.
+   */
+  @Post('motoristas/:motoristaId/dias-sem-interacao/tratar')
+  @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
+  tratarDiaSemInteracao(
+    @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
+    @Body() dto: TratarDiaSemInteracaoDto,
+    @CurrentUser() user: UsuarioAutenticado,
+  ) {
+    return this.service.tratarDiaSemInteracao(
+      motoristaId,
+      dto,
+      user.sub,
+      user.grupoId,
     );
   }
 }
