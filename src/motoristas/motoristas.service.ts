@@ -19,6 +19,11 @@ import { CreateMotoristaDto } from './dto/create-motorista.dto';
 import { AtualizarStatusMotoristaDto } from './dto/atualizar-status-motorista.dto';
 import { AtualizarCadastroMotoristaDto } from './dto/atualizar-cadastro-motorista.dto';
 import { AtualizarPerfilMotoristaDto } from './dto/atualizar-perfil-motorista.dto';
+import {
+  condicaoBuscaCpf,
+  protegerDadosPii,
+  revelarPii,
+} from '../common/crypto/pii-campo.util';
 import { normalizarPaginacao } from '../common/pagination/pagination.util';
 
 @Injectable()
@@ -112,9 +117,11 @@ export class MotoristasService {
         data: {
           id,
           nome: dto.nome,
-          cpf: dto.cpf,
-          cnh: dto.cnh,
-          telefone: dto.telefone ?? null,
+          ...protegerDadosPii({
+            cpf: dto.cpf,
+            cnh: dto.cnh,
+            telefone: dto.telefone ?? null,
+          }),
           status: StatusMotorista.ATIVO,
           empresaId,
           hashGenesis,
@@ -169,6 +176,7 @@ export class MotoristasService {
         createdAt: Date;
       },
     ];
+    revelarPii(motorista); // cru não passa pelo proxy de decifra
 
     await this.audit.registrar({
       actorType: ActorType.USUARIO_EMPRESA,
@@ -377,7 +385,7 @@ export class MotoristasService {
         ? {
             OR: [
               { nome: { contains: termo, mode: Prisma.QueryMode.insensitive } },
-              { cpf: { contains: termo } },
+              ...(condicaoBuscaCpf(termo) ? [condicaoBuscaCpf(termo)!] : []),
             ],
           }
         : {}),
@@ -441,7 +449,7 @@ export class MotoristasService {
     const agora = new Date();
     const motorista = await this.prisma.$transaction(async (tx) => {
       await tx.dispositivoVinculado.deleteMany({ where: { motoristaId: id } });
-      return tx.motorista.update({
+      return revelarPii(await tx.motorista.update({
         where: { id },
         data: {
           status: StatusMotorista.INATIVO,
@@ -457,7 +465,7 @@ export class MotoristasService {
           status: true,
           excluidoEm: true,
         },
-      });
+      }));
     });
 
     await this.audit.registrar({

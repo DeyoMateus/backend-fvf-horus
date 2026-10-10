@@ -17,6 +17,11 @@ import { normalizarPaginacao } from '../common/pagination/pagination.util';
 import { CreateAjudanteDto } from './dto/create-ajudante.dto';
 import { AtualizarStatusAjudanteDto } from './dto/atualizar-status-ajudante.dto';
 import { VincularDispositivoAjudanteDto } from './dto/vincular-dispositivo-ajudante.dto';
+import {
+  condicaoBuscaCpf,
+  protegerDadosPii,
+  revelarPii,
+} from '../common/crypto/pii-campo.util';
 import { hashChaveDispositivo } from '../common/crypto/device-key-hash.util';
 
 /**
@@ -88,8 +93,10 @@ export class AjudantesService {
         data: {
           id,
           nome: dto.nome,
-          cpf: dto.cpf,
-          telefone: dto.telefone ?? null,
+          ...protegerDadosPii({
+            cpf: dto.cpf,
+            telefone: dto.telefone ?? null,
+          }),
           status: StatusMotorista.ATIVO,
           empresaId,
           hashGenesis,
@@ -127,6 +134,7 @@ export class AjudantesService {
         createdAt: Date;
       },
     ];
+    revelarPii(ajudante); // cru não passa pelo proxy de decifra
 
     await this.audit.registrar({
       actorType: ActorType.USUARIO_EMPRESA,
@@ -226,7 +234,7 @@ export class AjudantesService {
         ? {
             OR: [
               { nome: { contains: termo, mode: Prisma.QueryMode.insensitive } },
-              { cpf: { contains: termo } },
+              ...(condicaoBuscaCpf(termo) ? [condicaoBuscaCpf(termo)!] : []),
             ],
           }
         : {}),
@@ -274,7 +282,7 @@ export class AjudantesService {
       await tx.dispositivoVinculadoAjudante.deleteMany({
         where: { ajudanteId: id },
       });
-      return tx.ajudante.update({
+      return revelarPii(await tx.ajudante.update({
         where: { id },
         data: {
           status: StatusMotorista.INATIVO,
@@ -289,7 +297,7 @@ export class AjudantesService {
           status: true,
           excluidoEm: true,
         },
-      });
+      }));
     });
 
     await this.audit.registrar({

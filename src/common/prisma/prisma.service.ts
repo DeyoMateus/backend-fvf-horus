@@ -2,6 +2,12 @@ import { grupoIdSeguro } from './grupo-id-seguro';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { TenantContext } from '../tenant/tenant-context';
+import { cifrarArgumentosPii, revelarPii } from '../crypto/pii-campo.util';
+
+// Rodada 199: modelos com CPF/CNH/telefone cifrados em repouso (ver
+// pii-campo.util.ts). A cifra/decifra é transparente aqui; as poucas
+// escritas por `cru`/`tx` (que não passam por este proxy) tratam à mão.
+const MODELOS_COM_PII = new Set<string>(['motorista', 'ajudante']);
 
 /**
  * Modelos protegidos por Row-Level Security no Postgres (ver migration
@@ -150,10 +156,19 @@ export class PrismaService
           ) {
             return original;
           }
-          return (...args: unknown[]) =>
-            this.executarComRls(`${nomeModelo}.${prop}`, () =>
-              (original as (...a: unknown[]) => unknown).apply(target, args),
-            );
+          return (...args: unknown[]) => {
+            const argsFinais = MODELOS_COM_PII.has(nomeModelo)
+              ? cifrarArgumentosPii(prop, args)
+              : args;
+            // Decifra o resultado (inclusive `include` aninhado de outros
+            // modelos que trazem o motorista/ajudante junto).
+            return this.executarComRls(`${nomeModelo}.${prop}`, () =>
+              (original as (...a: unknown[]) => unknown).apply(
+                target,
+                argsFinais,
+              ),
+            ).then((resultado) => revelarPii(resultado));
+          };
         },
       });
 
