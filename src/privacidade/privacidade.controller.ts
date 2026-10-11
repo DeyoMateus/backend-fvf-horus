@@ -12,7 +12,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { PapelUsuario, StatusSolicitacaoTitular } from '@prisma/client';
+import {
+  PapelUsuario,
+  StatusSolicitacaoTitular,
+  TipoSolicitacaoTitular,
+} from '@prisma/client';
 import type { Motorista } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { UsuarioAutenticado } from '../common/decorators/current-user.decorator';
@@ -79,27 +83,34 @@ export class PrivacidadeMobileController {
   }
 
   @Get('solicitacoes')
-  listar(@Req() req: RequisicaoMotorista) {
-    return this.service.listarDoMotorista(req.motorista.id);
-  }
-
-  @Throttle({ default: { limit: 3, ttl: 60_000 } })
-  @Get('meus-dados')
-  meusDados(@Req() req: RequisicaoMotorista) {
-    return this.service.exportarDadosDoMotorista(req.motorista.id);
-  }
-}
-
-/** Painel (ADMIN/GESTOR). */
-@Controller('privacidade/painel')
-@UseGuards(JwtAuthGuard, RolesGuard)
-export class PrivacidadePainelController {
-  constructor(private readonly service: PrivacidadeService) {}
-
-  @Get('solicitacoes')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
-  solicitacoes(@Query('status') status?: StatusSolicitacaoTitular) {
-    return this.service.listarParaPainel(status);
+  solicitacoes(
+    @Query('status') status?: string,
+    @Query('tipo') tipo?: string,
+    @Query('busca') busca?: string,
+    @Query('dataInicio') dataInicio?: string,
+    @Query('dataFim') dataFim?: string,
+    @Query('vencidas') vencidas?: string,
+    @Query('ordem') ordem?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    const data = (v?: string) => {
+      if (!v) return undefined;
+      const d = new Date(v);
+      return Number.isNaN(d.getTime()) ? undefined : d;
+    };
+    return this.service.listarParaPainel({
+      status: status as StatusSolicitacaoTitular | undefined,
+      tipo: tipo as TipoSolicitacaoTitular | undefined,
+      busca: busca?.slice(0, 80),
+      dataInicio: data(dataInicio),
+      dataFim: data(dataFim),
+      vencidas: vencidas === 'true',
+      ordem: ordem === 'asc' ? 'asc' : 'desc',
+      page: page ? Number(page) : undefined,
+      pageSize: pageSize ? Number(pageSize) : undefined,
+    });
   }
 
   @Get('solicitacoes-pendentes')

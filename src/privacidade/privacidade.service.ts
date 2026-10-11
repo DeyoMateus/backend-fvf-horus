@@ -1,10 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import {
   ActorType,
+  Prisma,
   StatusSolicitacaoTitular,
   TipoDocumentoPrivacidade,
   TipoSolicitacaoTitular,
 } from '@prisma/client';
+import { normalizarPaginacao } from '../common/pagination/pagination.util';
 import { AuditService } from '../common/audit/audit.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import {
@@ -18,6 +20,18 @@ import type {
 } from './dto/privacidade.dto';
 
 const LIMITE_EXPORTACAO = 20000;
+
+export interface FiltroSolicitacoesTitular {
+  status?: StatusSolicitacaoTitular;
+  tipo?: TipoSolicitacaoTitular;
+  busca?: string;
+  dataInicio?: Date;
+  dataFim?: Date;
+  vencidas?: boolean;
+  ordem?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
+}
 
 @Injectable()
 export class PrivacidadeService {
@@ -125,24 +139,100 @@ export class PrivacidadeService {
     });
   }
 
-  /** Painel: pedidos dos titulares do grupo (RLS já restringe ao grupo). */
-  async listarParaPainel(status?: StatusSolicitacaoTitular) {
-    const itens = await this.prisma.solicitacaoTitular.findMany({
-      where:
-        status && Object.values(StatusSolicitacaoTitular).includes(status)
-          ? { status }
-          : undefined,
-      orderBy: [{ status: 'asc' }, { prazoEm: 'asc' }],
-      take: 200,
-      include: { motorista: { select: { id: true, nome: true } } },
-    });
-    const agora = Date.now();
-    return itens.map((i) => ({
-      ...i,
-      vencida:
-        (i.status === 'ABERTA' || i.status === 'EM_ANALISE') &&
-        i.prazoEm.getTime() < agora,
-    }));
+  /**
+   * Painel: pedidos dos titulares do grupo (RLS já restringe ao grupo),
+   * filtrável e paginado no servidor (mesmo padrão da trilha de auditoria).
+   */
+  async listarParaPainel(filtro: FiltroSolicitacoesTitular) {
+    const pag = normalizarPaginacao(filtro.page, filtro.pageSize);
+    const agora = new Date();
+    const condicoes: Prisma.SolicitacaoTitularWhereInput[] = [];
+    if (
+      filtro.status &&
+      Object.values(StatusSolicitacaoTitular).includes(filtro.status)
+    ) {
+      condicoes.push({ status: filtro.status });
+    }
+    if (
+      filtro.tipo &&
+      Object.values(TipoSolicitacaoTitular).includes(filtro.tipo)
+    ) {
+      condicoes.push({ tipo: filtro.tipo });
+    }
+    if (filtro.busca?.trim()) {
+      condicoes.push({
+        motorista: {
+          nome: { contains: filtro.busca.trim(), mode: 'insensitive' },
+        },
+      });
+    }
+    if (filtro.dataInicio || filtro.dataFim) {
+      condicoes.push({
+        createdAt: {
+          ...(filtro.dataInicio ? { gte: filtro.dataInicio } : {}),
+          ...(filtro.dataFim ? { lte: filtro.dataFim } : {}),
+        },
+      });
+    }
+    if (filtro.vencidas) {
+      condicoes.push({
+        status: { in: ['ABERTA', 'EM_ANALISE'] },
+        prazoEm: { lt: agora },
+      });
+    }
+    const where: Prisma.SolicitacaoTitularWhereInput = condicoes.length
+      ? { AND: condicoes }
+      : {};
+
+    const [itens, total, abertas, emAnalise, vencidas] = await Promise.all([
+      this.prisma.solicitacaoTitular.findMany({
+        where,
+        orderBy: { createdAt: filtro.ordem === 'asc' ? 'asc' : 'desc' },
+        skip: pag.skip,
+        take: pag.take,
+        include: { motorista: { select: { id: true, nome: true } } },
+      }),
+      this.prisma.solicitacaoTitular.count({ where }),
+      this.prisma.solicitacaoTitular.count({ where: { status: 'ABERTA' } }),
+      this.prisma.solicitacaoTitular.count({ where: { status: 'EM_ANALISE' } }),
+      this.prisma.solicitacaoTitular.count({
+        where: {
+          status: { in: ['ABERTA', 'EM_ANALISE'] },
+          prazoEm: { lt: agora },
+        },
+      }),
+    ]);
+
+    const idsResp = Array.from(
+      new Set(
+        itens
+          .map((i) => i.respondidaPorUsuarioId)
+          .filter((x): x is string => !!x),
+      ),
+    );
+    const usuarios = idsResp.length
+      ? await this.prisma.usuarioEmpresa.findMany({
+          where: { id: { in: idsResp } },
+          select: { id: true, nome: true },
+        })
+      : [];
+    const nomePorId = new Map(usuarios.map((u) => [u.id, u.nome]));
+
+    return {
+      dados: itens.map((i) => ({
+        ...i,
+        respondidaPorNome: i.respondidaPorUsuarioId
+          ? (nomePorId.get(i.respondidaPorUsuarioId) ?? null)
+          : null,
+        vencida:
+          (i.status === 'ABERTA' || i.status === 'EM_ANALISE') &&
+          i.prazoEm.getTime() < agora.getTime(),
+      })),
+      total,
+      page: pag.page,
+      pageSize: pag.pageSize,
+      resumo: { abertas, emAnalise, vencidas },
+    };
   }
 
   /** Pedidos novos (ainda não tocados) , alimenta o sininho do painel. */
