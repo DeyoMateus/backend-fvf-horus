@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Patch, Query, Req, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Motorista } from '@prisma/client';
 import { MotoristaDeviceGuard } from '../common/guards/motorista-device.guard';
 import { BancoHorasService } from '../banco-horas/banco-horas.service';
@@ -77,6 +78,11 @@ export class MotoristasMobileController {
     private readonly bancoHoras: BancoHorasService,
   ) {}
 
+  // Rodada 204: é a rota que o app usa para CONFERIR o vínculo (ID + chave +
+  // código do aparelho). Limite rígido: 10 por minuto por IP (além do bloqueio
+  // por falhas de autenticação do guard: 30 falhas/IP e 10 falhas/identidade+IP
+  // em 15 min bloqueiam por 15 min).
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Get('meu-perfil')
   obterMeuPerfil(@Req() req: RequisicaoMotorista) {
     return this.motoristasService.obterPerfilProprio(req.motorista.id);

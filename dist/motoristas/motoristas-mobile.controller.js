@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MotoristasMobileController = void 0;
 const common_1 = require("@nestjs/common");
+const throttler_1 = require("@nestjs/throttler");
 const motorista_device_guard_1 = require("../common/guards/motorista-device.guard");
 const banco_horas_service_1 = require("../banco-horas/banco-horas.service");
 const holerite_service_1 = require("../holerite/holerite.service");
@@ -93,6 +94,7 @@ let MotoristasMobileController = class MotoristasMobileController {
 };
 exports.MotoristasMobileController = MotoristasMobileController;
 __decorate([
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 60_000 } }),
     (0, common_1.Get)('meu-perfil'),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
