@@ -8,21 +8,33 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var MotoristaDeviceGuard_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MotoristaDeviceGuard = void 0;
 const common_1 = require("@nestjs/common");
+const core_1 = require("@nestjs/core");
+const permitir_sem_ciencia_decorator_1 = require("../decorators/permitir-sem-ciencia.decorator");
+const client_1 = require("@prisma/client");
+const privacidade_textos_1 = require("../../privacidade/privacidade.textos");
 const crypto_1 = require("crypto");
 const device_key_hash_util_1 = require("../crypto/device-key-hash.util");
 const device_auth_limiter_service_1 = require("../throttler/device-auth-limiter.service");
 const prisma_service_1 = require("../prisma/prisma.service");
 const tenant_context_1 = require("../tenant/tenant-context");
 let MotoristaDeviceGuard = class MotoristaDeviceGuard {
+    static { MotoristaDeviceGuard_1 = this; }
     prisma;
     limiter;
-    constructor(prisma, limiter) {
+    reflector;
+    constructor(prisma, limiter, reflector) {
         this.prisma = prisma;
         this.limiter = limiter;
+        this.reflector = reflector;
     }
+    static cienciasConfirmadas = new Set();
     async canActivate(context) {
         const request = context.switchToHttp().getRequest();
         const ip = request.ip ?? 'desconhecido';
@@ -70,16 +82,44 @@ let MotoristaDeviceGuard = class MotoristaDeviceGuard {
             })).catch(() => undefined);
         }
         await this.limiter.limitarUso(motoristaId);
+        await this.exigirCienciaPrivacidade(context, motorista.id);
         request.motorista = motorista;
         request.deviceUuid = vinculo.deviceUuid;
         request.grupoId = motorista.empresa.grupoId;
         return true;
     }
+    async exigirCienciaPrivacidade(context, motoristaId) {
+        if (process.env.EXIGIR_CIENCIA_PRIVACIDADE === 'false')
+            return;
+        const liberada = this.reflector?.getAllAndOverride(permitir_sem_ciencia_decorator_1.PERMITIR_SEM_CIENCIA_KEY, [context.getHandler(), context.getClass()]);
+        if (liberada)
+            return;
+        const chave = `${motoristaId}:${privacidade_textos_1.VERSAO_DOCUMENTOS}`;
+        if (MotoristaDeviceGuard_1.cienciasConfirmadas.has(chave))
+            return;
+        const total = await tenant_context_1.TenantContext.paraSistema(() => this.prisma.aceitePrivacidade.count({
+            where: { motoristaId, versao: privacidade_textos_1.VERSAO_DOCUMENTOS },
+        }));
+        if (total >= Object.values(client_1.TipoDocumentoPrivacidade).length) {
+            if (MotoristaDeviceGuard_1.cienciasConfirmadas.size > 20000) {
+                MotoristaDeviceGuard_1.cienciasConfirmadas.clear();
+            }
+            MotoristaDeviceGuard_1.cienciasConfirmadas.add(chave);
+            return;
+        }
+        throw new common_1.HttpException({
+            statusCode: 428,
+            code: 'CIENCIA_PRIVACIDADE_PENDENTE',
+            message: 'É necessário ler e dar ciência da Política de Privacidade e dos termos para usar o aplicativo.',
+        }, 428);
+    }
 };
 exports.MotoristaDeviceGuard = MotoristaDeviceGuard;
-exports.MotoristaDeviceGuard = MotoristaDeviceGuard = __decorate([
+exports.MotoristaDeviceGuard = MotoristaDeviceGuard = MotoristaDeviceGuard_1 = __decorate([
     (0, common_1.Injectable)(),
+    __param(2, (0, common_1.Optional)()),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        device_auth_limiter_service_1.DeviceAuthLimiterService])
+        device_auth_limiter_service_1.DeviceAuthLimiterService,
+        core_1.Reflector])
 ], MotoristaDeviceGuard);
 //# sourceMappingURL=motorista-device.guard.js.map

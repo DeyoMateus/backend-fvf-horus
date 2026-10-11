@@ -167,9 +167,9 @@ export declare class PrivacidadeMobileController {
         cienciasDePrivacidade: {
             id: string;
             motoristaId: string;
+            versao: string;
             aceitoEm: Date;
             tipoDocumento: import("@prisma/client").$Enums.TipoDocumentoPrivacidade;
-            versao: string;
         }[];
         pedidosDoTitular: {
             id: string;

@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const throttler_1 = require("@nestjs/throttler");
 const client_1 = require("@prisma/client");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
+const permitir_sem_ciencia_decorator_1 = require("../common/decorators/permitir-sem-ciencia.decorator");
 const roles_decorator_1 = require("../common/decorators/roles.decorator");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const motorista_device_guard_1 = require("../common/guards/motorista-device.guard");
@@ -108,6 +109,7 @@ __decorate([
 exports.PrivacidadeMobileController = PrivacidadeMobileController = __decorate([
     (0, common_1.Controller)('dispositivo/privacidade'),
     (0, common_1.UseGuards)(motorista_device_guard_1.MotoristaDeviceGuard),
+    (0, permitir_sem_ciencia_decorator_1.PermitirSemCiencia)(),
     __metadata("design:paramtypes", [privacidade_service_1.PrivacidadeService])
 ], PrivacidadeMobileController);
 let PrivacidadePainelController = class PrivacidadePainelController {
