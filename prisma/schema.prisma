@@ -280,6 +280,13 @@ model Empresa {
   /// motorista segue o fuso onde ele está (`RegistroJornada.fusoOffsetMin`).
   fusoHorario String @default("America/Sao_Paulo")
 
+  /// Rodada 206 (LGPD art. 41): encarregado pelo tratamento de dados
+  /// pessoais da transportadora (controladora). Aparece para o motorista
+  /// no app e na política de privacidade.
+  encarregadoNome     String?
+  encarregadoEmail    String?
+  encarregadoTelefone String?
+
   grupoId String
   grupo   Grupo  @relation(fields: [grupoId], references: [id])
 
@@ -457,6 +464,8 @@ model Motorista {
   amostrasHoraConfiavel         AmostraHoraConfiavel[]
   verificacoesRelogioPendentes  VerificacaoRelogioPendente[]
   integridadeAceites            IntegridadeAceite[]
+  aceitesPrivacidade            AceitePrivacidade[]
+  solicitacoesTitular           SolicitacaoTitular[]
 
   @@map("motoristas")
 }
@@ -1682,4 +1691,76 @@ model RegistroJornadaAjudante {
   @@unique([ajudanteId, sequencial])
   @@index([ajudanteId, timestampEvento])
   @@map("registros_jornada_ajudante")
+}
+
+
+// ==========================================
+// LGPD (Rodada 206)
+// ==========================================
+
+enum TipoDocumentoPrivacidade {
+  POLITICA_PRIVACIDADE
+  TERMO_GPS
+  TERMO_DADOS_PESSOAIS
+}
+
+/// Registro de ciência do motorista (append-only: nunca editado nem
+/// apagado). Não é a base legal do tratamento (que é contrato de trabalho
+/// e obrigação legal), é prova de que o titular foi informado, com a
+/// versão exata do documento que leu.
+model AceitePrivacidade {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  tipoDocumento TipoDocumentoPrivacidade
+  versao        String
+  aceitoEm      DateTime @default(now())
+
+  @@unique([motoristaId, tipoDocumento, versao])
+  @@map("aceites_privacidade")
+}
+
+enum TipoSolicitacaoTitular {
+  CONFIRMACAO_TRATAMENTO
+  ACESSO
+  CORRECAO
+  ANONIMIZACAO_ELIMINACAO
+  PORTABILIDADE
+  INFORMACAO_COMPARTILHAMENTO
+  REVOGACAO_CONSENTIMENTO
+  REVISAO_DECISAO_AUTOMATIZADA
+  OPOSICAO
+}
+
+enum StatusSolicitacaoTitular {
+  ABERTA
+  EM_ANALISE
+  ATENDIDA
+  NEGADA_COM_JUSTIFICATIVA
+}
+
+/// Pedido do titular (LGPD art. 18). Prazo de resposta: 15 dias (art. 19, II).
+model SolicitacaoTitular {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  tipo      TipoSolicitacaoTitular
+  descricao String?
+  status    StatusSolicitacaoTitular @default(ABERTA)
+
+  prazoEm DateTime
+  resposta String?
+  respondidaEm DateTime?
+  respondidaPorUsuarioId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([motoristaId, createdAt])
+  @@index([status, prazoEm])
+  @@map("solicitacoes_titular")
 }

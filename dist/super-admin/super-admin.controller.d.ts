@@ -88,6 +88,9 @@ export declare class SuperAdminController {
         razaoSocial: string;
         registroInpiAfd: string | null;
         fusoHorario: string;
+        encarregadoNome: string | null;
+        encarregadoEmail: string | null;
+        encarregadoTelefone: string | null;
         regraSindicalId: string | null;
     }>;
     atualizarStatusEmpresa(id: string, dto: AtualizarStatusEmpresaDto, superAdmin: SuperAdminAutenticado): Promise<{
@@ -100,6 +103,9 @@ export declare class SuperAdminController {
         razaoSocial: string;
         registroInpiAfd: string | null;
         fusoHorario: string;
+        encarregadoNome: string | null;
+        encarregadoEmail: string | null;
+        encarregadoTelefone: string | null;
         regraSindicalId: string | null;
     }>;
     atualizarDestinatariosWhatsapp(id: string, dto: DestinatariosWhatsappUsuarioDto, superAdmin: SuperAdminAutenticado): Promise<{

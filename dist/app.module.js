@@ -46,6 +46,7 @@ const solicitacoes_ajuste_ponto_module_1 = require("./solicitacoes-ajuste-ponto/
 const usuarios_empresa_module_1 = require("./usuarios-empresa/usuarios-empresa.module");
 const super_admin_module_1 = require("./super-admin/super-admin.module");
 const auditoria_module_1 = require("./auditoria/auditoria.module");
+const privacidade_module_1 = require("./privacidade/privacidade.module");
 const ajudantes_module_1 = require("./ajudantes/ajudantes.module");
 const registros_jornada_ajudante_module_1 = require("./registros-jornada-ajudante/registros-jornada-ajudante.module");
 const dossie_cobranca_module_1 = require("./dossie-cobranca/dossie-cobranca.module");
@@ -111,6 +112,7 @@ exports.AppModule = AppModule = __decorate([
             usuarios_empresa_module_1.UsuariosEmpresaModule,
             super_admin_module_1.SuperAdminModule,
             auditoria_module_1.AuditoriaModule,
+            privacidade_module_1.PrivacidadeModule,
             ajudantes_module_1.AjudantesModule,
             registros_jornada_ajudante_module_1.RegistrosJornadaAjudanteModule,
             dossie_cobranca_module_1.DossieCobrancaModule,

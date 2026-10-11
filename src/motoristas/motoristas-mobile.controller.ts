@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Patch, Query, Req, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Motorista } from '@prisma/client';
+import { PermitirSemCiencia } from '../common/decorators/permitir-sem-ciencia.decorator';
 import { MotoristaDeviceGuard } from '../common/guards/motorista-device.guard';
 import { BancoHorasService } from '../banco-horas/banco-horas.service';
 import { HoleriteService } from '../holerite/holerite.service';
@@ -83,6 +84,7 @@ export class MotoristasMobileController {
   // por falhas de autenticação do guard: 30 falhas/IP e 10 falhas/identidade+IP
   // em 15 min bloqueiam por 15 min).
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @PermitirSemCiencia()
   @Get('meu-perfil')
   obterMeuPerfil(@Req() req: RequisicaoMotorista) {
     return this.motoristasService.obterPerfilProprio(req.motorista.id);

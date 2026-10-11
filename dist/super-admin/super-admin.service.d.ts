@@ -86,6 +86,9 @@ export declare class SuperAdminService {
         razaoSocial: string;
         registroInpiAfd: string | null;
         fusoHorario: string;
+        encarregadoNome: string | null;
+        encarregadoEmail: string | null;
+        encarregadoTelefone: string | null;
         regraSindicalId: string | null;
     }>;
     atualizarStatusEmpresa(empresaId: string, ativo: boolean, superAdminId: string): Promise<{
@@ -98,6 +101,9 @@ export declare class SuperAdminService {
         razaoSocial: string;
         registroInpiAfd: string | null;
         fusoHorario: string;
+        encarregadoNome: string | null;
+        encarregadoEmail: string | null;
+        encarregadoTelefone: string | null;
         regraSindicalId: string | null;
     }>;
     atualizarUsuario(usuarioId: string, dto: UpdateUsuarioSuperAdminDto, superAdminId: string): Promise<{

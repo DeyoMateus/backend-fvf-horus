@@ -15,6 +15,9 @@ export declare class EmpresasService {
         razaoSocial: string;
         registroInpiAfd: string | null;
         fusoHorario: string;
+        encarregadoNome: string | null;
+        encarregadoEmail: string | null;
+        encarregadoTelefone: string | null;
         regraSindicalId: string | null;
     }>;
     findById(id: string, grupoIdSolicitante: string): Promise<{
@@ -27,6 +30,9 @@ export declare class EmpresasService {
         razaoSocial: string;
         registroInpiAfd: string | null;
         fusoHorario: string;
+        encarregadoNome: string | null;
+        encarregadoEmail: string | null;
+        encarregadoTelefone: string | null;
         regraSindicalId: string | null;
     }>;
     list(grupoIdSolicitante: string): import("@prisma/client").Prisma.PrismaPromise<({
@@ -44,6 +50,9 @@ export declare class EmpresasService {
         razaoSocial: string;
         registroInpiAfd: string | null;
         fusoHorario: string;
+        encarregadoNome: string | null;
+        encarregadoEmail: string | null;
+        encarregadoTelefone: string | null;
         regraSindicalId: string | null;
     })[]>;
     vincularRegraSindical(empresaId: string, regraSindicalId: string | null, grupoIdSolicitante: string, actorId?: string): Promise<{
@@ -61,6 +70,9 @@ export declare class EmpresasService {
         razaoSocial: string;
         registroInpiAfd: string | null;
         fusoHorario: string;
+        encarregadoNome: string | null;
+        encarregadoEmail: string | null;
+        encarregadoTelefone: string | null;
         regraSindicalId: string | null;
     }>;
 }

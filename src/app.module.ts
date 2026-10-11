@@ -37,6 +37,7 @@ import { SolicitacoesAjustePontoModule } from './solicitacoes-ajuste-ponto/solic
 import { UsuariosEmpresaModule } from './usuarios-empresa/usuarios-empresa.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { AuditoriaModule } from './auditoria/auditoria.module';
+import { PrivacidadeModule } from './privacidade/privacidade.module';
 import { AjudantesModule } from './ajudantes/ajudantes.module';
 import { RegistrosJornadaAjudanteModule } from './registros-jornada-ajudante/registros-jornada-ajudante.module';
 import { DossieCobrancaModule } from './dossie-cobranca/dossie-cobranca.module';
@@ -108,6 +109,7 @@ import { FusoClienteInterceptor } from './common/fuso/fuso-cliente.interceptor';
     UsuariosEmpresaModule,
     SuperAdminModule,
     AuditoriaModule,
+    PrivacidadeModule,
     AjudantesModule,
     RegistrosJornadaAjudanteModule,
     DossieCobrancaModule,
