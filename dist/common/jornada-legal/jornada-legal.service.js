@@ -357,7 +357,7 @@ let JornadaLegalService = class JornadaLegalService {
             return null;
         if (alertasExistentesTipos.has(client_1.TipoAlertaJornada.DESCANSO_INTERJORNADA_INSUFICIENTE))
             return null;
-        const ordenados = [...registros].sort(ordenacao_temporal_util_1.compararPorTimestampEvento);
+        const ordenados = this.removerJornadasVazias([...registros].sort(ordenacao_temporal_util_1.compararPorTimestampEvento), registroRecemCriado.id);
         const idxAtual = ordenados.findIndex((r) => r.id === registroRecemCriado.id);
         if (idxAtual <= 0)
             return null;
@@ -390,6 +390,22 @@ let JornadaLegalService = class JornadaLegalService {
             janelaFim: registroRecemCriado.timestampEvento,
             minutosAcumulados: Math.round(descansoMin),
         };
+    }
+    removerJornadasVazias(ordenados, manterId) {
+        const resultado = [];
+        for (let i = 0; i < ordenados.length; i++) {
+            const r = ordenados[i];
+            const prox = ordenados[i + 1];
+            if (r.tipoEvento === client_1.TipoEvento.INICIO_JORNADA &&
+                prox?.tipoEvento === client_1.TipoEvento.FIM_JORNADA &&
+                r.id !== manterId &&
+                prox.id !== manterId) {
+                i++;
+                continue;
+            }
+            resultado.push(r);
+        }
+        return resultado;
     }
     recortarJornadaLegal(registros, agora) {
         const ordenados = [...registros]
