@@ -24,6 +24,7 @@ const fechamento_holerite_dto_1 = require("./dto/fechamento-holerite.dto");
 const holerite_pdf_util_1 = require("./holerite-pdf.util");
 const holerite_service_1 = require("./holerite.service");
 const zip_util_1 = require("../common/zip/zip.util");
+const arquivo_seguro_util_1 = require("../common/arquivos/arquivo-seguro.util");
 let FechamentoHoleriteController = class FechamentoHoleriteController {
     holeriteService;
     constructor(holeriteService) {
@@ -49,7 +50,7 @@ let FechamentoHoleriteController = class FechamentoHoleriteController {
             const pdf = await (0, holerite_pdf_util_1.gerarPdfHolerite)(itens[0].motorista, itens[0].empresa, itens[0].resultado);
             res.set({
                 'Content-Type': 'application/pdf',
-                'Content-Disposition': `attachment; filename="holerite-${itens[0].motorista.nome.replace(/\s+/g, '-')}-${sufixoPeriodo}.pdf"`,
+                'Content-Disposition': (0, arquivo_seguro_util_1.contentDispositionAnexo)(`holerite-${itens[0].motorista.nome.replace(/\s+/g, '-')}-${sufixoPeriodo}.pdf`),
                 'Content-Length': pdf.length,
             });
             res.send(pdf);

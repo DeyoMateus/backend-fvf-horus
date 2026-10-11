@@ -76,6 +76,7 @@ export declare class RegistrosJornadaService {
     private avaliarLimitesLegais;
     verificarJornadasAbertasProativamente(): Promise<number>;
     verificarEAgendarProximoMotorista(motoristaId: string): Promise<void>;
+    private historicoParaMotorDeAlertas;
     private agendarProximaVerificacaoSeAplicavel;
     private avaliarAntifraude;
     private avaliarFolgaConflitante;

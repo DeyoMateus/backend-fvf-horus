@@ -23,7 +23,7 @@ exports.TIPOS_ALERTA_RISCO_FRAUDE = [
     client_1.TipoAlertaJornada.INTEGRIDADE_DISPOSITIVO_SUSPEITA,
     client_1.TipoAlertaJornada.INTEGRIDADE_CADEIA_VIOLADA,
 ];
-const HORAS_JORNADA_ABERTA_ALERTA = 16;
+const HORAS_JORNADA_ABERTA_ALERTA = 14;
 let DashboardService = class DashboardService {
     prisma;
     constructor(prisma) {
@@ -99,7 +99,25 @@ let DashboardService = class DashboardService {
             }
         }
         const jornadasEmAberto = await this.jornadasEmAbertoComInicio(grupoId);
+        const encerradasPeloGestor = new Set();
+        if (jornadasEmAberto.length > 0) {
+            const ajustesFim = await this.prisma.tratamentoPonto.findMany({
+                where: {
+                    tipoEvento: 'FIM_JORNADA',
+                    motoristaId: { in: jornadasEmAberto.map((j) => j.motoristaId) },
+                },
+                select: { motoristaId: true, timestampEvento: true },
+            });
+            for (const j of jornadasEmAberto) {
+                if (ajustesFim.some((a) => a.motoristaId === j.motoristaId &&
+                    a.timestampEvento.getTime() >= j.inicioJornada.getTime())) {
+                    encerradasPeloGestor.add(j.motoristaId);
+                }
+            }
+        }
         for (const j of jornadasEmAberto) {
+            if (encerradasPeloGestor.has(j.motoristaId))
+                continue;
             const horasAberta = (agora.getTime() - j.inicioJornada.getTime()) / 3_600_000;
             if (horasAberta >= HORAS_JORNADA_ABERTA_ALERTA) {
                 jornadasAbertasHaMuitoTempo.push({

@@ -13,16 +13,16 @@ export declare class MotoristasMobileController {
     private readonly bancoHoras;
     constructor(motoristasService: MotoristasService, holerite: HoleriteService, bancoHoras: BancoHorasService);
     obterMeuPerfil(req: RequisicaoMotorista): Promise<{
-        id: string;
-        nome: string;
         cpf: string;
         telefone: string | null;
+        id: string;
+        nome: string;
     }>;
     atualizarMeuPerfil(req: RequisicaoMotorista, dto: AtualizarPerfilMotoristaDto): Promise<{
-        id: string;
-        nome: string;
         cpf: string;
         telefone: string | null;
+        id: string;
+        nome: string;
     }>;
     minhasHoras(req: RequisicaoMotorista, anoQuery?: string, mesQuery?: string): Promise<{
         periodoInicio: Date;

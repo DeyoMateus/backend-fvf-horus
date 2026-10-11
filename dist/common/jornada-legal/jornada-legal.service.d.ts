@@ -24,6 +24,9 @@ export declare class JornadaLegalService {
     inicioDaDirecaoContinua(registros: RegistroJornada[], agora: Date): Date | null;
     private calcularAcumuladosDirecao;
     private avaliarDescansoInterjornada;
+    private recortarJornadaLegal;
+    private cortarPorDescansoImplicito;
+    private intervalosDeDirecao;
     private recortarJornadaCorrente;
     private construirIntervalos;
     private avaliarTempoIndefinido;

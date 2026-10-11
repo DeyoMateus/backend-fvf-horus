@@ -20,13 +20,13 @@ export declare class AjudantesController {
     }>;
     list(user: UsuarioAutenticado, page?: string, pageSize?: string, busca?: string, incluirExcluidos?: string): Promise<{
         dados: {
+            cpf: string;
             dispositivoVinculado: {
                 deviceUuid: string;
             } | null;
             id: string;
             createdAt: Date;
             nome: string;
-            cpf: string;
             status: import("@prisma/client").$Enums.StatusMotorista;
             certificadoValidoAte: Date | null;
             excluidoEm: Date | null;
@@ -36,6 +36,8 @@ export declare class AjudantesController {
         pageSize: number;
     }>;
     findOne(id: string, user: UsuarioAutenticado): Promise<{
+        cpf: string;
+        telefone: string | null;
         dispositivoVinculado: {
             deviceUuid: string;
             vinculadoEm: Date;
@@ -45,9 +47,7 @@ export declare class AjudantesController {
         createdAt: Date;
         nome: string;
         updatedAt: Date;
-        cpf: string;
         status: import("@prisma/client").$Enums.StatusMotorista;
-        telefone: string | null;
         empresaId: string;
         hashGenesis: string;
         certificadoFingerprint: string | null;
@@ -56,18 +56,18 @@ export declare class AjudantesController {
         motivoExclusao: string | null;
     }>;
     atualizarStatus(id: string, dto: AtualizarStatusAjudanteDto, user: UsuarioAutenticado): Promise<{
+        cpf: string;
         id: string;
         createdAt: Date;
         nome: string;
         updatedAt: Date;
-        cpf: string;
         status: import("@prisma/client").$Enums.StatusMotorista;
         empresaId: string;
     }>;
     excluir(id: string, dto: ExcluirAjudanteDto, user: UsuarioAutenticado): Promise<{
+        cpf: string;
         id: string;
         nome: string;
-        cpf: string;
         status: import("@prisma/client").$Enums.StatusMotorista;
         excluidoEm: Date | null;
     }>;

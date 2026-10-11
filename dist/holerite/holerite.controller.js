@@ -23,6 +23,7 @@ const prisma_service_1 = require("../common/prisma/prisma.service");
 const gerar_holerite_dto_1 = require("./dto/gerar-holerite.dto");
 const holerite_pdf_util_1 = require("./holerite-pdf.util");
 const holerite_service_1 = require("./holerite.service");
+const arquivo_seguro_util_1 = require("../common/arquivos/arquivo-seguro.util");
 const INCLUDE_EMPRESA_DOCUMENTO = {
     empresa: { select: { razaoSocial: true, cnpj: true } },
 };
@@ -56,7 +57,7 @@ let HoleriteController = class HoleriteController {
         const pdf = await (0, holerite_pdf_util_1.gerarPdfHolerite)(motorista, motorista.empresa, resultado);
         res.set({
             'Content-Type': 'application/pdf',
-            'Content-Disposition': `attachment; filename="holerite-${motorista.nome.replace(/\s+/g, '-')}-${query.inicio.slice(0, 10)}-a-${query.fim.slice(0, 10)}.pdf"`,
+            'Content-Disposition': (0, arquivo_seguro_util_1.contentDispositionAnexo)(`holerite-${motorista.nome.replace(/\s+/g, '-')}-${query.inicio.slice(0, 10)}-a-${query.fim.slice(0, 10)}.pdf`),
             'Content-Length': pdf.length,
         });
         res.send(pdf);

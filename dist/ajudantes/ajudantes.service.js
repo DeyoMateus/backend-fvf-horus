@@ -22,6 +22,7 @@ const envelope_encryption_service_1 = require("../common/crypto/envelope-encrypt
 const hash_chain_service_1 = require("../common/hash-chain/hash-chain.service");
 const prisma_service_1 = require("../common/prisma/prisma.service");
 const pagination_util_1 = require("../common/pagination/pagination.util");
+const pii_campo_util_1 = require("../common/crypto/pii-campo.util");
 const device_key_hash_util_1 = require("../common/crypto/device-key-hash.util");
 let AjudantesService = class AjudantesService {
     prisma;
@@ -74,8 +75,10 @@ let AjudantesService = class AjudantesService {
                 data: {
                     id,
                     nome: dto.nome,
-                    cpf: dto.cpf,
-                    telefone: dto.telefone ?? null,
+                    ...(0, pii_campo_util_1.protegerDadosPii)({
+                        cpf: dto.cpf,
+                        telefone: dto.telefone ?? null,
+                    }),
                     status: client_1.StatusMotorista.ATIVO,
                     empresaId,
                     hashGenesis,
@@ -99,6 +102,7 @@ let AjudantesService = class AjudantesService {
                 },
             }),
         ]));
+        (0, pii_campo_util_1.revelarPii)(ajudante);
         await this.audit.registrar({
             actorType: client_1.ActorType.USUARIO_EMPRESA,
             actorId: actorId ?? null,
@@ -181,7 +185,7 @@ let AjudantesService = class AjudantesService {
                 ? {
                     OR: [
                         { nome: { contains: termo, mode: client_1.Prisma.QueryMode.insensitive } },
-                        { cpf: { contains: termo } },
+                        ...((0, pii_campo_util_1.condicaoBuscaCpf)(termo) ? [(0, pii_campo_util_1.condicaoBuscaCpf)(termo)] : []),
                     ],
                 }
                 : {}),
@@ -222,7 +226,7 @@ let AjudantesService = class AjudantesService {
             await tx.dispositivoVinculadoAjudante.deleteMany({
                 where: { ajudanteId: id },
             });
-            return tx.ajudante.update({
+            return (0, pii_campo_util_1.revelarPii)(await tx.ajudante.update({
                 where: { id },
                 data: {
                     status: client_1.StatusMotorista.INATIVO,
@@ -237,7 +241,7 @@ let AjudantesService = class AjudantesService {
                     status: true,
                     excluidoEm: true,
                 },
-            });
+            }));
         });
         await this.audit.registrar({
             actorType: client_1.ActorType.USUARIO_EMPRESA,

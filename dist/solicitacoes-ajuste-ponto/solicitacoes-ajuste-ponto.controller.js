@@ -21,6 +21,7 @@ const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../common/guards/roles.guard");
 const decidir_solicitacao_dto_1 = require("./dto/decidir-solicitacao.dto");
 const solicitacoes_ajuste_ponto_service_1 = require("./solicitacoes-ajuste-ponto.service");
+const arquivo_seguro_util_1 = require("../common/arquivos/arquivo-seguro.util");
 let SolicitacoesAjustePontoPorMotoristaController = class SolicitacoesAjustePontoPorMotoristaController {
     solicitacoesService;
     constructor(solicitacoesService) {
@@ -66,7 +67,7 @@ let SolicitacoesAjustePontoGeralController = class SolicitacoesAjustePontoGeralC
         const evidencia = await this.solicitacoesService.baixarEvidenciaDoPainel(evidenciaId, user.grupoId);
         res.set({
             'Content-Type': evidencia.contentType,
-            'Content-Disposition': `attachment; filename="${evidencia.nomeArquivo}"`,
+            'Content-Disposition': (0, arquivo_seguro_util_1.contentDispositionAnexo)(evidencia.nomeArquivo),
         });
         res.send(evidencia.conteudo);
     }

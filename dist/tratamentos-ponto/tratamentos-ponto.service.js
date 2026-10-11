@@ -22,6 +22,7 @@ const storage_service_1 = require("../common/storage/storage.service");
 const tenant_service_1 = require("../common/tenant/tenant.service");
 const registros_jornada_service_1 = require("../registros-jornada/registros-jornada.service");
 const validacao_sequencia_ajuste_1 = require("./validacao-sequencia-ajuste");
+const arquivo_seguro_util_1 = require("../common/arquivos/arquivo-seguro.util");
 const TAMANHO_MAXIMO_EVIDENCIA_BYTES = 25 * 1024 * 1024;
 const MAXIMO_EVIDENCIAS_POR_TRATAMENTO = 4;
 let TratamentosPontoService = class TratamentosPontoService {
@@ -86,7 +87,7 @@ let TratamentosPontoService = class TratamentosPontoService {
             return null;
         }
     }
-    async validarEncaixeNaJornada(motoristaId, tipoEvento, timestampEvento) {
+    async validarEncaixeNaJornada(motoristaId, tipoEvento, timestampEvento, extras = []) {
         const [regAnt, tratAnt, regPost, tratPost] = await Promise.all([
             this.prisma.registroJornada.findMany({
                 where: { motoristaId, timestampEvento: { lte: timestampEvento } },
@@ -114,9 +115,68 @@ let TratamentosPontoService = class TratamentosPontoService {
             }),
         ]);
         const porHorario = (a, b) => a.timestampEvento.getTime() - b.timestampEvento.getTime();
-        const anteriores = [...regAnt, ...tratAnt].sort(porHorario);
-        const posteriores = [...regPost, ...tratPost].sort(porHorario);
+        const extrasAnt = extras.filter((e) => e.timestampEvento.getTime() <= timestampEvento.getTime());
+        const extrasPost = extras.filter((e) => e.timestampEvento.getTime() > timestampEvento.getTime());
+        const anteriores = [...regAnt, ...tratAnt, ...extrasAnt].sort(porHorario);
+        const posteriores = [...regPost, ...tratPost, ...extrasPost].sort(porHorario);
         return (0, validacao_sequencia_ajuste_1.validarSequenciaAjuste)(tipoEvento, anteriores, posteriores);
+    }
+    async createJornada(motoristaId, dto, usuarioId, grupoIdSolicitante) {
+        await this.tenant.verificarMotoristaNoGrupo(motoristaId, grupoIdSolicitante);
+        await this.tenant.verificarMotoristaAtivo(motoristaId);
+        const eventos = dto.eventos.map((e) => ({
+            tipoEvento: e.tipoEvento,
+            timestampEvento: new Date(e.timestampEvento),
+        }));
+        if (eventos.some((e) => Number.isNaN(e.timestampEvento.getTime()))) {
+            throw new common_1.BadRequestException('Há um horário inválido na jornada.');
+        }
+        for (let i = 1; i < eventos.length; i++) {
+            if (eventos[i].timestampEvento.getTime() <=
+                eventos[i - 1].timestampEvento.getTime()) {
+                throw new common_1.BadRequestException(`O evento ${i + 1} precisa ter horário depois do evento ${i}. Confira a ordem e os horários.`);
+            }
+        }
+        if (eventos[0].tipoEvento !== 'INICIO_JORNADA') {
+            throw new common_1.BadRequestException('A jornada precisa começar com "Início de jornada".');
+        }
+        if (eventos[eventos.length - 1].tipoEvento !== 'FIM_JORNADA') {
+            throw new common_1.BadRequestException('A jornada precisa terminar com "Fim de jornada".');
+        }
+        const spanMs = eventos[eventos.length - 1].timestampEvento.getTime() -
+            eventos[0].timestampEvento.getTime();
+        if (spanMs > 48 * 3_600_000) {
+            throw new common_1.BadRequestException('Uma jornada lançada de uma vez não pode passar de 48 horas. Confira as datas e horários.');
+        }
+        for (let i = 0; i < eventos.length; i++) {
+            const outros = eventos.filter((_, j) => j !== i);
+            const r = await this.validarEncaixeNaJornada(motoristaId, eventos[i].tipoEvento, eventos[i].timestampEvento, outros);
+            if (!r.ok) {
+                throw new common_1.BadRequestException(`Evento ${i + 1} da jornada: ${r.mensagem}`);
+            }
+        }
+        const criados = [];
+        for (const e of eventos) {
+            criados.push(await this.criarRegistroAncorado(motoristaId, e.tipoEvento, e.timestampEvento, dto.motivo, usuarioId, undefined, dto.fusoOffsetMin));
+        }
+        await this.audit.registrar({
+            actorType: client_1.ActorType.USUARIO_EMPRESA,
+            actorId: usuarioId,
+            acao: 'TRATAMENTO_PONTO_JORNADA_CRIADA',
+            entidade: 'TratamentoPonto',
+            entidadeId: criados[0].id,
+            detalhes: {
+                motoristaId,
+                motivo: dto.motivo,
+                tratamentoIds: criados.map((c) => c.id),
+                eventos: eventos.map((e) => ({
+                    tipoEvento: e.tipoEvento,
+                    timestampEvento: e.timestampEvento.toISOString(),
+                })),
+            },
+        });
+        await this.push.notificarMotorista(motoristaId, 'Ajuste no seu ponto', `A empresa lançou uma jornada inteira (${eventos.length} registros) referente a ${(0, fuso_brasil_util_1.marcarHorario)(eventos[0].timestampEvento)}. Toque para ver o motivo e os comprovantes.`, { tipo: 'TRATAMENTO_PONTO', tratamentoId: criados[0].id });
+        return criados;
     }
     async contextoDoAjuste(motoristaId, timestampEvento, grupoIdSolicitante) {
         await this.tenant.verificarMotoristaNoGrupo(motoristaId, grupoIdSolicitante);
@@ -225,6 +285,11 @@ let TratamentosPontoService = class TratamentosPontoService {
         });
     }
     async anexarEvidencia(tratamentoId, arquivo, usuarioId, grupoIdSolicitante) {
+        const tipoImagem = (0, arquivo_seguro_util_1.detectarTipoImagem)(arquivo.buffer);
+        if (!tipoImagem) {
+            throw new common_1.BadRequestException(arquivo_seguro_util_1.MENSAGEM_SO_IMAGEM);
+        }
+        const nomeSeguro = (0, arquivo_seguro_util_1.nomeComExtensaoDoTipo)(arquivo.originalname, tipoImagem);
         if (arquivo.size > TAMANHO_MAXIMO_EVIDENCIA_BYTES) {
             throw new common_1.BadRequestException('Arquivo maior que o limite de 25MB');
         }
@@ -244,9 +309,9 @@ let TratamentosPontoService = class TratamentosPontoService {
         if (!this.storage.configurado()) {
             throw new common_1.BadRequestException('Armazenamento de evidências (Cloudflare R2) não está configurado , peça para o administrador configurar as variáveis R2_* antes de anexar evidências.');
         }
-        const chaveR2 = `tratamentos-ponto/${tratamentoId}/${(0, crypto_1.randomUUID)()}-${arquivo.originalname}`;
+        const chaveR2 = `tratamentos-ponto/${tratamentoId}/${(0, crypto_1.randomUUID)()}-${nomeSeguro}`;
         try {
-            await this.storage.subirObjeto(chaveR2, arquivo.buffer, arquivo.mimetype);
+            await this.storage.subirObjeto(chaveR2, arquivo.buffer, tipoImagem.mime);
         }
         catch (erro) {
             this.storage.logFalhaUpload(chaveR2, erro);
@@ -255,8 +320,8 @@ let TratamentosPontoService = class TratamentosPontoService {
         const evidencia = await this.prisma.tratamentoPontoEvidencia.create({
             data: {
                 tratamentoId,
-                nomeArquivo: arquivo.originalname,
-                contentType: arquivo.mimetype,
+                nomeArquivo: nomeSeguro,
+                contentType: tipoImagem.mime,
                 tamanhoBytes: arquivo.size,
                 chaveStorage: chaveR2,
                 conteudo: null,
@@ -270,7 +335,7 @@ let TratamentosPontoService = class TratamentosPontoService {
             entidadeId: evidencia.id,
             detalhes: {
                 tratamentoId,
-                nomeArquivo: arquivo.originalname,
+                nomeArquivo: nomeSeguro,
                 tamanhoBytes: arquivo.size,
             },
         });

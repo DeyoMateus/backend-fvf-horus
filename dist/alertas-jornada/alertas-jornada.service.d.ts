@@ -27,9 +27,9 @@ export declare class AlertasJornadaService {
     }[]>;
     listByGrupo(grupoId: string, apenasNaoVisualizados?: boolean): import("@prisma/client").Prisma.PrismaPromise<({
         motorista: {
+            cpf: string;
             id: string;
             nome: string;
-            cpf: string;
         };
     } & {
         id: string;
@@ -50,6 +50,7 @@ export declare class AlertasJornadaService {
         tratadoPorUsuarioId: string | null;
         tratamentoObservacao: string | null;
     })[]>;
+    private exigirJornadaEncerradaParaDispensar;
     marcarVisualizado(alertaId: string, usuarioId: string, grupoIdSolicitante: string): Promise<{
         id: string;
         detalhes: import("@prisma/client/runtime/library").JsonValue | null;

@@ -20,8 +20,10 @@ const current_user_decorator_1 = require("../common/decorators/current-user.deco
 const roles_decorator_1 = require("../common/decorators/roles.decorator");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../common/guards/roles.guard");
+const create_jornada_tratamento_dto_1 = require("./dto/create-jornada-tratamento.dto");
 const create_tratamento_ponto_dto_1 = require("./dto/create-tratamento-ponto.dto");
 const tratamentos_ponto_service_1 = require("./tratamentos-ponto.service");
+const arquivo_seguro_util_1 = require("../common/arquivos/arquivo-seguro.util");
 const TAMANHO_MAXIMO_EVIDENCIA_BYTES = 25 * 1024 * 1024;
 let TratamentosPontoController = class TratamentosPontoController {
     tratamentosService;
@@ -30,6 +32,9 @@ let TratamentosPontoController = class TratamentosPontoController {
     }
     create(motoristaId, dto, user) {
         return this.tratamentosService.create(motoristaId, dto, user.sub, user.grupoId);
+    }
+    createJornada(motoristaId, dto, user) {
+        return this.tratamentosService.createJornada(motoristaId, dto, user.sub, user.grupoId);
     }
     contexto(motoristaId, timestamp, user) {
         const data = new Date(timestamp);
@@ -50,7 +55,7 @@ let TratamentosPontoController = class TratamentosPontoController {
         const evidencia = await this.tratamentosService.baixarEvidencia(evidenciaId);
         res.set({
             'Content-Type': evidencia.contentType,
-            'Content-Disposition': `attachment; filename="${evidencia.nomeArquivo}"`,
+            'Content-Disposition': (0, arquivo_seguro_util_1.contentDispositionAnexo)(evidencia.nomeArquivo),
         });
         res.send(evidencia.conteudo);
     }
@@ -69,6 +74,15 @@ __decorate([
     __metadata("design:paramtypes", [String, create_tratamento_ponto_dto_1.CreateTratamentoPontoDto, Object]),
     __metadata("design:returntype", void 0)
 ], TratamentosPontoController.prototype, "create", null);
+__decorate([
+    (0, common_1.Post)('jornada'),
+    __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, create_jornada_tratamento_dto_1.CreateJornadaTratamentoDto, Object]),
+    __metadata("design:returntype", void 0)
+], TratamentosPontoController.prototype, "createJornada", null);
 __decorate([
     (0, common_1.Get)('contexto'),
     __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),

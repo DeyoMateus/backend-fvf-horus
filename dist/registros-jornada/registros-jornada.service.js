@@ -37,6 +37,12 @@ const bullmq_2 = require("bullmq");
 const verificacao_agendada_service_1 = require("./verificacao-agendada.service");
 const lote_registros_jornada_constants_1 = require("./lote-registros-jornada.constants");
 const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
+const LIMITE_EVENTO_ATRASADO_PUSH_MS = 30 * 60 * 1000;
+const TIPOS_ALERTA_SOBRE_O_PROPRIO_ATRASO = [
+    'SINCRONIZACAO_TARDIA_SUSPEITA',
+    'RELOGIO_DIVERGENTE_DETECTADO_RETROATIVAMENTE',
+    'RELOGIO_DISPOSITIVO_SUSPEITO',
+];
 let RegistrosJornadaService = class RegistrosJornadaService {
     static { RegistrosJornadaService_1 = this; }
     prisma;
@@ -345,7 +351,14 @@ let RegistrosJornadaService = class RegistrosJornadaService {
             }
             return registro;
         }, { isolationLevel: client_1.Prisma.TransactionIsolationLevel.Serializable });
+        const momentoEvento = new Date(registro.timestampEvento).getTime();
+        const eventoAntigoParaPush = Number.isFinite(momentoEvento) &&
+            Date.now() - momentoEvento > LIMITE_EVENTO_ATRASADO_PUSH_MS;
         for (const alerta of alertasCriticosParaNotificar) {
+            const suprimir = eventoAntigoParaPush &&
+                !TIPOS_ALERTA_SOBRE_O_PROPRIO_ATRASO.includes(alerta.tipo);
+            if (suprimir)
+                continue;
             void this.pushNotifications.notificarMotorista(motoristaId, 'Alerta de jornada', alerta.mensagem, { tipo: alerta.tipo });
             if (empresaIdParaNotificar &&
                 !whatsapp_notifications_constants_1.TIPOS_ALERTA_SOMENTE_PAINEL.includes(alerta.tipo)) {
@@ -420,10 +433,7 @@ let RegistrosJornadaService = class RegistrosJornadaService {
     }
     async avaliarLimitesLegais(tx, motoristaId, registroRecemCriado, agoraOverride) {
         try {
-            const historico = await tx.registroJornada.findMany({
-                where: { motoristaId },
-                orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
-            });
+            const historico = await this.historicoParaMotorDeAlertas(tx, motoristaId);
             const ultimoInicioJornada = [...historico]
                 .filter((r) => r.tipoEvento === client_1.TipoEvento.INICIO_JORNADA)
                 .pop();
@@ -560,14 +570,33 @@ let RegistrosJornadaService = class RegistrosJornadaService {
             }
         });
     }
+    async historicoParaMotorDeAlertas(db, motoristaId) {
+        const [registros, tratamentos] = await Promise.all([
+            db.registroJornada.findMany({
+                where: { motoristaId },
+                orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
+            }),
+            db.tratamentoPonto?.findMany?.({
+                where: { motoristaId },
+                orderBy: { timestampEvento: 'asc' },
+            }) ?? Promise.resolve([]),
+        ]);
+        const virtuais = tratamentos.map((t) => ({
+            id: `tratamento:${t.id}`,
+            motoristaId: t.motoristaId,
+            tipoEvento: t.tipoEvento,
+            timestampEvento: t.timestampEvento,
+            sequencial: 0,
+            createdAt: t.createdAt,
+        }));
+        return [...registros, ...virtuais].sort((a, b) => a.timestampEvento.getTime() - b.timestampEvento.getTime() ||
+            a.sequencial - b.sequencial);
+    }
     async agendarProximaVerificacaoSeAplicavel(motoristaId, agora) {
         if (!this.verificacaoAgendada)
             return;
         try {
-            const historico = await this.prisma.registroJornada.findMany({
-                where: { motoristaId },
-                orderBy: [{ timestampEvento: 'asc' }, { sequencial: 'asc' }],
-            });
+            const historico = await this.historicoParaMotorDeAlertas(this.prisma, motoristaId);
             const proximo = this.jornadaLegal.calcularProximoLimiar(historico, agora, await this.obterLimitesEspera(this.prisma, motoristaId));
             if (proximo) {
                 await this.verificacaoAgendada.agendar(motoristaId, proximo.emMs);

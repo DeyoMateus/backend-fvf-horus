@@ -18,6 +18,7 @@ const platform_express_1 = require("@nestjs/platform-express");
 const motorista_device_guard_1 = require("../common/guards/motorista-device.guard");
 const create_solicitacao_ajuste_dto_1 = require("./dto/create-solicitacao-ajuste.dto");
 const solicitacoes_ajuste_ponto_service_1 = require("./solicitacoes-ajuste-ponto.service");
+const arquivo_seguro_util_1 = require("../common/arquivos/arquivo-seguro.util");
 const TAMANHO_MAXIMO_EVIDENCIA_BYTES = 25 * 1024 * 1024;
 let SolicitacoesAjustePontoMobileController = class SolicitacoesAjustePontoMobileController {
     solicitacoesService;
@@ -39,7 +40,7 @@ let SolicitacoesAjustePontoMobileController = class SolicitacoesAjustePontoMobil
         const evidencia = await this.solicitacoesService.baixarEvidenciaDoMotorista(evidenciaId, req.motorista.id);
         res.set({
             'Content-Type': evidencia.contentType,
-            'Content-Disposition': `attachment; filename="${evidencia.nomeArquivo}"`,
+            'Content-Disposition': (0, arquivo_seguro_util_1.contentDispositionAnexo)(evidencia.nomeArquivo),
         });
         res.send(evidencia.conteudo);
     }

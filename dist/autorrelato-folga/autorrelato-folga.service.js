@@ -115,7 +115,7 @@ let AutorrelatoFolgaService = class AutorrelatoFolgaService {
             m.id,
             (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(m.empresa?.fusoHorario),
         ]));
-        const [registros, autorrelatos, folgasConcedidas] = await Promise.all([
+        const [registros, autorrelatos, folgasConcedidas, tratamentosDePonto, diasTratados,] = await Promise.all([
             this.prisma.registroJornada.findMany({
                 where: {
                     motorista: { empresa: { grupoId } },
@@ -144,12 +144,38 @@ let AutorrelatoFolgaService = class AutorrelatoFolgaService {
                 },
                 select: { motoristaId: true, data: true },
             }),
+            this.prisma.tratamentoPonto.findMany({
+                where: {
+                    motoristaId: { in: motoristas.map((m) => m.id) },
+                    timestampEvento: {
+                        gte: new Date(inicioUtc.getTime() + 2 * 3_600_000),
+                        lt: new Date(hojeUtc.getTime() + 5 * 3_600_000),
+                    },
+                },
+                select: {
+                    motoristaId: true,
+                    timestampEvento: true,
+                    fusoOffsetMin: true,
+                },
+            }),
+            this.prisma.diaSemInteracaoTratado.findMany({
+                where: {
+                    motoristaId: { in: motoristas.map((m) => m.id) },
+                    data: { gte: inicioUtc, lt: hojeUtc },
+                },
+                select: { motoristaId: true, data: true },
+            }),
         ]);
         const diasComRegistro = new Map();
         for (const r of registros) {
             const set = diasComRegistro.get(r.motoristaId) ?? new Set();
             set.add((0, fuso_brasil_util_1.chaveDiaBrt)(r.timestampEvento, r.fusoOffsetMin ?? offsetEmpresaDe.get(r.motoristaId)));
             diasComRegistro.set(r.motoristaId, set);
+        }
+        for (const t of tratamentosDePonto) {
+            const set = diasComRegistro.get(t.motoristaId) ?? new Set();
+            set.add((0, fuso_brasil_util_1.chaveDiaBrt)(t.timestampEvento, t.fusoOffsetMin ?? offsetEmpresaDe.get(t.motoristaId)));
+            diasComRegistro.set(t.motoristaId, set);
         }
         const diasComFolga = new Map();
         for (const a of autorrelatos) {
@@ -162,9 +188,15 @@ let AutorrelatoFolgaService = class AutorrelatoFolgaService {
             set.add(chaveDia(f.data));
             diasComFolga.set(f.motoristaId, set);
         }
+        for (const d of diasTratados) {
+            const set = diasComFolga.get(d.motoristaId) ?? new Set();
+            set.add(chaveDia(d.data));
+            diasComFolga.set(d.motoristaId, set);
+        }
         const resultado = [];
         for (const motorista of motoristas) {
-            const inicioMotorista = new Date(Math.max(inicioUtc.getTime(), paraDiaUtc((0, fuso_brasil_util_1.paraParedeBrt)(motorista.createdAt)).getTime()));
+            const diaSeguinteAoCadastro = paraDiaUtc((0, fuso_brasil_util_1.paraParedeBrt)(motorista.createdAt)).getTime() + 86_400_000;
+            const inicioMotorista = new Date(Math.max(inicioUtc.getTime(), diaSeguinteAoCadastro));
             const diasFaltando = [];
             for (const cursor = new Date(inicioMotorista); cursor.getTime() < hojeUtc.getTime(); cursor.setUTCDate(cursor.getUTCDate() + 1)) {
                 const chave = chaveDia(cursor);
@@ -182,6 +214,66 @@ let AutorrelatoFolgaService = class AutorrelatoFolgaService {
             }
         }
         return resultado;
+    }
+    async tratarDiaSemInteracao(motoristaId, dto, usuarioId, grupoIdSolicitante) {
+        await this.tenant.verificarMotoristaNoGrupo(motoristaId, grupoIdSolicitante);
+        await this.tenant.verificarMotoristaAtivo(motoristaId);
+        const dia = paraDiaUtc(dto.data);
+        const hojeUtc = paraDiaUtc((0, fuso_brasil_util_1.paraParedeBrt)(new Date()));
+        if (dia.getTime() >= hojeUtc.getTime()) {
+            throw new common_1.BadRequestException('Só é possível tratar dias que já terminaram (até ontem).');
+        }
+        let tratado;
+        try {
+            tratado = await this.prisma.diaSemInteracaoTratado.create({
+                data: {
+                    motoristaId,
+                    data: dia,
+                    tipo: dto.tipo,
+                    observacao: dto.observacao,
+                    tratadoPorUsuarioId: usuarioId,
+                },
+            });
+        }
+        catch (err) {
+            if (err instanceof client_1.Prisma.PrismaClientKnownRequestError &&
+                err.code === 'P2002') {
+                throw new common_1.ConflictException('Este dia já foi tratado para este motorista.');
+            }
+            throw err;
+        }
+        if (dto.tipo === 'FOLGA') {
+            try {
+                await this.prisma.folgaConcedida.create({
+                    data: {
+                        motoristaId,
+                        data: dia,
+                        motivo: `Tratado no radar de dias sem interação: ${dto.observacao}`.slice(0, 400),
+                        concedidaPorUsuarioId: usuarioId,
+                    },
+                });
+            }
+            catch (err) {
+                if (!(err instanceof client_1.Prisma.PrismaClientKnownRequestError &&
+                    err.code === 'P2002')) {
+                    throw err;
+                }
+            }
+        }
+        await this.audit.registrar({
+            actorType: client_1.ActorType.USUARIO_EMPRESA,
+            actorId: usuarioId,
+            acao: 'DIA_SEM_INTERACAO_TRATADO',
+            entidade: 'DiaSemInteracaoTratado',
+            entidadeId: tratado.id,
+            detalhes: {
+                motoristaId,
+                data: chaveDia(dia),
+                tipo: dto.tipo,
+                observacao: dto.observacao,
+            },
+        });
+        return tratado;
     }
 };
 exports.AutorrelatoFolgaService = AutorrelatoFolgaService;

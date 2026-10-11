@@ -22,6 +22,7 @@ const certificate_service_1 = require("../common/signature/certificate.service")
 const envelope_encryption_service_1 = require("../common/crypto/envelope-encryption.service");
 const hash_chain_service_1 = require("../common/hash-chain/hash-chain.service");
 const prisma_service_1 = require("../common/prisma/prisma.service");
+const pii_campo_util_1 = require("../common/crypto/pii-campo.util");
 const pagination_util_1 = require("../common/pagination/pagination.util");
 let MotoristasService = class MotoristasService {
     prisma;
@@ -76,9 +77,11 @@ let MotoristasService = class MotoristasService {
                 data: {
                     id,
                     nome: dto.nome,
-                    cpf: dto.cpf,
-                    cnh: dto.cnh,
-                    telefone: dto.telefone ?? null,
+                    ...(0, pii_campo_util_1.protegerDadosPii)({
+                        cpf: dto.cpf,
+                        cnh: dto.cnh,
+                        telefone: dto.telefone ?? null,
+                    }),
                     status: client_1.StatusMotorista.ATIVO,
                     empresaId,
                     hashGenesis,
@@ -116,6 +119,7 @@ let MotoristasService = class MotoristasService {
             }));
         }
         const [, motorista] = (await this.prisma.$transaction(operacoes));
+        (0, pii_campo_util_1.revelarPii)(motorista);
         await this.audit.registrar({
             actorType: client_1.ActorType.USUARIO_EMPRESA,
             actorId: actorId ?? null,
@@ -258,7 +262,7 @@ let MotoristasService = class MotoristasService {
                 ? {
                     OR: [
                         { nome: { contains: termo, mode: client_1.Prisma.QueryMode.insensitive } },
-                        { cpf: { contains: termo } },
+                        ...((0, pii_campo_util_1.condicaoBuscaCpf)(termo) ? [(0, pii_campo_util_1.condicaoBuscaCpf)(termo)] : []),
                     ],
                 }
                 : {}),
@@ -298,7 +302,7 @@ let MotoristasService = class MotoristasService {
         const agora = new Date();
         const motorista = await this.prisma.$transaction(async (tx) => {
             await tx.dispositivoVinculado.deleteMany({ where: { motoristaId: id } });
-            return tx.motorista.update({
+            return (0, pii_campo_util_1.revelarPii)(await tx.motorista.update({
                 where: { id },
                 data: {
                     status: client_1.StatusMotorista.INATIVO,
@@ -314,7 +318,7 @@ let MotoristasService = class MotoristasService {
                     status: true,
                     excluidoEm: true,
                 },
-            });
+            }));
         });
         await this.audit.registrar({
             actorType: client_1.ActorType.USUARIO_EMPRESA,

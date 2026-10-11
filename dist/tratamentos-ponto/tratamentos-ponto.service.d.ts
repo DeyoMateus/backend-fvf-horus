@@ -6,6 +6,7 @@ import { StorageService } from '../common/storage/storage.service';
 import { TenantService } from '../common/tenant/tenant.service';
 import { RegistrosJornadaService } from '../registros-jornada/registros-jornada.service';
 import { CreateTratamentoPontoDto } from './dto/create-tratamento-ponto.dto';
+import { CreateJornadaTratamentoDto } from './dto/create-jornada-tratamento.dto';
 export declare class TratamentosPontoService {
     private readonly prisma;
     private readonly hashChain;
@@ -31,6 +32,20 @@ export declare class TratamentosPontoService {
     }>;
     private fusoDoMotoristaNoInstante;
     private validarEncaixeNaJornada;
+    createJornada(motoristaId: string, dto: CreateJornadaTratamentoDto, usuarioId: string, grupoIdSolicitante: string): Promise<{
+        id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
+        motoristaId: string;
+        tipoEvento: import("@prisma/client").$Enums.TipoEvento;
+        timestampEvento: Date;
+        usuarioId: string;
+        motivo: string;
+        registroReferenciaId: string | null;
+        hashReferencia: string;
+        hashRegistro: string;
+        motoristaCienciaEm: Date | null;
+    }[]>;
     contextoDoAjuste(motoristaId: string, timestampEvento: Date, grupoIdSolicitante: string): Promise<{
         permitidos: string[];
     }>;

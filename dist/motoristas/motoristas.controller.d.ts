@@ -21,6 +21,7 @@ export declare class MotoristasController {
     }>;
     list(user: UsuarioAutenticado, page?: string, pageSize?: string, busca?: string, incluirExcluidos?: string): Promise<{
         dados: {
+            cpf: string;
             dispositivoVinculado: {
                 deviceUuid: string;
             } | null;
@@ -30,7 +31,6 @@ export declare class MotoristasController {
             id: string;
             createdAt: Date;
             nome: string;
-            cpf: string;
             status: import("@prisma/client").$Enums.StatusMotorista;
             certificadoValidoAte: Date | null;
             excluidoEm: Date | null;
@@ -40,6 +40,9 @@ export declare class MotoristasController {
         pageSize: number;
     }>;
     findOne(id: string, user: UsuarioAutenticado): Promise<{
+        cpf: string;
+        cnh: string;
+        telefone: string | null;
         dispositivoVinculado: {
             deviceUuid: string;
             vinculadoEm: Date;
@@ -55,10 +58,7 @@ export declare class MotoristasController {
         createdAt: Date;
         nome: string;
         updatedAt: Date;
-        cpf: string;
-        cnh: string;
         status: import("@prisma/client").$Enums.StatusMotorista;
-        telefone: string | null;
         empresaId: string;
         hashGenesis: string;
         certificadoFingerprint: string | null;
@@ -67,31 +67,31 @@ export declare class MotoristasController {
         motivoExclusao: string | null;
     }>;
     atualizarCadastro(id: string, dto: AtualizarCadastroMotoristaDto, user: UsuarioAutenticado): Promise<{
+        cpf: string;
+        cnh: string;
+        telefone: string | null;
         id: string;
         createdAt: Date;
         nome: string;
         updatedAt: Date;
-        cpf: string;
-        cnh: string;
         status: import("@prisma/client").$Enums.StatusMotorista;
-        telefone: string | null;
         empresaId: string;
     }>;
     atualizarStatus(id: string, dto: AtualizarStatusMotoristaDto, user: UsuarioAutenticado): Promise<{
+        cpf: string;
+        cnh: string;
         id: string;
         createdAt: Date;
         nome: string;
         updatedAt: Date;
-        cpf: string;
-        cnh: string;
         status: import("@prisma/client").$Enums.StatusMotorista;
         empresaId: string;
     }>;
     excluir(id: string, dto: ExcluirMotoristaDto, user: UsuarioAutenticado): Promise<{
-        id: string;
-        nome: string;
         cpf: string;
         cnh: string;
+        id: string;
+        nome: string;
         status: import("@prisma/client").$Enums.StatusMotorista;
         excluidoEm: Date | null;
     }>;

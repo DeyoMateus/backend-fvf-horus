@@ -21,6 +21,7 @@ const storage_service_1 = require("../common/storage/storage.service");
 const tenant_service_1 = require("../common/tenant/tenant.service");
 const tratamentos_ponto_service_1 = require("../tratamentos-ponto/tratamentos-ponto.service");
 const pagination_util_1 = require("../common/pagination/pagination.util");
+const arquivo_seguro_util_1 = require("../common/arquivos/arquivo-seguro.util");
 const TAMANHO_MAXIMO_EVIDENCIA_BYTES = 25 * 1024 * 1024;
 const MAXIMO_EVIDENCIAS_POR_SOLICITACAO = 4;
 const INCLUDE_PADRAO = {
@@ -285,6 +286,11 @@ let SolicitacoesAjustePontoService = class SolicitacoesAjustePontoService {
         return solicitacao;
     }
     async anexarEvidencia(solicitacaoId, arquivo) {
+        const tipoImagem = (0, arquivo_seguro_util_1.detectarTipoImagem)(arquivo.buffer);
+        if (!tipoImagem) {
+            throw new common_1.BadRequestException(arquivo_seguro_util_1.MENSAGEM_SO_IMAGEM);
+        }
+        const nomeSeguro = (0, arquivo_seguro_util_1.nomeComExtensaoDoTipo)(arquivo.originalname, tipoImagem);
         if (arquivo.size > TAMANHO_MAXIMO_EVIDENCIA_BYTES) {
             throw new common_1.BadRequestException('Arquivo maior que o limite de 25MB');
         }
@@ -297,9 +303,9 @@ let SolicitacoesAjustePontoService = class SolicitacoesAjustePontoService {
         if (!this.storage.configurado()) {
             throw new common_1.BadRequestException('Armazenamento de evidências (Cloudflare R2) não está configurado , peça para o administrador configurar as variáveis R2_* antes de anexar evidências.');
         }
-        const chaveR2 = `solicitacoes-ajuste-ponto/${solicitacaoId}/${(0, crypto_1.randomUUID)()}-${arquivo.originalname}`;
+        const chaveR2 = `solicitacoes-ajuste-ponto/${solicitacaoId}/${(0, crypto_1.randomUUID)()}-${nomeSeguro}`;
         try {
-            await this.storage.subirObjeto(chaveR2, arquivo.buffer, arquivo.mimetype);
+            await this.storage.subirObjeto(chaveR2, arquivo.buffer, tipoImagem.mime);
         }
         catch (erro) {
             this.storage.logFalhaUpload(chaveR2, erro);
@@ -308,8 +314,8 @@ let SolicitacoesAjustePontoService = class SolicitacoesAjustePontoService {
         return this.prisma.solicitacaoAjustePontoEvidencia.create({
             data: {
                 solicitacaoId,
-                nomeArquivo: arquivo.originalname,
-                contentType: arquivo.mimetype,
+                nomeArquivo: nomeSeguro,
+                contentType: tipoImagem.mime,
                 tamanhoBytes: arquivo.size,
                 chaveStorage: chaveR2,
                 conteudo: null,

@@ -3,6 +3,7 @@ import { WhatsappNotificationsService } from '../common/notifications/whatsapp-n
 import { PrismaService } from '../common/prisma/prisma.service';
 import { TenantService } from '../common/tenant/tenant.service';
 import { CreateAutorrelatoFolgaDto } from './dto/create-autorrelato-folga.dto';
+import { TratarDiaSemInteracaoDto } from './dto/tratar-dia-sem-interacao.dto';
 export declare class AutorrelatoFolgaService {
     private readonly prisma;
     private readonly audit;
@@ -38,4 +39,13 @@ export declare class AutorrelatoFolgaService {
         nome: string;
         diasSemInteracao: string[];
     }[]>;
+    tratarDiaSemInteracao(motoristaId: string, dto: TratarDiaSemInteracaoDto, usuarioId: string, grupoIdSolicitante: string): Promise<{
+        data: Date;
+        id: string;
+        createdAt: Date;
+        motoristaId: string;
+        tipo: import("@prisma/client").$Enums.TipoTratamentoDiaSemInteracao;
+        observacao: string;
+        tratadoPorUsuarioId: string;
+    }>;
 }

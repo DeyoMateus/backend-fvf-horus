@@ -18,6 +18,34 @@ const LIMITE_ESPERA_INFO_MIN = 180;
 const LIMITE_ESPERA_ATENCAO_MIN = 285;
 const LIMITE_ESPERA_CRITICO_MIN = 300;
 const PAUSA_QUALIFICADA_MIN = 30;
+const LIMITE_JORNADA_ABERTA_MIN = 840;
+const _FECHADO = [
+    client_1.TipoEvento.INICIO_DIRECAO,
+    client_1.TipoEvento.INICIO_DESCANSO,
+    client_1.TipoEvento.ESPERA_CARGA_DESCARGA,
+    client_1.TipoEvento.OUTRO,
+    client_1.TipoEvento.FIM_JORNADA,
+];
+const TRANSICOES_PERMITIDAS = {
+    [client_1.TipoEvento.INICIO_JORNADA]: _FECHADO,
+    [client_1.TipoEvento.FIM_DIRECAO]: _FECHADO,
+    [client_1.TipoEvento.FIM_DESCANSO]: _FECHADO,
+    [client_1.TipoEvento.FIM_ESPERA_CARGA_DESCARGA]: _FECHADO,
+    [client_1.TipoEvento.FIM_DESCARREGAMENTO]: _FECHADO,
+    [client_1.TipoEvento.INICIO_DIRECAO]: [client_1.TipoEvento.FIM_DIRECAO],
+    [client_1.TipoEvento.INICIO_DESCANSO]: [client_1.TipoEvento.FIM_DESCANSO],
+    [client_1.TipoEvento.ESPERA_CARGA_DESCARGA]: [
+        client_1.TipoEvento.FIM_ESPERA_CARGA_DESCARGA,
+        client_1.TipoEvento.FIM_DESCARREGAMENTO,
+    ],
+    [client_1.TipoEvento.FIM_JORNADA]: [client_1.TipoEvento.INICIO_JORNADA],
+    [client_1.TipoEvento.OUTRO]: [
+        client_1.TipoEvento.INICIO_DIRECAO,
+        client_1.TipoEvento.INICIO_DESCANSO,
+        client_1.TipoEvento.ESPERA_CARGA_DESCARGA,
+        client_1.TipoEvento.FIM_JORNADA,
+    ],
+};
 const OCIOSIDADE_TEMPO_MINIMO_MIN = 20;
 const OCIOSIDADE_DISTANCIA_MAXIMA_M = 500;
 const LIMITE_TEMPO_INDEFINIDO_ATENCAO_MIN = 15;
@@ -43,7 +71,44 @@ let JornadaLegalService = class JornadaLegalService {
             return [];
         const janelaInicio = jornada[0].timestampEvento;
         const alertas = [];
-        const { direcaoContinuaMin, totalDirecaoMin, corteContinuo } = this.calcularAcumuladosDirecao(jornada, agora);
+        if (!agoraOverride) {
+            const todos = [...registros].sort(ordenacao_temporal_util_1.compararPorTimestampEvento);
+            const idxNovo = todos.findIndex((r) => r.id === registroRecemCriado.id);
+            if (idxNovo !== -1) {
+                const anterior = idxNovo > 0 ? todos[idxNovo - 1] : null;
+                const permitidos = anterior
+                    ? TRANSICOES_PERMITIDAS[anterior.tipoEvento]
+                    : [client_1.TipoEvento.INICIO_JORNADA];
+                if (permitidos && !permitidos.includes(registroRecemCriado.tipoEvento)) {
+                    alertas.push({
+                        tipo: client_1.TipoAlertaJornada.SEQUENCIA_EVENTOS_INCONSISTENTE,
+                        severidade: client_1.SeveridadeAlerta.ATENCAO,
+                        mensagem: anterior
+                            ? `Sequência de eventos inconsistente: "${registroRecemCriado.tipoEvento}" registrado logo após "${anterior.tipoEvento}". O ponto foi aceito, mas confira se algum registro ficou faltando.`
+                            : `Primeiro registro do motorista não é um início de jornada ("${registroRecemCriado.tipoEvento}"). O ponto foi aceito, mas confira o histórico.`,
+                        janelaInicio: anterior?.timestampEvento ?? agora,
+                        janelaFim: agora,
+                        minutosAcumulados: 0,
+                    });
+                }
+            }
+        }
+        if (jornada[0].tipoEvento === client_1.TipoEvento.INICIO_JORNADA &&
+            jornada[jornada.length - 1].tipoEvento !== client_1.TipoEvento.FIM_JORNADA) {
+            const abertaMin = this.minutosEntre(jornada[0].timestampEvento, agora);
+            if (abertaMin >= LIMITE_JORNADA_ABERTA_MIN &&
+                !alertasExistentesTipos.has(client_1.TipoAlertaJornada.JORNADA_ABERTA_PROLONGADA)) {
+                alertas.push({
+                    tipo: client_1.TipoAlertaJornada.JORNADA_ABERTA_PROLONGADA,
+                    severidade: client_1.SeveridadeAlerta.CRITICO,
+                    mensagem: `Jornada aberta há ${this.formatarHoras(abertaMin)} sem "Fim de jornada". Se você já terminou, encerre a jornada no app; caso contrário, o gestor precisará encerrá-la no painel com justificativa.`,
+                    janelaInicio: jornada[0].timestampEvento,
+                    janelaFim: agora,
+                    minutosAcumulados: Math.round(abertaMin),
+                });
+            }
+        }
+        const { direcaoContinuaMin, totalDirecaoMin, corteContinuo } = this.calcularAcumuladosDirecao(this.recortarJornadaLegal(registros, agora), agora);
         if (direcaoContinuaMin >= LIMITE_DIRECAO_CONTINUA_CRITICO_MIN &&
             !alertasExistentesTipos.has(client_1.TipoAlertaJornada.DIRECAO_CONTINUA_EXCEDIDA)) {
             alertas.push({
@@ -171,7 +236,7 @@ let JornadaLegalService = class JornadaLegalService {
         const ultimoEvento = jornada[jornada.length - 1].tipoEvento;
         const candidatosMin = [];
         if (ultimoEvento === client_1.TipoEvento.INICIO_DIRECAO) {
-            const { direcaoContinuaMin, totalDirecaoMin } = this.calcularAcumuladosDirecao(jornada, agora);
+            const { direcaoContinuaMin, totalDirecaoMin } = this.calcularAcumuladosDirecao(this.recortarJornadaLegal(registros, agora), agora);
             for (const limite of [
                 LIMITE_DIRECAO_CONTINUA_ATENCAO_MIN,
                 LIMITE_DIRECAO_CONTINUA_CRITICO_MIN,
@@ -261,16 +326,19 @@ let JornadaLegalService = class JornadaLegalService {
         return RAIO_TERRA_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
     inicioDaDirecaoContinua(registros, agora) {
-        const jornada = this.recortarJornadaCorrente(registros, agora);
+        const jornada = this.recortarJornadaLegal(registros, agora);
         if (jornada.length === 0)
             return null;
         return this.calcularAcumuladosDirecao(jornada, agora).corteContinuo;
     }
     calcularAcumuladosDirecao(jornada, agora) {
         const janelaInicio = jornada[0].timestampEvento;
-        const direcaoIntervalos = this.construirIntervalos(jornada, 'INICIO_DIRECAO', ['FIM_DIRECAO'], agora);
+        const direcaoIntervalos = this.intervalosDeDirecao(jornada, agora);
         const totalDirecaoMin = this.somarMinutos(direcaoIntervalos);
-        const pausasQualificadas = this.construirIntervalos(jornada, 'INICIO_DESCANSO', ['FIM_DESCANSO'], agora)
+        const pausasQualificadas = [
+            ...this.construirIntervalos(jornada, 'INICIO_DESCANSO', ['FIM_DESCANSO'], agora),
+            ...this.construirIntervalos(jornada, 'FIM_JORNADA', ['INICIO_JORNADA'], agora).filter((p) => p.fim.getTime() > p.inicio.getTime()),
+        ]
             .filter((p) => this.minutosEntre(p.inicio, p.fim) >= PAUSA_QUALIFICADA_MIN)
             .sort((a, b) => b.fim.getTime() - a.fim.getTime());
         const corteContinuo = pausasQualificadas[0]?.fim ?? janelaInicio;
@@ -305,7 +373,8 @@ let JornadaLegalService = class JornadaLegalService {
             .lastIndexOf(client_1.TipoEvento.INICIO_JORNADA);
         if (idxInicioJornadaAnterior !== -1) {
             const jornadaAnterior = ordenados.slice(idxInicioJornadaAnterior, idxAtual);
-            const { totalDirecaoMin: direcaoJornadaAnteriorMin } = this.calcularAcumuladosDirecao(jornadaAnterior, anterior.timestampEvento);
+            void jornadaAnterior;
+            const { totalDirecaoMin: direcaoJornadaAnteriorMin } = this.calcularAcumuladosDirecao(this.recortarJornadaLegal(ordenados.slice(0, idxAtual), anterior.timestampEvento), anterior.timestampEvento);
             if (direcaoJornadaAnteriorMin < LIMITE_JORNADA_DIRECAO_ATENCAO_MIN) {
                 return null;
             }
@@ -321,6 +390,67 @@ let JornadaLegalService = class JornadaLegalService {
             janelaFim: registroRecemCriado.timestampEvento,
             minutosAcumulados: Math.round(descansoMin),
         };
+    }
+    recortarJornadaLegal(registros, agora) {
+        const ordenados = [...registros]
+            .filter((r) => r.timestampEvento.getTime() <= agora.getTime())
+            .sort(ordenacao_temporal_util_1.compararPorTimestampEvento);
+        let inicioIdx = ordenados
+            .map((r) => r.tipoEvento)
+            .lastIndexOf(client_1.TipoEvento.INICIO_JORNADA);
+        if (inicioIdx === -1)
+            return ordenados;
+        while (inicioIdx > 0) {
+            const anteriorIdx = inicioIdx - 1;
+            const anterior = ordenados[anteriorIdx];
+            if (anterior.tipoEvento !== client_1.TipoEvento.FIM_JORNADA)
+                break;
+            const gapMin = this.minutosEntre(anterior.timestampEvento, ordenados[inicioIdx].timestampEvento);
+            if (gapMin >= DESCANSO_INTERJORNADA_MINIMO_MIN)
+                break;
+            const inicioAnterior = ordenados
+                .slice(0, anteriorIdx)
+                .map((r) => r.tipoEvento)
+                .lastIndexOf(client_1.TipoEvento.INICIO_JORNADA);
+            if (inicioAnterior === -1)
+                break;
+            inicioIdx = inicioAnterior;
+        }
+        return this.cortarPorDescansoImplicito(ordenados.slice(inicioIdx));
+    }
+    cortarPorDescansoImplicito(janela) {
+        for (let i = janela.length - 2; i >= 0; i--) {
+            const gap = this.minutosEntre(janela[i].timestampEvento, janela[i + 1].timestampEvento);
+            if (gap >= DESCANSO_INTERJORNADA_MINIMO_MIN &&
+                janela[i].tipoEvento !== client_1.TipoEvento.INICIO_DIRECAO) {
+                return janela.slice(i + 1);
+            }
+        }
+        return janela;
+    }
+    intervalosDeDirecao(registros, agora) {
+        const fechamentos = new Set([
+            client_1.TipoEvento.FIM_DIRECAO,
+            client_1.TipoEvento.FIM_JORNADA,
+            client_1.TipoEvento.INICIO_DESCANSO,
+            client_1.TipoEvento.ESPERA_CARGA_DESCARGA,
+            client_1.TipoEvento.OUTRO,
+        ]);
+        const intervalos = [];
+        let aberto = null;
+        for (const r of registros) {
+            if (r.tipoEvento === client_1.TipoEvento.INICIO_DIRECAO) {
+                if (!aberto)
+                    aberto = r.timestampEvento;
+            }
+            else if (fechamentos.has(r.tipoEvento) && aberto) {
+                intervalos.push({ inicio: aberto, fim: r.timestampEvento });
+                aberto = null;
+            }
+        }
+        if (aberto)
+            intervalos.push({ inicio: aberto, fim: agora });
+        return intervalos;
     }
     recortarJornadaCorrente(registros, agora) {
         const ordenados = [...registros]
@@ -339,7 +469,8 @@ let JornadaLegalService = class JornadaLegalService {
         let aberto = null;
         for (const r of registros) {
             if (r.tipoEvento === client_1.TipoEvento[tipoInicio]) {
-                aberto = r.timestampEvento;
+                if (!aberto)
+                    aberto = r.timestampEvento;
             }
             else if (valoresFim.has(r.tipoEvento) && aberto) {
                 intervalos.push({ inicio: aberto, fim: r.timestampEvento });

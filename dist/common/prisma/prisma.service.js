@@ -14,6 +14,8 @@ const grupo_id_seguro_1 = require("./grupo-id-seguro");
 const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 const tenant_context_1 = require("../tenant/tenant-context");
+const pii_campo_util_1 = require("../crypto/pii-campo.util");
+const MODELOS_COM_PII = new Set(['motorista', 'ajudante']);
 const MODELOS_COM_RLS = [
     'grupo',
     'empresa',
@@ -29,6 +31,7 @@ const MODELOS_COM_RLS = [
     'solicitacaoTrocaDispositivo',
     'autorrelatoFolga',
     'folgaConcedida',
+    'diaSemInteracaoTratado',
     'documentoCarga',
     'tratamentoPontoEvidencia',
     'regraSindical',
@@ -81,7 +84,12 @@ let PrismaService = class PrismaService extends client_1.PrismaClient {
                         !OPERACOES_INTERCEPTADAS.includes(prop)) {
                         return original;
                     }
-                    return (...args) => this.executarComRls(`${nomeModelo}.${prop}`, () => original.apply(target, args));
+                    return (...args) => {
+                        const argsFinais = MODELOS_COM_PII.has(nomeModelo)
+                            ? (0, pii_campo_util_1.cifrarArgumentosPii)(prop, args)
+                            : args;
+                        return this.executarComRls(`${nomeModelo}.${prop}`, () => original.apply(target, argsFinais)).then((resultado) => (0, pii_campo_util_1.revelarPii)(resultado));
+                    };
                 },
             });
             Object.defineProperty(this, nomeModelo, {

@@ -19,6 +19,7 @@ const TIPOS_ESTOURO_JORNADA_CORRENTE = new Set([
     'DIRECAO_CONTINUA_PROXIMA_LIMITE',
     'DIRECAO_CONTINUA_EXCEDIDA',
     'DIRECAO_RETOMADA_SEM_PAUSA',
+    'JORNADA_ABERTA_PROLONGADA',
     'JORNADA_DIRECAO_PROXIMA_LIMITE',
     'JORNADA_DIRECAO_EXCEDIDA',
     'ESPERA_PROXIMA_LIMITE',
@@ -70,6 +71,34 @@ let AlertasJornadaService = class AlertasJornadaService {
             take: 200,
         });
     }
+    async exigirJornadaEncerradaParaDispensar(alerta) {
+        if (alerta.tipo !== 'JORNADA_ABERTA_PROLONGADA')
+            return;
+        const ultimo = await this.prisma.registroJornada.findFirst({
+            where: { motoristaId: alerta.motoristaId, tipoEvento: { not: 'OUTRO' } },
+            orderBy: [{ timestampEvento: 'desc' }, { sequencial: 'desc' }],
+        });
+        if (!ultimo || ultimo.tipoEvento === 'FIM_JORNADA')
+            return;
+        const inicioAtual = await this.prisma.registroJornada.findFirst({
+            where: { motoristaId: alerta.motoristaId, tipoEvento: 'INICIO_JORNADA' },
+            orderBy: [{ timestampEvento: 'desc' }, { sequencial: 'desc' }],
+        });
+        if (inicioAtual &&
+            alerta.janelaInicio.getTime() < inicioAtual.timestampEvento.getTime()) {
+            return;
+        }
+        const ajuste = await this.prisma.tratamentoPonto.findFirst({
+            where: {
+                motoristaId: alerta.motoristaId,
+                tipoEvento: 'FIM_JORNADA',
+                timestampEvento: { gte: alerta.janelaInicio },
+            },
+        });
+        if (ajuste)
+            return;
+        throw new common_1.BadRequestException('Esta jornada continua aberta há mais de 14h. Encerre a jornada (Tratamento de ponto, evento "FIM_JORNADA", com justificativa) antes de dispensar este alerta.');
+    }
     async marcarVisualizado(alertaId, usuarioId, grupoIdSolicitante) {
         const alerta = await this.prisma.alertaJornada.findUnique({
             where: { id: alertaId },
@@ -82,6 +111,7 @@ let AlertasJornadaService = class AlertasJornadaService {
         if (alerta.motorista.empresa.grupoId !== grupoIdSolicitante) {
             throw new common_1.ForbiddenException('Alerta não pertence ao seu grupo');
         }
+        await this.exigirJornadaEncerradaParaDispensar(alerta);
         const atualizado = await this.prisma.alertaJornada.update({
             where: { id: alertaId },
             data: { visualizadoEm: new Date(), visualizadoPorUsuarioId: usuarioId },
@@ -123,6 +153,7 @@ let AlertasJornadaService = class AlertasJornadaService {
         if (alerta.motorista.empresa.grupoId !== grupoIdSolicitante) {
             throw new common_1.ForbiddenException('Alerta não pertence ao seu grupo');
         }
+        await this.exigirJornadaEncerradaParaDispensar(alerta);
         const agora = new Date();
         const atualizado = await this.prisma.alertaJornada.update({
             where: { id: alertaId },

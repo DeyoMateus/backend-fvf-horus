@@ -1,5 +1,6 @@
 import type { Response } from 'express';
 import type { UsuarioAutenticado } from '../common/decorators/current-user.decorator';
+import { CreateJornadaTratamentoDto } from './dto/create-jornada-tratamento.dto';
 import { CreateTratamentoPontoDto } from './dto/create-tratamento-ponto.dto';
 import { TratamentosPontoService } from './tratamentos-ponto.service';
 export declare class TratamentosPontoController {
@@ -19,6 +20,20 @@ export declare class TratamentosPontoController {
         hashRegistro: string;
         motoristaCienciaEm: Date | null;
     }>;
+    createJornada(motoristaId: string, dto: CreateJornadaTratamentoDto, user: UsuarioAutenticado): Promise<{
+        id: string;
+        createdAt: Date;
+        fusoOffsetMin: number | null;
+        motoristaId: string;
+        tipoEvento: import("@prisma/client").$Enums.TipoEvento;
+        timestampEvento: Date;
+        usuarioId: string;
+        motivo: string;
+        registroReferenciaId: string | null;
+        hashReferencia: string;
+        hashRegistro: string;
+        motoristaCienciaEm: Date | null;
+    }[]>;
     contexto(motoristaId: string, timestamp: string, user: UsuarioAutenticado): Promise<{
         permitidos: string[];
     }>;

@@ -20,9 +20,9 @@ export declare class SolicitacoesTrocaDispositivoController {
     }>;
     listarPendentes(user: UsuarioAutenticado): Promise<({
         motorista: {
+            cpf: string;
             id: string;
             nome: string;
-            cpf: string;
         };
     } & {
         id: string;

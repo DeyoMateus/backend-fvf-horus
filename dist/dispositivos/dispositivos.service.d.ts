@@ -40,9 +40,9 @@ export declare class DispositivosService {
     }>;
     listarSolicitacoesPendentes(grupoId: string): Promise<({
         motorista: {
+            cpf: string;
             id: string;
             nome: string;
-            cpf: string;
         };
     } & {
         id: string;

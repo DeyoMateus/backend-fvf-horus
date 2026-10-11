@@ -16,6 +16,7 @@ exports.TratamentosPontoMobileController = void 0;
 const common_1 = require("@nestjs/common");
 const motorista_device_guard_1 = require("../common/guards/motorista-device.guard");
 const tratamentos_ponto_service_1 = require("./tratamentos-ponto.service");
+const arquivo_seguro_util_1 = require("../common/arquivos/arquivo-seguro.util");
 let TratamentosPontoMobileController = class TratamentosPontoMobileController {
     tratamentosService;
     constructor(tratamentosService) {
@@ -31,7 +32,7 @@ let TratamentosPontoMobileController = class TratamentosPontoMobileController {
         const evidencia = await this.tratamentosService.baixarEvidenciaDoMotorista(evidenciaId, req.motorista.id);
         res.set({
             'Content-Type': evidencia.contentType,
-            'Content-Disposition': `attachment; filename="${evidencia.nomeArquivo}"`,
+            'Content-Disposition': (0, arquivo_seguro_util_1.contentDispositionAnexo)(evidencia.nomeArquivo),
         });
         res.send(evidencia.conteudo);
     }

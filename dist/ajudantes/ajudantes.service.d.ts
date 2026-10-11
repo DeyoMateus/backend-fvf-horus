@@ -28,15 +28,17 @@ export declare class AjudantesService {
         createdAt: Date;
     }>;
     atualizarStatus(id: string, dto: AtualizarStatusAjudanteDto, usuarioId: string, grupoIdSolicitante: string): Promise<{
+        cpf: string;
         id: string;
         createdAt: Date;
         nome: string;
         updatedAt: Date;
-        cpf: string;
         status: import("@prisma/client").$Enums.StatusMotorista;
         empresaId: string;
     }>;
     findById(id: string, grupoIdSolicitante: string): Promise<{
+        cpf: string;
+        telefone: string | null;
         dispositivoVinculado: {
             deviceUuid: string;
             vinculadoEm: Date;
@@ -46,9 +48,7 @@ export declare class AjudantesService {
         createdAt: Date;
         nome: string;
         updatedAt: Date;
-        cpf: string;
         status: import("@prisma/client").$Enums.StatusMotorista;
-        telefone: string | null;
         empresaId: string;
         hashGenesis: string;
         certificadoFingerprint: string | null;
@@ -58,13 +58,13 @@ export declare class AjudantesService {
     }>;
     listByGrupo(grupoId: string, page?: number, pageSize?: number, busca?: string, incluirExcluidos?: boolean): Promise<{
         dados: {
+            cpf: string;
             dispositivoVinculado: {
                 deviceUuid: string;
             } | null;
             id: string;
             createdAt: Date;
             nome: string;
-            cpf: string;
             status: import("@prisma/client").$Enums.StatusMotorista;
             certificadoValidoAte: Date | null;
             excluidoEm: Date | null;
@@ -74,9 +74,9 @@ export declare class AjudantesService {
         pageSize: number;
     }>;
     excluir(id: string, motivo: string | undefined, usuarioId: string, grupoIdSolicitante: string): Promise<{
+        cpf: string;
         id: string;
         nome: string;
-        cpf: string;
         status: import("@prisma/client").$Enums.StatusMotorista;
         excluidoEm: Date | null;
     }>;

@@ -20,6 +20,7 @@ const roles_decorator_1 = require("../common/decorators/roles.decorator");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../common/guards/roles.guard");
 const autorrelato_folga_service_1 = require("./autorrelato-folga.service");
+const tratar_dia_sem_interacao_dto_1 = require("./dto/tratar-dia-sem-interacao.dto");
 let AutorrelatoFolgaController = class AutorrelatoFolgaController {
     service;
     constructor(service) {
@@ -30,6 +31,9 @@ let AutorrelatoFolgaController = class AutorrelatoFolgaController {
     }
     diasSemInteracao(dias, user) {
         return this.service.diasSemInteracao(user.grupoId, dias ? Number(dias) : undefined);
+    }
+    tratarDiaSemInteracao(motoristaId, dto, user) {
+        return this.service.tratarDiaSemInteracao(motoristaId, dto, user.sub, user.grupoId);
     }
 };
 exports.AutorrelatoFolgaController = AutorrelatoFolgaController;
@@ -51,6 +55,16 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", void 0)
 ], AutorrelatoFolgaController.prototype, "diasSemInteracao", null);
+__decorate([
+    (0, common_1.Post)('motoristas/:motoristaId/dias-sem-interacao/tratar'),
+    (0, roles_decorator_1.Roles)(client_1.PapelUsuario.ADMIN, client_1.PapelUsuario.GESTOR),
+    __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, tratar_dia_sem_interacao_dto_1.TratarDiaSemInteracaoDto, Object]),
+    __metadata("design:returntype", void 0)
+], AutorrelatoFolgaController.prototype, "tratarDiaSemInteracao", null);
 exports.AutorrelatoFolgaController = AutorrelatoFolgaController = __decorate([
     (0, common_1.Controller)(),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

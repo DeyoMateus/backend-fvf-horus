@@ -25,9 +25,9 @@ export declare class AlertasJornadaController {
     }[]>;
     listByEmpresa(user: UsuarioAutenticado, naoVisualizados?: string): import("@prisma/client").Prisma.PrismaPromise<({
         motorista: {
+            cpf: string;
             id: string;
             nome: string;
-            cpf: string;
         };
     } & {
         id: string;
