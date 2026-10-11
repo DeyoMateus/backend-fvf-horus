@@ -84,6 +84,16 @@ type HistoricoDb = Pick<
   'registroJornada' | 'tratamentoPonto'
 >;
 
+/** Evento mais antigo que isso (no recebimento) não gera push ao motorista. */
+const LIMITE_EVENTO_ATRASADO_PUSH_MS = 30 * 60 * 1000;
+
+/** Alertas que tratam do próprio atraso/relógio: continuam notificando mesmo com evento antigo. */
+const TIPOS_ALERTA_SOBRE_O_PROPRIO_ATRASO: string[] = [
+  'SINCRONIZACAO_TARDIA_SUSPEITA',
+  'RELOGIO_DIVERGENTE_DETECTADO_RETROATIVAMENTE',
+  'RELOGIO_DISPOSITIVO_SUSPEITO',
+];
+
 @Injectable()
 export class RegistrosJornadaService {
   // Mesmo valor de DESVIO_RELOGIO_FUTURO_MAXIMO_MIN em AntifraudeService ,
@@ -673,7 +683,21 @@ export class RegistrosJornadaService {
     // notificação push é I/O que não deveria segurar o lock/transação
     // do banco. Fail-open (fire-and-forget) já é garantido dentro do
     // próprio PushNotificationsService.
+    // Rodada 202: evento sincronizado com atraso (aparelho ficou sem sinal,
+    // ex.: 3 dias): o alerta descreve algo do passado, o app já avisou o
+    // motorista no momento (alarme local) e não faz sentido avisar de novo.
+    // O alerta continua gravado e visível (painel, lista do motorista); só
+    // o push ao motorista e o WhatsApp ao gestor/GR são suprimidos. Exceção:
+    // alertas que existem justamente por causa do atraso/relógio.
+    const momentoEvento = new Date(registro.timestampEvento).getTime();
+    const eventoAntigoParaPush =
+      Number.isFinite(momentoEvento) &&
+      Date.now() - momentoEvento > LIMITE_EVENTO_ATRASADO_PUSH_MS;
     for (const alerta of alertasCriticosParaNotificar) {
+      const suprimir =
+        eventoAntigoParaPush &&
+        !TIPOS_ALERTA_SOBRE_O_PROPRIO_ATRASO.includes(alerta.tipo);
+      if (suprimir) continue;
       void this.pushNotifications.notificarMotorista(
         motoristaId,
         'Alerta de jornada',
