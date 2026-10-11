@@ -134,4 +134,49 @@ describe('JornadaLegalService , jornadas encadeadas (Rodada 182)', () => {
     expect(tipos).not.toContain('JORNADA_DIRECAO_EXCEDIDA');
     expect(tipos).not.toContain('JORNADA_DIRECAO_PROXIMA_LIMITE');
   });
+
+  describe('Rodada 205 , jornada vazia não zera o descanso interjornada', () => {
+    const base = () => [
+      reg('INICIO_JORNADA', '2026-10-10T08:00:00Z'),
+      reg('INICIO_DIRECAO', '2026-10-10T08:00:00Z'),
+      reg('FIM_DIRECAO', '2026-10-10T17:00:00Z'), // 9h
+      reg('FIM_JORNADA', '2026-10-10T22:46:00Z'),
+    ];
+
+    it('jornada aberta e fechada sem trabalho no meio não gera falso positivo (13h41 desde o último fim com trabalho)', () => {
+      const registros = [
+        ...base(),
+        reg('INICIO_JORNADA', '2026-10-11T08:27:00Z'),
+        reg('FIM_JORNADA', '2026-10-11T08:28:00Z'),
+        reg('INICIO_JORNADA', '2026-10-11T12:27:00Z'),
+      ];
+      const alertas = service.avaliar(
+        registros,
+        registros[registros.length - 1],
+        new Set(),
+        new Date('2026-10-11T12:27:30Z'),
+      );
+      expect(alertas.map((a) => a.tipo)).not.toContain(
+        'DESCANSO_INTERJORNADA_INSUFICIENTE',
+      );
+    });
+
+    it('continua alertando quando o descanso real desde a jornada com trabalho é menor que 11h', () => {
+      const registros = [
+        ...base(),
+        reg('INICIO_JORNADA', '2026-10-11T06:00:00Z'),
+        reg('FIM_JORNADA', '2026-10-11T06:01:00Z'),
+        reg('INICIO_JORNADA', '2026-10-11T07:00:00Z'), // 8h14 desde 22:46
+      ];
+      const alertas = service.avaliar(
+        registros,
+        registros[registros.length - 1],
+        new Set(),
+        new Date('2026-10-11T07:00:30Z'),
+      );
+      expect(alertas.map((a) => a.tipo)).toContain(
+        'DESCANSO_INTERJORNADA_INSUFICIENTE',
+      );
+    });
+  });
 });

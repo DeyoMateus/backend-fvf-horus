@@ -704,7 +704,14 @@ export class JornadaLegalService {
     )
       return null;
 
-    const ordenados = [...registros].sort(compararPorTimestampEvento);
+    // Rodada 205: jornada "vazia" (INICIO_JORNADA seguido direto de
+    // FIM_JORNADA, sem nenhum trabalho) não conta como jornada nem zera o
+    // descanso: o descanso de 11h é contado desde o fim da última
+    // jornada em que houve trabalho.
+    const ordenados = this.removerJornadasVazias(
+      [...registros].sort(compararPorTimestampEvento),
+      registroRecemCriado.id,
+    );
     const idxAtual = ordenados.findIndex(
       (r) => r.id === registroRecemCriado.id,
     );
@@ -775,6 +782,33 @@ export class JornadaLegalService {
       janelaFim: registroRecemCriado.timestampEvento,
       minutosAcumulados: Math.round(descansoMin),
     };
+  }
+
+  /**
+   * Rodada 205: remove pares INICIO_JORNADA + FIM_JORNADA consecutivos
+   * (jornada aberta e fechada sem nenhum evento de trabalho entre eles).
+   * Nunca remove o registro com id `manterId`.
+   */
+  private removerJornadasVazias(
+    ordenados: RegistroJornada[],
+    manterId?: string,
+  ): RegistroJornada[] {
+    const resultado: RegistroJornada[] = [];
+    for (let i = 0; i < ordenados.length; i++) {
+      const r = ordenados[i];
+      const prox = ordenados[i + 1];
+      if (
+        r.tipoEvento === TipoEvento.INICIO_JORNADA &&
+        prox?.tipoEvento === TipoEvento.FIM_JORNADA &&
+        r.id !== manterId &&
+        prox.id !== manterId
+      ) {
+        i++; // pula o par vazio
+        continue;
+      }
+      resultado.push(r);
+    }
+    return resultado;
   }
 
   /**
