@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PrivacidadeService = void 0;
 const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
+const pagination_util_1 = require("../common/pagination/pagination.util");
 const audit_service_1 = require("../common/audit/audit.service");
 const prisma_service_1 = require("../common/prisma/prisma.service");
 const privacidade_textos_1 = require("./privacidade.textos");
@@ -101,21 +102,84 @@ let PrivacidadeService = class PrivacidadeService {
             take: 100,
         });
     }
-    async listarParaPainel(status) {
-        const itens = await this.prisma.solicitacaoTitular.findMany({
-            where: status && Object.values(client_1.StatusSolicitacaoTitular).includes(status)
-                ? { status }
-                : undefined,
-            orderBy: [{ status: 'asc' }, { prazoEm: 'asc' }],
-            take: 200,
-            include: { motorista: { select: { id: true, nome: true } } },
-        });
-        const agora = Date.now();
-        return itens.map((i) => ({
-            ...i,
-            vencida: (i.status === 'ABERTA' || i.status === 'EM_ANALISE') &&
-                i.prazoEm.getTime() < agora,
-        }));
+    async listarParaPainel(filtro) {
+        const pag = (0, pagination_util_1.normalizarPaginacao)(filtro.page, filtro.pageSize);
+        const agora = new Date();
+        const condicoes = [];
+        if (filtro.status &&
+            Object.values(client_1.StatusSolicitacaoTitular).includes(filtro.status)) {
+            condicoes.push({ status: filtro.status });
+        }
+        if (filtro.tipo &&
+            Object.values(client_1.TipoSolicitacaoTitular).includes(filtro.tipo)) {
+            condicoes.push({ tipo: filtro.tipo });
+        }
+        if (filtro.busca?.trim()) {
+            condicoes.push({
+                motorista: {
+                    nome: { contains: filtro.busca.trim(), mode: 'insensitive' },
+                },
+            });
+        }
+        if (filtro.dataInicio || filtro.dataFim) {
+            condicoes.push({
+                createdAt: {
+                    ...(filtro.dataInicio ? { gte: filtro.dataInicio } : {}),
+                    ...(filtro.dataFim ? { lte: filtro.dataFim } : {}),
+                },
+            });
+        }
+        if (filtro.vencidas) {
+            condicoes.push({
+                status: { in: ['ABERTA', 'EM_ANALISE'] },
+                prazoEm: { lt: agora },
+            });
+        }
+        const where = condicoes.length
+            ? { AND: condicoes }
+            : {};
+        const [itens, total, abertas, emAnalise, vencidas] = await Promise.all([
+            this.prisma.solicitacaoTitular.findMany({
+                where,
+                orderBy: { createdAt: filtro.ordem === 'asc' ? 'asc' : 'desc' },
+                skip: pag.skip,
+                take: pag.take,
+                include: { motorista: { select: { id: true, nome: true } } },
+            }),
+            this.prisma.solicitacaoTitular.count({ where }),
+            this.prisma.solicitacaoTitular.count({ where: { status: 'ABERTA' } }),
+            this.prisma.solicitacaoTitular.count({ where: { status: 'EM_ANALISE' } }),
+            this.prisma.solicitacaoTitular.count({
+                where: {
+                    status: { in: ['ABERTA', 'EM_ANALISE'] },
+                    prazoEm: { lt: agora },
+                },
+            }),
+        ]);
+        const idsResp = Array.from(new Set(itens
+            .map((i) => i.respondidaPorUsuarioId)
+            .filter((x) => !!x)));
+        const usuarios = idsResp.length
+            ? await this.prisma.usuarioEmpresa.findMany({
+                where: { id: { in: idsResp } },
+                select: { id: true, nome: true },
+            })
+            : [];
+        const nomePorId = new Map(usuarios.map((u) => [u.id, u.nome]));
+        return {
+            dados: itens.map((i) => ({
+                ...i,
+                respondidaPorNome: i.respondidaPorUsuarioId
+                    ? (nomePorId.get(i.respondidaPorUsuarioId) ?? null)
+                    : null,
+                vencida: (i.status === 'ABERTA' || i.status === 'EM_ANALISE') &&
+                    i.prazoEm.getTime() < agora.getTime(),
+            })),
+            total,
+            page: pag.page,
+            pageSize: pag.pageSize,
+            resumo: { abertas, emAnalise, vencidas },
+        };
     }
     async listarPendentesParaSino() {
         return this.prisma.solicitacaoTitular.findMany({

@@ -12,16 +12,14 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PrivacidadePainelController = exports.PrivacidadeMobileController = exports.PrivacidadePublicaController = void 0;
+exports.PrivacidadeMobileController = exports.PrivacidadePublicaController = void 0;
 const common_1 = require("@nestjs/common");
 const throttler_1 = require("@nestjs/throttler");
 const client_1 = require("@prisma/client");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
 const permitir_sem_ciencia_decorator_1 = require("../common/decorators/permitir-sem-ciencia.decorator");
 const roles_decorator_1 = require("../common/decorators/roles.decorator");
-const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const motorista_device_guard_1 = require("../common/guards/motorista-device.guard");
-const roles_guard_1 = require("../common/guards/roles.guard");
 const privacidade_dto_1 = require("./dto/privacidade.dto");
 const privacidade_service_1 = require("./privacidade.service");
 let PrivacidadePublicaController = class PrivacidadePublicaController {
@@ -59,11 +57,39 @@ let PrivacidadeMobileController = class PrivacidadeMobileController {
     criar(req, dto) {
         return this.service.criarSolicitacao(req.motorista.id, dto.tipo, dto.descricao);
     }
-    listar(req) {
-        return this.service.listarDoMotorista(req.motorista.id);
+    solicitacoes(status, tipo, busca, dataInicio, dataFim, vencidas, ordem, page, pageSize) {
+        const data = (v) => {
+            if (!v)
+                return undefined;
+            const d = new Date(v);
+            return Number.isNaN(d.getTime()) ? undefined : d;
+        };
+        return this.service.listarParaPainel({
+            status: status,
+            tipo: tipo,
+            busca: busca?.slice(0, 80),
+            dataInicio: data(dataInicio),
+            dataFim: data(dataFim),
+            vencidas: vencidas === 'true',
+            ordem: ordem === 'asc' ? 'asc' : 'desc',
+            page: page ? Number(page) : undefined,
+            pageSize: pageSize ? Number(pageSize) : undefined,
+        });
     }
-    meusDados(req) {
-        return this.service.exportarDadosDoMotorista(req.motorista.id);
+    pendentes() {
+        return this.service.listarPendentesParaSino();
+    }
+    responder(id, dto, user) {
+        return this.service.responderSolicitacao(id, user.grupoId, user.sub, dto);
+    }
+    ciencias() {
+        return this.service.situacaoDasCiencias();
+    }
+    encarregado(user) {
+        return this.service.obterEncarregado(user.grupoId);
+    }
+    atualizarEncarregado(dto, user) {
+        return this.service.atualizarEncarregado(user.grupoId, user.sub, dto);
     }
 };
 exports.PrivacidadeMobileController = PrivacidadeMobileController;
@@ -93,65 +119,27 @@ __decorate([
 ], PrivacidadeMobileController.prototype, "criar", null);
 __decorate([
     (0, common_1.Get)('solicitacoes'),
-    __param(0, (0, common_1.Req)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", void 0)
-], PrivacidadeMobileController.prototype, "listar", null);
-__decorate([
-    (0, throttler_1.Throttle)({ default: { limit: 3, ttl: 60_000 } }),
-    (0, common_1.Get)('meus-dados'),
-    __param(0, (0, common_1.Req)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", void 0)
-], PrivacidadeMobileController.prototype, "meusDados", null);
-exports.PrivacidadeMobileController = PrivacidadeMobileController = __decorate([
-    (0, common_1.Controller)('dispositivo/privacidade'),
-    (0, common_1.UseGuards)(motorista_device_guard_1.MotoristaDeviceGuard),
-    (0, permitir_sem_ciencia_decorator_1.PermitirSemCiencia)(),
-    __metadata("design:paramtypes", [privacidade_service_1.PrivacidadeService])
-], PrivacidadeMobileController);
-let PrivacidadePainelController = class PrivacidadePainelController {
-    service;
-    constructor(service) {
-        this.service = service;
-    }
-    solicitacoes(status) {
-        return this.service.listarParaPainel(status);
-    }
-    pendentes() {
-        return this.service.listarPendentesParaSino();
-    }
-    responder(id, dto, user) {
-        return this.service.responderSolicitacao(id, user.grupoId, user.sub, dto);
-    }
-    ciencias() {
-        return this.service.situacaoDasCiencias();
-    }
-    encarregado(user) {
-        return this.service.obterEncarregado(user.grupoId);
-    }
-    atualizarEncarregado(dto, user) {
-        return this.service.atualizarEncarregado(user.grupoId, user.sub, dto);
-    }
-};
-exports.PrivacidadePainelController = PrivacidadePainelController;
-__decorate([
-    (0, common_1.Get)('solicitacoes'),
     (0, roles_decorator_1.Roles)(client_1.PapelUsuario.ADMIN, client_1.PapelUsuario.GESTOR),
     __param(0, (0, common_1.Query)('status')),
+    __param(1, (0, common_1.Query)('tipo')),
+    __param(2, (0, common_1.Query)('busca')),
+    __param(3, (0, common_1.Query)('dataInicio')),
+    __param(4, (0, common_1.Query)('dataFim')),
+    __param(5, (0, common_1.Query)('vencidas')),
+    __param(6, (0, common_1.Query)('ordem')),
+    __param(7, (0, common_1.Query)('page')),
+    __param(8, (0, common_1.Query)('pageSize')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, String, String, String, String, String, String, String, String]),
     __metadata("design:returntype", void 0)
-], PrivacidadePainelController.prototype, "solicitacoes", null);
+], PrivacidadeMobileController.prototype, "solicitacoes", null);
 __decorate([
     (0, common_1.Get)('solicitacoes-pendentes'),
     (0, roles_decorator_1.Roles)(client_1.PapelUsuario.ADMIN, client_1.PapelUsuario.GESTOR),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
-], PrivacidadePainelController.prototype, "pendentes", null);
+], PrivacidadeMobileController.prototype, "pendentes", null);
 __decorate([
     (0, common_1.Patch)('solicitacoes/:id'),
     (0, roles_decorator_1.Roles)(client_1.PapelUsuario.ADMIN, client_1.PapelUsuario.GESTOR),
@@ -161,14 +149,14 @@ __decorate([
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, privacidade_dto_1.ResponderSolicitacaoTitularDto, Object]),
     __metadata("design:returntype", void 0)
-], PrivacidadePainelController.prototype, "responder", null);
+], PrivacidadeMobileController.prototype, "responder", null);
 __decorate([
     (0, common_1.Get)('ciencias'),
     (0, roles_decorator_1.Roles)(client_1.PapelUsuario.ADMIN, client_1.PapelUsuario.GESTOR),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
-], PrivacidadePainelController.prototype, "ciencias", null);
+], PrivacidadeMobileController.prototype, "ciencias", null);
 __decorate([
     (0, common_1.Get)('encarregado'),
     (0, roles_decorator_1.Roles)(client_1.PapelUsuario.ADMIN, client_1.PapelUsuario.GESTOR),
@@ -176,7 +164,7 @@ __decorate([
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
-], PrivacidadePainelController.prototype, "encarregado", null);
+], PrivacidadeMobileController.prototype, "encarregado", null);
 __decorate([
     (0, common_1.Put)('encarregado'),
     (0, roles_decorator_1.Roles)(client_1.PapelUsuario.ADMIN),
@@ -185,10 +173,11 @@ __decorate([
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [privacidade_dto_1.AtualizarEncarregadoDto, Object]),
     __metadata("design:returntype", void 0)
-], PrivacidadePainelController.prototype, "atualizarEncarregado", null);
-exports.PrivacidadePainelController = PrivacidadePainelController = __decorate([
-    (0, common_1.Controller)('privacidade/painel'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+], PrivacidadeMobileController.prototype, "atualizarEncarregado", null);
+exports.PrivacidadeMobileController = PrivacidadeMobileController = __decorate([
+    (0, common_1.Controller)('dispositivo/privacidade'),
+    (0, common_1.UseGuards)(motorista_device_guard_1.MotoristaDeviceGuard),
+    (0, permitir_sem_ciencia_decorator_1.PermitirSemCiencia)(),
     __metadata("design:paramtypes", [privacidade_service_1.PrivacidadeService])
-], PrivacidadePainelController);
+], PrivacidadeMobileController);
 //# sourceMappingURL=privacidade.controller.js.map

@@ -1,7 +1,18 @@
-import { StatusSolicitacaoTitular, TipoDocumentoPrivacidade, TipoSolicitacaoTitular } from '@prisma/client';
+import { Prisma, StatusSolicitacaoTitular, TipoDocumentoPrivacidade, TipoSolicitacaoTitular } from '@prisma/client';
 import { AuditService } from '../common/audit/audit.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { AtualizarEncarregadoDto, ResponderSolicitacaoTitularDto } from './dto/privacidade.dto';
+export interface FiltroSolicitacoesTitular {
+    status?: StatusSolicitacaoTitular;
+    tipo?: TipoSolicitacaoTitular;
+    busca?: string;
+    dataInicio?: Date;
+    dataFim?: Date;
+    vencidas?: boolean;
+    ordem?: 'asc' | 'desc';
+    page?: number;
+    pageSize?: number;
+}
 export declare class PrivacidadeService {
     private readonly prisma;
     private readonly audit;
@@ -78,7 +89,7 @@ export declare class PrivacidadeService {
         respondidaEm: Date | null;
         respondidaPorUsuarioId: string | null;
     }>;
-    listarDoMotorista(motoristaId: string): import("@prisma/client").Prisma.PrismaPromise<{
+    listarDoMotorista(motoristaId: string): Prisma.PrismaPromise<{
         id: string;
         createdAt: Date;
         updatedAt: Date;
@@ -91,24 +102,35 @@ export declare class PrivacidadeService {
         respondidaEm: Date | null;
         respondidaPorUsuarioId: string | null;
     }[]>;
-    listarParaPainel(status?: StatusSolicitacaoTitular): Promise<{
-        vencida: boolean;
-        motorista: {
+    listarParaPainel(filtro: FiltroSolicitacoesTitular): Promise<{
+        dados: {
+            respondidaPorNome: string | null;
+            vencida: boolean;
+            motorista: {
+                id: string;
+                nome: string;
+            };
             id: string;
-            nome: string;
+            createdAt: Date;
+            updatedAt: Date;
+            status: import("@prisma/client").$Enums.StatusSolicitacaoTitular;
+            motoristaId: string;
+            tipo: import("@prisma/client").$Enums.TipoSolicitacaoTitular;
+            descricao: string | null;
+            resposta: string | null;
+            prazoEm: Date;
+            respondidaEm: Date | null;
+            respondidaPorUsuarioId: string | null;
+        }[];
+        total: number;
+        page: number;
+        pageSize: number;
+        resumo: {
+            abertas: number;
+            emAnalise: number;
+            vencidas: number;
         };
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoTitular;
-        motoristaId: string;
-        tipo: import("@prisma/client").$Enums.TipoSolicitacaoTitular;
-        descricao: string | null;
-        resposta: string | null;
-        prazoEm: Date;
-        respondidaEm: Date | null;
-        respondidaPorUsuarioId: string | null;
-    }[]>;
+    }>;
     listarPendentesParaSino(): Promise<{
         motorista: {
             nome: string;
@@ -178,13 +200,13 @@ export declare class PrivacidadeService {
             observacao: string | null;
             tipoEvento: import("@prisma/client").$Enums.TipoEvento;
             timestampEvento: Date;
-            latitude: import("@prisma/client/runtime/library").Decimal | null;
-            longitude: import("@prisma/client/runtime/library").Decimal | null;
+            latitude: Prisma.Decimal | null;
+            longitude: Prisma.Decimal | null;
             precisaoGpsM: number | null;
         }[];
         amostrasDeLocalizacao: {
-            latitude: import("@prisma/client/runtime/library").Decimal;
-            longitude: import("@prisma/client/runtime/library").Decimal;
+            latitude: Prisma.Decimal;
+            longitude: Prisma.Decimal;
             precisaoGpsM: number | null;
             capturadoEm: Date;
         }[];

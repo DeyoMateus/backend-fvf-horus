@@ -1,4 +1,3 @@
-import { StatusSolicitacaoTitular } from '@prisma/client';
 import type { Motorista } from '@prisma/client';
 import type { UsuarioAutenticado } from '../common/decorators/current-user.decorator';
 import { AtualizarEncarregadoDto, CriarSolicitacaoTitularDto, RegistrarAceiteDto, ResponderSolicitacaoTitularDto } from './dto/privacidade.dto';
@@ -86,92 +85,14 @@ export declare class PrivacidadeMobileController {
         respondidaEm: Date | null;
         respondidaPorUsuarioId: string | null;
     }>;
-    listar(req: RequisicaoMotorista): import("@prisma/client").Prisma.PrismaPromise<{
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoTitular;
-        motoristaId: string;
-        tipo: import("@prisma/client").$Enums.TipoSolicitacaoTitular;
-        descricao: string | null;
-        resposta: string | null;
-        prazoEm: Date;
-        respondidaEm: Date | null;
-        respondidaPorUsuarioId: string | null;
-    }[]>;
-    meusDados(req: RequisicaoMotorista): Promise<{
-        geradoEm: string;
-        aviso: string;
-        cadastro: {
-            cpf: string;
-            cnh: string;
-            telefone: string | null;
-            empresa: {
-                cnpj: string;
-                razaoSocial: string;
+    solicitacoes(status?: string, tipo?: string, busca?: string, dataInicio?: string, dataFim?: string, vencidas?: string, ordem?: string, page?: string, pageSize?: string): Promise<{
+        dados: {
+            respondidaPorNome: string | null;
+            vencida: boolean;
+            motorista: {
+                id: string;
+                nome: string;
             };
-            createdAt: Date;
-            nome: string;
-            status: import("@prisma/client").$Enums.StatusMotorista;
-        } | null;
-        registrosDeJornada: {
-            createdAt: Date;
-            fusoOffsetMin: number | null;
-            observacao: string | null;
-            tipoEvento: import("@prisma/client").$Enums.TipoEvento;
-            timestampEvento: Date;
-            latitude: import("@prisma/client/runtime/library").Decimal | null;
-            longitude: import("@prisma/client/runtime/library").Decimal | null;
-            precisaoGpsM: number | null;
-        }[];
-        amostrasDeLocalizacao: {
-            latitude: import("@prisma/client/runtime/library").Decimal;
-            longitude: import("@prisma/client/runtime/library").Decimal;
-            precisaoGpsM: number | null;
-            capturadoEm: Date;
-        }[];
-        ajustesDePonto: {
-            id: string;
-            createdAt: Date;
-            fusoOffsetMin: number | null;
-            motoristaId: string;
-            tipoEvento: import("@prisma/client").$Enums.TipoEvento;
-            timestampEvento: Date;
-            usuarioId: string;
-            motivo: string;
-            registroReferenciaId: string | null;
-            hashReferencia: string;
-            hashRegistro: string;
-            motoristaCienciaEm: Date | null;
-        }[];
-        solicitacoesDeAjuste: {
-            id: string;
-            createdAt: Date;
-            status: import("@prisma/client").$Enums.StatusSolicitacaoAjuste;
-            motoristaId: string;
-            tipoEvento: import("@prisma/client").$Enums.TipoEvento;
-            timestampEvento: Date;
-            registroReferenciaId: string | null;
-            justificativa: string;
-            decididoPorUsuarioId: string | null;
-            decididoEm: Date | null;
-            motivoDecisao: string | null;
-            tratamentoPontoId: string | null;
-        }[];
-        alertas: {
-            createdAt: Date;
-            tipo: import("@prisma/client").$Enums.TipoAlertaJornada;
-            severidade: import("@prisma/client").$Enums.SeveridadeAlerta;
-            mensagem: string;
-        }[];
-        cienciasDePrivacidade: {
-            id: string;
-            motoristaId: string;
-            versao: string;
-            aceitoEm: Date;
-            tipoDocumento: import("@prisma/client").$Enums.TipoDocumentoPrivacidade;
-        }[];
-        pedidosDoTitular: {
             id: string;
             createdAt: Date;
             updatedAt: Date;
@@ -184,29 +105,15 @@ export declare class PrivacidadeMobileController {
             respondidaEm: Date | null;
             respondidaPorUsuarioId: string | null;
         }[];
-    }>;
-}
-export declare class PrivacidadePainelController {
-    private readonly service;
-    constructor(service: PrivacidadeService);
-    solicitacoes(status?: StatusSolicitacaoTitular): Promise<{
-        vencida: boolean;
-        motorista: {
-            id: string;
-            nome: string;
+        total: number;
+        page: number;
+        pageSize: number;
+        resumo: {
+            abertas: number;
+            emAnalise: number;
+            vencidas: number;
         };
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        status: import("@prisma/client").$Enums.StatusSolicitacaoTitular;
-        motoristaId: string;
-        tipo: import("@prisma/client").$Enums.TipoSolicitacaoTitular;
-        descricao: string | null;
-        resposta: string | null;
-        prazoEm: Date;
-        respondidaEm: Date | null;
-        respondidaPorUsuarioId: string | null;
-    }[]>;
+    }>;
     pendentes(): Promise<{
         motorista: {
             nome: string;
