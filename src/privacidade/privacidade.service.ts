@@ -14,6 +14,10 @@ import {
   PRAZO_RESPOSTA_TITULAR_DIAS,
   VERSAO_DOCUMENTOS,
 } from './privacidade.textos';
+import {
+  gerarPdfMeusDados,
+  type DadosExportadosMotorista,
+} from './privacidade-pdf.util';
 import type {
   AtualizarEncarregadoDto,
   ResponderSolicitacaoTitularDto,
@@ -444,5 +448,11 @@ export class PrivacidadeService {
       cienciasDePrivacidade: aceites,
       pedidosDoTitular: solicitacoesTitular,
     };
+  }
+
+  /** Mesma exportação, em PDF (também gera o registro de auditoria da exportação). */
+  async exportarDadosDoMotoristaPdf(motoristaId: string): Promise<Buffer> {
+    const dados = await this.exportarDadosDoMotorista(motoristaId);
+    return gerarPdfMeusDados(dados as unknown as DadosExportadosMotorista);
   }
 }

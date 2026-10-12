@@ -1,4 +1,4 @@
-import { Prisma, RegistroJornada } from '@prisma/client';
+import { Prisma, RegistroJornada, TipoEvento } from '@prisma/client';
 import { AntifraudeService } from '../common/antifraude/antifraude.service';
 import { JornadaLegalService } from '../common/jornada-legal/jornada-legal.service';
 import { PushNotificationsService } from '../common/notifications/push-notifications.service';
@@ -29,6 +29,7 @@ export interface ViagemConsolidada {
         numero: string | null;
     }[];
 }
+export declare function fimSeguidoDeInicioDeOutraAtividade(anterior: TipoEvento, novo: TipoEvento): boolean;
 export declare class RegistrosJornadaService {
     private readonly prisma;
     private readonly hashChain;

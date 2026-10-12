@@ -65,6 +65,16 @@ let PrivacidadeMobileController = class PrivacidadeMobileController {
     meusDados(req) {
         return this.service.exportarDadosDoMotorista(req.motorista.id);
     }
+    async meusDadosPdf(req, res) {
+        const pdf = await this.service.exportarDadosDoMotoristaPdf(req.motorista.id);
+        res.set({
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': 'attachment; filename="meus-dados-fvf-horus.pdf"',
+            'Content-Length': String(pdf.length),
+            'Cache-Control': 'no-store',
+        });
+        res.end(pdf);
+    }
 };
 exports.PrivacidadeMobileController = PrivacidadeMobileController;
 __decorate([
@@ -106,6 +116,15 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], PrivacidadeMobileController.prototype, "meusDados", null);
+__decorate([
+    (0, throttler_1.Throttle)({ default: { limit: 3, ttl: 60_000 } }),
+    (0, common_1.Get)('meus-dados/pdf'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], PrivacidadeMobileController.prototype, "meusDadosPdf", null);
 exports.PrivacidadeMobileController = PrivacidadeMobileController = __decorate([
     (0, common_1.Controller)('dispositivo/privacidade'),
     (0, common_1.UseGuards)(motorista_device_guard_1.MotoristaDeviceGuard),

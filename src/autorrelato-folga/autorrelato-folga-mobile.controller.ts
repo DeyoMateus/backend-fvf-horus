@@ -22,12 +22,17 @@ const REGEX_DATA_ISO = /^\d{4}-\d{2}-\d{2}$/;
 export class AutorrelatoFolgaMobileController {
   constructor(private readonly service: AutorrelatoFolgaService) {}
 
+  // Rodada 221: o motorista não "avisa" mais a folga, ele PEDE (ver
+  // `solicitacoes-folga`). Esta rota fica só para responder claramente a
+  // versões antigas do app; os avisos já feitos continuam como histórico.
   @Post('autorrelato-folga')
   autorrelatar(
-    @Req() req: { motorista: { id: string } },
-    @Body() dto: CreateAutorrelatoFolgaDto,
-  ) {
-    return this.service.autorrelatar(req.motorista.id, dto);
+    @Req() _req: { motorista: { id: string } },
+    @Body() _dto: CreateAutorrelatoFolgaDto,
+  ): never {
+    throw new BadRequestException(
+      'Agora a folga é pedida ao RH. Atualize o aplicativo e use "Pedir folga" na aba Horas.',
+    );
   }
 
   // Rodada 57 , o motorista consegue conferir, no próprio app, os

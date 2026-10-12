@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 var RegistrosJornadaService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RegistrosJornadaService = void 0;
+exports.fimSeguidoDeInicioDeOutraAtividade = fimSeguidoDeInicioDeOutraAtividade;
 const precisao_gps_util_1 = require("../common/hash-chain/precisao-gps.util");
 const grupo_id_seguro_1 = require("../common/prisma/grupo-id-seguro");
 const common_1 = require("@nestjs/common");
@@ -43,6 +44,22 @@ const TIPOS_ALERTA_SOBRE_O_PROPRIO_ATRASO = [
     'RELOGIO_DIVERGENTE_DETECTADO_RETROATIVAMENTE',
     'RELOGIO_DISPOSITIVO_SUSPEITO',
 ];
+const ATIVIDADE_DO_FIM = {
+    [client_1.TipoEvento.FIM_DESCANSO]: 'DESCANSO',
+    [client_1.TipoEvento.FIM_DIRECAO]: 'DIRECAO',
+    [client_1.TipoEvento.FIM_ESPERA_CARGA_DESCARGA]: 'ESPERA',
+    [client_1.TipoEvento.FIM_DESCARREGAMENTO]: 'ESPERA',
+};
+const ATIVIDADE_DO_INICIO = {
+    [client_1.TipoEvento.INICIO_DESCANSO]: 'DESCANSO',
+    [client_1.TipoEvento.INICIO_DIRECAO]: 'DIRECAO',
+    [client_1.TipoEvento.ESPERA_CARGA_DESCARGA]: 'ESPERA',
+};
+function fimSeguidoDeInicioDeOutraAtividade(anterior, novo) {
+    const fim = ATIVIDADE_DO_FIM[anterior];
+    const inicio = ATIVIDADE_DO_INICIO[novo];
+    return !!fim && !!inicio && fim !== inicio;
+}
 let RegistrosJornadaService = class RegistrosJornadaService {
     static { RegistrosJornadaService_1 = this; }
     prisma;
@@ -125,7 +142,8 @@ let RegistrosJornadaService = class RegistrosJornadaService {
             const igualPermitido = !!ultimo &&
                 timestampEventoNovo.getTime() === ultimo.timestampEvento.getTime() &&
                 (dto.tipoEvento === client_1.TipoEvento.FIM_JORNADA ||
-                    ultimo.tipoEvento === client_1.TipoEvento.INICIO_JORNADA);
+                    ultimo.tipoEvento === client_1.TipoEvento.INICIO_JORNADA ||
+                    fimSeguidoDeInicioDeOutraAtividade(ultimo.tipoEvento, dto.tipoEvento));
             if (ultimo &&
                 !igualPermitido &&
                 timestampEventoNovo.getTime() <= ultimo.timestampEvento.getTime()) {

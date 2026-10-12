@@ -16,6 +16,7 @@ const pagination_util_1 = require("../common/pagination/pagination.util");
 const audit_service_1 = require("../common/audit/audit.service");
 const prisma_service_1 = require("../common/prisma/prisma.service");
 const privacidade_textos_1 = require("./privacidade.textos");
+const privacidade_pdf_util_1 = require("./privacidade-pdf.util");
 const LIMITE_EXPORTACAO = 20000;
 let PrivacidadeService = class PrivacidadeService {
     prisma;
@@ -355,6 +356,10 @@ let PrivacidadeService = class PrivacidadeService {
             cienciasDePrivacidade: aceites,
             pedidosDoTitular: solicitacoesTitular,
         };
+    }
+    async exportarDadosDoMotoristaPdf(motoristaId) {
+        const dados = await this.exportarDadosDoMotorista(motoristaId);
+        return (0, privacidade_pdf_util_1.gerarPdfMeusDados)(dados);
     }
 };
 exports.PrivacidadeService = PrivacidadeService;

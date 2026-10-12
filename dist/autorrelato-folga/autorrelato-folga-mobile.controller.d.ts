@@ -3,17 +3,11 @@ import { CreateAutorrelatoFolgaDto } from './dto/create-autorrelato-folga.dto';
 export declare class AutorrelatoFolgaMobileController {
     private readonly service;
     constructor(service: AutorrelatoFolgaService);
-    autorrelatar(req: {
+    autorrelatar(_req: {
         motorista: {
             id: string;
         };
-    }, dto: CreateAutorrelatoFolgaDto): Promise<{
-        data: Date;
-        id: string;
-        createdAt: Date;
-        motoristaId: string;
-        observacao: string | null;
-    }>;
+    }, _dto: CreateAutorrelatoFolgaDto): never;
     listarMinhas(req: {
         motorista: {
             id: string;

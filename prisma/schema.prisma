@@ -359,6 +359,7 @@ model UsuarioEmpresa {
   solicitacoesTrocaRevisadas SolicitacaoTrocaDispositivo[]
   documentosCargaEnviados    DocumentoCarga[]
   folgasConcedidas           FolgaConcedida[]
+  solicitacoesFolgaDecididas SolicitacaoFolga[]
   diasSemInteracaoTratados   DiaSemInteracaoTratado[]
   solicitacoesAjusteDecididas SolicitacaoAjustePonto[]
   feriadosCriados            Feriado[]
@@ -456,6 +457,7 @@ model Motorista {
   solicitacoesTrocaDispositivo SolicitacaoTrocaDispositivo[]
   autorrelatosFolga            AutorrelatoFolga[]
   folgasConcedidas             FolgaConcedida[]
+  solicitacoesFolga            SolicitacaoFolga[]
   diasSemInteracaoTratados     DiaSemInteracaoTratado[]
   veiculoVinculado              VeiculoVinculado?
   documentosCarga              DocumentoCarga[]
@@ -1763,4 +1765,46 @@ model SolicitacaoTitular {
   @@index([motoristaId, createdAt])
   @@index([status, prazoEm])
   @@map("solicitacoes_titular")
+}
+
+// ==========================================
+// PEDIDO DE FOLGA (Rodada 221)
+//  - O motorista NÃO avisa mais a folga: ele PEDE (um ou vários dias
+//    seguidos, de hoje em diante). O RH confere, aceita ou nega com
+//    justificativa. Aprovar cria uma FolgaConcedida por dia; negar só
+//    marca o status. O RH continua podendo lançar folga direto
+//    (FolgaConcedida) quando não houve pedido.
+// ==========================================
+
+enum StatusSolicitacaoFolga {
+  PENDENTE
+  APROVADA
+  NEGADA
+}
+
+model SolicitacaoFolga {
+  id String @id @default(uuid())
+
+  motoristaId String
+  motorista   Motorista @relation(fields: [motoristaId], references: [id])
+
+  /// Primeiro e último dia pedidos (dia calendário, inclusive). Máx. 15 dias.
+  dataInicio DateTime @db.Date
+  dataFim    DateTime @db.Date
+
+  /// Texto do motorista explicando o pedido (opcional).
+  observacao String?
+
+  status StatusSolicitacaoFolga @default(PENDENTE)
+
+  decididoPorUsuarioId String?
+  decididoPorUsuario   UsuarioEmpresa? @relation(fields: [decididoPorUsuarioId], references: [id])
+  decididoEm           DateTime?
+  /// Justificativa do RH , obrigatória ao negar, opcional ao aprovar.
+  motivoDecisao        String?
+
+  createdAt DateTime @default(now())
+
+  @@index([motoristaId, status])
+  @@map("solicitacoes_folga")
 }

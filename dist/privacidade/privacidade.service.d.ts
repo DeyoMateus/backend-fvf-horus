@@ -265,4 +265,5 @@ export declare class PrivacidadeService {
             respondidaPorUsuarioId: string | null;
         }[];
     }>;
+    exportarDadosDoMotoristaPdf(motoristaId: string): Promise<Buffer>;
 }

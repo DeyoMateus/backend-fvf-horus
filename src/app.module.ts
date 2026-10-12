@@ -34,6 +34,7 @@ import { IndicadoresModule } from './indicadores/indicadores.module';
 import { BancoHorasModule } from './banco-horas/banco-horas.module';
 import { RegrasSindicaisModule } from './regras-sindicais/regras-sindicais.module';
 import { FeriadosModule } from './feriados/feriados.module';
+import { SolicitacoesFolgaModule } from './solicitacoes-folga/solicitacoes-folga.module';
 import { SolicitacoesAjustePontoModule } from './solicitacoes-ajuste-ponto/solicitacoes-ajuste-ponto.module';
 import { UsuariosEmpresaModule } from './usuarios-empresa/usuarios-empresa.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
@@ -109,6 +110,7 @@ import { FusoClienteInterceptor } from './common/fuso/fuso-cliente.interceptor';
     RegrasSindicaisModule,
     FeriadosModule,
     SolicitacoesAjustePontoModule,
+    SolicitacoesFolgaModule,
     UsuariosEmpresaModule,
     SuperAdminModule,
     AuditoriaModule,

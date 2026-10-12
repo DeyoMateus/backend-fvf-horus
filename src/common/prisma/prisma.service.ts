@@ -36,6 +36,12 @@ const MODELOS_COM_RLS = [
   'solicitacaoTrocaDispositivo',
   'autorrelatoFolga',
   'folgaConcedida',
+  'solicitacaoFolga',
+  // Rodada 222 (LGPD): estas duas tabelas têm RLS forçado desde a rodada 206
+  // mas faltavam aqui , sem o SET LOCAL do grupo a leitura vinha vazia e a
+  // ciência "nunca" constava (o app pedia a assinatura de novo).
+  'aceitePrivacidade',
+  'solicitacaoTitular',
   'diaSemInteracaoTratado',
   'documentoCarga',
   'tratamentoPontoEvidencia',

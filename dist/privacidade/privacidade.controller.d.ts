@@ -1,3 +1,4 @@
+import type { Response } from 'express';
 import type { Motorista } from '@prisma/client';
 import type { UsuarioAutenticado } from '../common/decorators/current-user.decorator';
 import { AtualizarEncarregadoDto, CriarSolicitacaoTitularDto, RegistrarAceiteDto, ResponderSolicitacaoTitularDto } from './dto/privacidade.dto';
@@ -184,6 +185,7 @@ export declare class PrivacidadeMobileController {
             respondidaPorUsuarioId: string | null;
         }[];
     }>;
+    meusDadosPdf(req: RequisicaoMotorista, res: Response): Promise<void>;
 }
 export declare class PrivacidadePainelController {
     private readonly service;

@@ -23,8 +23,8 @@ let AutorrelatoFolgaMobileController = class AutorrelatoFolgaMobileController {
     constructor(service) {
         this.service = service;
     }
-    autorrelatar(req, dto) {
-        return this.service.autorrelatar(req.motorista.id, dto);
+    autorrelatar(_req, _dto) {
+        throw new common_1.BadRequestException('Agora a folga é pedida ao RH. Atualize o aplicativo e use "Pedir folga" na aba Horas.');
     }
     listarMinhas(req) {
         return this.service.listarMinhas(req.motorista.id);

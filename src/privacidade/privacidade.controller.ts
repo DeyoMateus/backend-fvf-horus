@@ -9,9 +9,11 @@ import {
   Put,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import type { Response } from 'express';
 import {
   PapelUsuario,
   StatusSolicitacaoTitular,
@@ -92,6 +94,20 @@ export class PrivacidadeMobileController {
   @Get('meus-dados')
   meusDados(@Req() req: RequisicaoMotorista) {
     return this.service.exportarDadosDoMotorista(req.motorista.id);
+  }
+
+  /** Mesma cópia dos dados, em PDF formal e legível (rodada 218). */
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @Get('meus-dados/pdf')
+  async meusDadosPdf(@Req() req: RequisicaoMotorista, @Res() res: Response) {
+    const pdf = await this.service.exportarDadosDoMotoristaPdf(req.motorista.id);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'attachment; filename="meus-dados-fvf-horus.pdf"',
+      'Content-Length': String(pdf.length),
+      'Cache-Control': 'no-store',
+    });
+    res.end(pdf);
   }
 }
 

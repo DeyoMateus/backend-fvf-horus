@@ -94,6 +94,30 @@ const TIPOS_ALERTA_SOBRE_O_PROPRIO_ATRASO: string[] = [
   'RELOGIO_DISPOSITIVO_SUSPEITO',
 ];
 
+type AtividadeJornada = 'DESCANSO' | 'DIRECAO' | 'ESPERA';
+
+const ATIVIDADE_DO_FIM: Partial<Record<TipoEvento, AtividadeJornada>> = {
+  [TipoEvento.FIM_DESCANSO]: 'DESCANSO',
+  [TipoEvento.FIM_DIRECAO]: 'DIRECAO',
+  [TipoEvento.FIM_ESPERA_CARGA_DESCARGA]: 'ESPERA',
+  [TipoEvento.FIM_DESCARREGAMENTO]: 'ESPERA',
+};
+const ATIVIDADE_DO_INICIO: Partial<Record<TipoEvento, AtividadeJornada>> = {
+  [TipoEvento.INICIO_DESCANSO]: 'DESCANSO',
+  [TipoEvento.INICIO_DIRECAO]: 'DIRECAO',
+  [TipoEvento.ESPERA_CARGA_DESCARGA]: 'ESPERA',
+};
+
+/** Fim de uma atividade logo seguido do início de OUTRA atividade (pode ter o mesmo horário). */
+export function fimSeguidoDeInicioDeOutraAtividade(
+  anterior: TipoEvento,
+  novo: TipoEvento,
+): boolean {
+  const fim = ATIVIDADE_DO_FIM[anterior];
+  const inicio = ATIVIDADE_DO_INICIO[novo];
+  return !!fim && !!inicio && fim !== inicio;
+}
+
 @Injectable()
 export class RegistrosJornadaService {
   // Mesmo valor de DESVIO_RELOGIO_FUTURO_MAXIMO_MIN em AntifraudeService ,
@@ -278,11 +302,19 @@ export class RegistrosJornadaService {
         // INICIO_JORNADA seguido do próximo (ex.: Início de jornada + Início
         // de direção). Horário ANTERIOR continua sempre rejeitado, e um par
         // início/fim do mesmo trecho com duração zero também.
+        // Rodada 223: também é legítimo o FIM de uma atividade seguido, no
+        // mesmo horário, do INÍCIO de OUTRA atividade (ex.: Fim de descanso +
+        // Início de direção). Continua proibido o par da MESMA atividade com
+        // duração zero (Início de descanso + Fim de descanso).
         const igualPermitido =
           !!ultimo &&
           timestampEventoNovo.getTime() === ultimo.timestampEvento.getTime() &&
           (dto.tipoEvento === TipoEvento.FIM_JORNADA ||
-            ultimo.tipoEvento === TipoEvento.INICIO_JORNADA);
+            ultimo.tipoEvento === TipoEvento.INICIO_JORNADA ||
+            fimSeguidoDeInicioDeOutraAtividade(
+              ultimo.tipoEvento,
+              dto.tipoEvento,
+            ));
         if (
           ultimo &&
           !igualPermitido &&

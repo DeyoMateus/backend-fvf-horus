@@ -43,6 +43,7 @@ const indicadores_module_1 = require("./indicadores/indicadores.module");
 const banco_horas_module_1 = require("./banco-horas/banco-horas.module");
 const regras_sindicais_module_1 = require("./regras-sindicais/regras-sindicais.module");
 const feriados_module_1 = require("./feriados/feriados.module");
+const solicitacoes_folga_module_1 = require("./solicitacoes-folga/solicitacoes-folga.module");
 const solicitacoes_ajuste_ponto_module_1 = require("./solicitacoes-ajuste-ponto/solicitacoes-ajuste-ponto.module");
 const usuarios_empresa_module_1 = require("./usuarios-empresa/usuarios-empresa.module");
 const super_admin_module_1 = require("./super-admin/super-admin.module");
@@ -112,6 +113,7 @@ exports.AppModule = AppModule = __decorate([
             regras_sindicais_module_1.RegrasSindicaisModule,
             feriados_module_1.FeriadosModule,
             solicitacoes_ajuste_ponto_module_1.SolicitacoesAjustePontoModule,
+            solicitacoes_folga_module_1.SolicitacoesFolgaModule,
             usuarios_empresa_module_1.UsuariosEmpresaModule,
             super_admin_module_1.SuperAdminModule,
             auditoria_module_1.AuditoriaModule,
