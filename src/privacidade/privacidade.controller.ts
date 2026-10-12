@@ -83,6 +83,25 @@ export class PrivacidadeMobileController {
   }
 
   @Get('solicitacoes')
+  minhasSolicitacoes(@Req() req: RequisicaoMotorista) {
+    return this.service.listarDoMotorista(req.motorista.id);
+  }
+
+  /** Cópia dos dados do próprio motorista (LGPD art. 18, II e V). */
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @Get('meus-dados')
+  meusDados(@Req() req: RequisicaoMotorista) {
+    return this.service.exportarDadosDoMotorista(req.motorista.id);
+  }
+}
+
+/** Painel da transportadora (JWT): pedidos dos titulares, ciências e encarregado. */
+@Controller('privacidade/painel')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class PrivacidadePainelController {
+  constructor(private readonly service: PrivacidadeService) {}
+
+  @Get('solicitacoes')
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
   solicitacoes(
     @Query('status') status?: string,

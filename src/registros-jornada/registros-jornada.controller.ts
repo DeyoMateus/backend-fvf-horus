@@ -28,6 +28,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { MotoristaDeviceGuard } from '../common/guards/motorista-device.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { LocalizacaoAcessoService } from '../common/localizacao/localizacao-acesso.service';
+import { podeVerLocalizacao } from '../common/localizacao/localizacao-acesso.util';
 import { TenantService } from '../common/tenant/tenant.service';
 import { CreateRegistroJornadaDto } from './dto/create-registro-jornada.dto';
 import { LoteRegistroJornadaDto } from './dto/lote-registro-jornada.dto';
@@ -73,6 +75,7 @@ export class RegistrosJornadaController {
     private readonly feriadosService: FeriadosService,
     private readonly prisma: PrismaService,
     private readonly tenant: TenantService,
+    private readonly localizacao: LocalizacaoAcessoService,
   ) {}
 
   // Usado pelo app do motorista. Autenticação por device binding
@@ -194,11 +197,21 @@ export class RegistrosJornadaController {
   @Get('motorista/:motoristaId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
-  list(
+  async list(
     @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @CurrentUser() user: UsuarioAutenticado,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent?: string,
   ) {
-    return this.registrosService.listByMotorista(motoristaId, user.grupoId);
+    // Rodada 213/215: usuários do painel veem coordenadas; cada consulta é auditada.
+    const registros = await this.registrosService.listByMotorista(
+      motoristaId,
+      user.grupoId,
+    );
+    return this.localizacao.filtrar(user, motoristaId, 'LISTA_REGISTROS', registros, {
+      ip,
+      userAgent,
+    });
   }
 
   @Get('motorista/:motoristaId/verificar-integridade')
@@ -219,16 +232,37 @@ export class RegistrosJornadaController {
   @Get('motorista/:motoristaId/integridade/:sequencial')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(PapelUsuario.ADMIN, PapelUsuario.GESTOR)
-  analisarEventoIntegridade(
+  async analisarEventoIntegridade(
     @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Param('sequencial') sequencial: string,
     @CurrentUser() user: UsuarioAutenticado,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent?: string,
   ) {
-    return this.registrosService.analisarEventoIntegridade(
+    const analise = await this.registrosService.analisarEventoIntegridade(
       motoristaId,
       Number(sequencial),
       user.grupoId,
     );
+    // Rodada 213: o payload canônico do hash contém latitude/longitude,
+    // então também é omitido para quem não é ADMIN.
+    const filtrada = await this.localizacao.filtrar(
+      user,
+      motoristaId,
+      'ANALISE_INTEGRIDADE',
+      analise,
+      { ip, userAgent },
+    );
+    if (!podeVerLocalizacao(user.papel) && filtrada.verificacao) {
+      return {
+        ...filtrada,
+        verificacao: {
+          ...filtrada.verificacao,
+          payloadCanonico: '(omitido: contém localização, indisponível para este perfil)',
+        },
+      };
+    }
+    return filtrada;
   }
 
   /** Pedido do usuário: aceitar/regularizar uma divergência específica da verificação de integridade, em vez de ela ficar marcada como problema pra sempre. */
@@ -277,6 +311,7 @@ export class RegistrosJornadaController {
     @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Res() res: Response,
     @CurrentUser() user: UsuarioAutenticado,
+    @Ip() ip: string,
     @Query('inicio') inicio?: string,
     @Query('fim') fim?: string,
   ) {
@@ -287,11 +322,18 @@ export class RegistrosJornadaController {
     });
     if (!motorista) throw new NotFoundException('Motorista não encontrado');
 
-    const registros = await this.registrosService.listByMotoristaNoPeriodo(
+    const registrosBrutos = await this.registrosService.listByMotoristaNoPeriodo(
       motoristaId,
       inicio ? new Date(inicio) : undefined,
       fim ? new Date(fim) : undefined,
       offsetPadraoDaEmpresa(motorista.empresa.fusoHorario),
+    );
+    const registros = await this.localizacao.filtrar(
+      user,
+      motoristaId,
+      'AEJ',
+      registrosBrutos,
+      { ip },
     );
     const csv = this.aejService.gerarCsv(
       motorista,
@@ -315,6 +357,7 @@ export class RegistrosJornadaController {
     @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Res() res: Response,
     @CurrentUser() user: UsuarioAutenticado,
+    @Ip() ip: string,
     @Query('inicio') inicio?: string,
     @Query('fim') fim?: string,
   ) {
@@ -324,6 +367,8 @@ export class RegistrosJornadaController {
       inicio,
       fim,
       user.grupoId,
+      user,
+      ip,
     );
   }
 
@@ -342,6 +387,7 @@ export class RegistrosJornadaController {
     @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Res() res: Response,
     @CurrentUser() user: UsuarioAutenticado,
+    @Ip() ip: string,
     @Query('inicio') inicio?: string,
     @Query('fim') fim?: string,
   ) {
@@ -351,6 +397,8 @@ export class RegistrosJornadaController {
       inicio,
       fim,
       user.grupoId,
+      user,
+      ip,
     );
   }
 
@@ -371,6 +419,8 @@ export class RegistrosJornadaController {
     inicio?: string,
     fim?: string,
     grupoIdSolicitante?: string,
+    usuarioPainel?: UsuarioAutenticado,
+    ip?: string,
   ) {
     if (grupoIdSolicitante) {
       await this.tenant.verificarMotoristaNoGrupo(
@@ -389,7 +439,7 @@ export class RegistrosJornadaController {
     const periodoInicio = dataInicio ?? new Date(0);
     const periodoFim = dataFim ?? new Date();
 
-    const [registros, tratamentos, feriadosRaw] = await Promise.all([
+    const [registrosBrutos, tratamentos, feriadosRaw] = await Promise.all([
       this.registrosService.listByMotoristaNoPeriodo(
         motoristaId,
         dataInicio,
@@ -424,6 +474,16 @@ export class RegistrosJornadaController {
         periodoFim,
       ),
     ]);
+    // Rodada 213: pedido do painel segue a regra de papel (só ADMIN vê GPS).
+    const registros = usuarioPainel
+      ? await this.localizacao.filtrar(
+          usuarioPainel,
+          motoristaId,
+          'ESPELHO_REP_P',
+          registrosBrutos,
+          { ip },
+        )
+      : registrosBrutos;
     const feriadosNoPeriodo = feriadosRaw.map((f) => ({
       data: f.data.toISOString().slice(0, 10),
       descricao: f.descricao,
@@ -459,6 +519,8 @@ export class RegistrosJornadaController {
     inicio?: string,
     fim?: string,
     grupoIdSolicitante?: string,
+    usuarioPainel?: UsuarioAutenticado,
+    ip?: string,
   ) {
     // Só confere tenant quando quem pediu foi o painel (grupoIdSolicitante
     // presente) , a rota do próprio app (meuComprovante) já usa o id do
@@ -478,12 +540,23 @@ export class RegistrosJornadaController {
     const dataInicio = inicio ? new Date(inicio) : undefined;
     const dataFim = fim ? new Date(fim) : undefined;
 
-    const registros = await this.registrosService.listByMotoristaNoPeriodo(
+    const registrosBrutos = await this.registrosService.listByMotoristaNoPeriodo(
       motoristaId,
       dataInicio,
       dataFim,
       offsetPadraoDaEmpresa(motorista.empresa.fusoHorario),
     );
+    // Rodada 213: o comprovante pedido pelo painel segue a regra de papel;
+    // o do próprio motorista (usuarioPainel ausente) mostra o que é dele.
+    const registros = usuarioPainel
+      ? await this.localizacao.filtrar(
+          usuarioPainel,
+          motoristaId,
+          'COMPROVANTE',
+          registrosBrutos,
+          { ip },
+        )
+      : registrosBrutos;
 
     const pdf = await this.comprovanteService.gerarPdfRegistros(
       motorista,

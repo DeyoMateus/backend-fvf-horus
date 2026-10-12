@@ -17,6 +17,7 @@ const whatsapp_notifications_service_1 = require("../common/notifications/whatsa
 const prisma_service_1 = require("../common/prisma/prisma.service");
 const tenant_service_1 = require("../common/tenant/tenant.service");
 const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
+const minimizar_dados_whatsapp_util_1 = require("../common/notifications/minimizar-dados-whatsapp.util");
 function paraDiaUtc(data) {
     const d = typeof data === 'string' ? new Date(data) : data;
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -172,7 +173,7 @@ let FolgaConcedidaService = class FolgaConcedidaService {
                 .split('-')
                 .reverse()
                 .join('/');
-            void this.whatsapp.notificarGestoresDaEmpresa(motorista.empresaId, `${motorista.nome} bateu ponto em ${diaFormatado}, dia em que a empresa tinha concedido folga , a folga foi anulada automaticamente.`);
+            void this.whatsapp.notificarGestoresDaEmpresa(motorista.empresaId, `${(0, minimizar_dados_whatsapp_util_1.nomeAbreviado)(motorista.nome)} bateu ponto em ${diaFormatado}, dia em que a empresa tinha concedido folga , a folga foi anulada automaticamente.`);
         }
         return { anulada: true };
     }

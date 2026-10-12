@@ -27,6 +27,8 @@ const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const motorista_device_guard_1 = require("../common/guards/motorista-device.guard");
 const roles_guard_1 = require("../common/guards/roles.guard");
 const prisma_service_1 = require("../common/prisma/prisma.service");
+const localizacao_acesso_service_1 = require("../common/localizacao/localizacao-acesso.service");
+const localizacao_acesso_util_1 = require("../common/localizacao/localizacao-acesso.util");
 const tenant_service_1 = require("../common/tenant/tenant.service");
 const create_registro_jornada_dto_1 = require("./dto/create-registro-jornada.dto");
 const lote_registro_jornada_dto_1 = require("./dto/lote-registro-jornada.dto");
@@ -55,7 +57,8 @@ let RegistrosJornadaController = class RegistrosJornadaController {
     feriadosService;
     prisma;
     tenant;
-    constructor(registrosService, comprovanteService, aejService, repPService, feriadosService, prisma, tenant) {
+    localizacao;
+    constructor(registrosService, comprovanteService, aejService, repPService, feriadosService, prisma, tenant, localizacao) {
         this.registrosService = registrosService;
         this.comprovanteService = comprovanteService;
         this.aejService = aejService;
@@ -63,6 +66,7 @@ let RegistrosJornadaController = class RegistrosJornadaController {
         this.feriadosService = feriadosService;
         this.prisma = prisma;
         this.tenant = tenant;
+        this.localizacao = localizacao;
     }
     create(req, dto, ip, userAgent) {
         return this.registrosService.create(req.motorista.id, req.deviceUuid, dto, ip, userAgent);
@@ -98,14 +102,29 @@ let RegistrosJornadaController = class RegistrosJornadaController {
         });
         res.send(pdf);
     }
-    list(motoristaId, user) {
-        return this.registrosService.listByMotorista(motoristaId, user.grupoId);
+    async list(motoristaId, user, ip, userAgent) {
+        const registros = await this.registrosService.listByMotorista(motoristaId, user.grupoId);
+        return this.localizacao.filtrar(user, motoristaId, 'LISTA_REGISTROS', registros, {
+            ip,
+            userAgent,
+        });
     }
     verificarIntegridade(motoristaId, user) {
         return this.registrosService.verificarIntegridade(motoristaId, user.sub, user.grupoId);
     }
-    analisarEventoIntegridade(motoristaId, sequencial, user) {
-        return this.registrosService.analisarEventoIntegridade(motoristaId, Number(sequencial), user.grupoId);
+    async analisarEventoIntegridade(motoristaId, sequencial, user, ip, userAgent) {
+        const analise = await this.registrosService.analisarEventoIntegridade(motoristaId, Number(sequencial), user.grupoId);
+        const filtrada = await this.localizacao.filtrar(user, motoristaId, 'ANALISE_INTEGRIDADE', analise, { ip, userAgent });
+        if (!(0, localizacao_acesso_util_1.podeVerLocalizacao)(user.papel) && filtrada.verificacao) {
+            return {
+                ...filtrada,
+                verificacao: {
+                    ...filtrada.verificacao,
+                    payloadCanonico: '(omitido: contém localização, indisponível para este perfil)',
+                },
+            };
+        }
+        return filtrada;
     }
     aceitarDivergenciaIntegridade(motoristaId, sequencial, motivo, user) {
         return this.registrosService.aceitarDivergenciaIntegridade(motoristaId, Number(sequencial), motivo, user.sub, user.grupoId);
@@ -113,7 +132,7 @@ let RegistrosJornadaController = class RegistrosJornadaController {
     viagens(motoristaId, user) {
         return this.registrosService.consolidarViagens(motoristaId, user.grupoId);
     }
-    async aej(motoristaId, res, user, inicio, fim) {
+    async aej(motoristaId, res, user, ip, inicio, fim) {
         await this.tenant.verificarMotoristaNoGrupo(motoristaId, user.grupoId);
         const motorista = await this.prisma.motorista.findUnique({
             where: { id: motoristaId },
@@ -121,7 +140,8 @@ let RegistrosJornadaController = class RegistrosJornadaController {
         });
         if (!motorista)
             throw new common_2.NotFoundException('Motorista não encontrado');
-        const registros = await this.registrosService.listByMotoristaNoPeriodo(motoristaId, inicio ? new Date(inicio) : undefined, fim ? new Date(fim) : undefined, (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(motorista.empresa.fusoHorario));
+        const registrosBrutos = await this.registrosService.listByMotoristaNoPeriodo(motoristaId, inicio ? new Date(inicio) : undefined, fim ? new Date(fim) : undefined, (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(motorista.empresa.fusoHorario));
+        const registros = await this.localizacao.filtrar(user, motoristaId, 'AEJ', registrosBrutos, { ip });
         const csv = this.aejService.gerarCsv(motorista, motorista.empresa, registros);
         res.set({
             'Content-Type': 'text/csv; charset=utf-8',
@@ -129,16 +149,16 @@ let RegistrosJornadaController = class RegistrosJornadaController {
         });
         res.send(csv);
     }
-    async comprovante(motoristaId, res, user, inicio, fim) {
-        await this.responderComprovante(res, motoristaId, inicio, fim, user.grupoId);
+    async comprovante(motoristaId, res, user, ip, inicio, fim) {
+        await this.responderComprovante(res, motoristaId, inicio, fim, user.grupoId, user, ip);
     }
-    async espelhoRepP(motoristaId, res, user, inicio, fim) {
-        await this.responderEspelhoRepP(res, motoristaId, inicio, fim, user.grupoId);
+    async espelhoRepP(motoristaId, res, user, ip, inicio, fim) {
+        await this.responderEspelhoRepP(res, motoristaId, inicio, fim, user.grupoId, user, ip);
     }
     async meuEspelhoRepP(req, res, inicio, fim) {
         await this.responderEspelhoRepP(res, req.motorista.id, inicio, fim);
     }
-    async responderEspelhoRepP(res, motoristaId, inicio, fim, grupoIdSolicitante) {
+    async responderEspelhoRepP(res, motoristaId, inicio, fim, grupoIdSolicitante, usuarioPainel, ip) {
         if (grupoIdSolicitante) {
             await this.tenant.verificarMotoristaNoGrupo(motoristaId, grupoIdSolicitante);
         }
@@ -152,7 +172,7 @@ let RegistrosJornadaController = class RegistrosJornadaController {
         const dataFim = fim ? new Date(fim) : undefined;
         const periodoInicio = dataInicio ?? new Date(0);
         const periodoFim = dataFim ?? new Date();
-        const [registros, tratamentos, feriadosRaw] = await Promise.all([
+        const [registrosBrutos, tratamentos, feriadosRaw] = await Promise.all([
             this.registrosService.listByMotoristaNoPeriodo(motoristaId, dataInicio, dataFim, (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(motorista.empresa.fusoHorario)),
             this.prisma.tratamentoPonto.findMany({
                 where: {
@@ -167,6 +187,9 @@ let RegistrosJornadaController = class RegistrosJornadaController {
             }),
             this.feriadosService.listarParaRelatorio(motorista.empresa.grupoId, motorista.empresaId, periodoInicio, periodoFim),
         ]);
+        const registros = usuarioPainel
+            ? await this.localizacao.filtrar(usuarioPainel, motoristaId, 'ESPELHO_REP_P', registrosBrutos, { ip })
+            : registrosBrutos;
         const feriadosNoPeriodo = feriadosRaw.map((f) => ({
             data: f.data.toISOString().slice(0, 10),
             descricao: f.descricao,
@@ -183,7 +206,7 @@ let RegistrosJornadaController = class RegistrosJornadaController {
         });
         res.send(pdf);
     }
-    async responderComprovante(res, motoristaId, inicio, fim, grupoIdSolicitante) {
+    async responderComprovante(res, motoristaId, inicio, fim, grupoIdSolicitante, usuarioPainel, ip) {
         if (grupoIdSolicitante) {
             await this.tenant.verificarMotoristaNoGrupo(motoristaId, grupoIdSolicitante);
         }
@@ -195,7 +218,10 @@ let RegistrosJornadaController = class RegistrosJornadaController {
             throw new common_2.NotFoundException('Motorista não encontrado');
         const dataInicio = inicio ? new Date(inicio) : undefined;
         const dataFim = fim ? new Date(fim) : undefined;
-        const registros = await this.registrosService.listByMotoristaNoPeriodo(motoristaId, dataInicio, dataFim, (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(motorista.empresa.fusoHorario));
+        const registrosBrutos = await this.registrosService.listByMotoristaNoPeriodo(motoristaId, dataInicio, dataFim, (0, fuso_brasil_util_1.offsetPadraoDaEmpresa)(motorista.empresa.fusoHorario));
+        const registros = usuarioPainel
+            ? await this.localizacao.filtrar(usuarioPainel, motoristaId, 'COMPROVANTE', registrosBrutos, { ip })
+            : registrosBrutos;
         const pdf = await this.comprovanteService.gerarPdfRegistros(motorista, motorista.empresa, registros, dataInicio ?? registros[0]?.timestampEvento ?? new Date(), dataFim ?? new Date());
         res.set({
             'Content-Type': 'application/pdf',
@@ -265,9 +291,11 @@ __decorate([
     (0, roles_decorator_1.Roles)(client_1.PapelUsuario.ADMIN, client_1.PapelUsuario.GESTOR),
     __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __param(2, (0, common_1.Ip)()),
+    __param(3, (0, common_1.Headers)('user-agent')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:paramtypes", [String, Object, String, String]),
+    __metadata("design:returntype", Promise)
 ], RegistrosJornadaController.prototype, "list", null);
 __decorate([
     (0, common_1.Get)('motorista/:motoristaId/verificar-integridade'),
@@ -286,9 +314,11 @@ __decorate([
     __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Param)('sequencial')),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __param(3, (0, common_1.Ip)()),
+    __param(4, (0, common_1.Headers)('user-agent')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Object]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:paramtypes", [String, String, Object, String, String]),
+    __metadata("design:returntype", Promise)
 ], RegistrosJornadaController.prototype, "analisarEventoIntegridade", null);
 __decorate([
     (0, common_1.Patch)('motorista/:motoristaId/integridade/:sequencial/aceitar'),
@@ -320,10 +350,11 @@ __decorate([
     __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Res)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
-    __param(3, (0, common_1.Query)('inicio')),
-    __param(4, (0, common_1.Query)('fim')),
+    __param(3, (0, common_1.Ip)()),
+    __param(4, (0, common_1.Query)('inicio')),
+    __param(5, (0, common_1.Query)('fim')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object, Object, String, String]),
+    __metadata("design:paramtypes", [String, Object, Object, String, String, String]),
     __metadata("design:returntype", Promise)
 ], RegistrosJornadaController.prototype, "aej", null);
 __decorate([
@@ -334,10 +365,11 @@ __decorate([
     __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Res)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
-    __param(3, (0, common_1.Query)('inicio')),
-    __param(4, (0, common_1.Query)('fim')),
+    __param(3, (0, common_1.Ip)()),
+    __param(4, (0, common_1.Query)('inicio')),
+    __param(5, (0, common_1.Query)('fim')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object, Object, String, String]),
+    __metadata("design:paramtypes", [String, Object, Object, String, String, String]),
     __metadata("design:returntype", Promise)
 ], RegistrosJornadaController.prototype, "comprovante", null);
 __decorate([
@@ -348,10 +380,11 @@ __decorate([
     __param(0, (0, common_1.Param)('motoristaId', common_1.ParseUUIDPipe)),
     __param(1, (0, common_1.Res)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
-    __param(3, (0, common_1.Query)('inicio')),
-    __param(4, (0, common_1.Query)('fim')),
+    __param(3, (0, common_1.Ip)()),
+    __param(4, (0, common_1.Query)('inicio')),
+    __param(5, (0, common_1.Query)('fim')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object, Object, String, String]),
+    __metadata("design:paramtypes", [String, Object, Object, String, String, String]),
     __metadata("design:returntype", Promise)
 ], RegistrosJornadaController.prototype, "espelhoRepP", null);
 __decorate([
@@ -373,6 +406,7 @@ exports.RegistrosJornadaController = RegistrosJornadaController = __decorate([
         rep_p_service_1.RepPService,
         feriados_service_1.FeriadosService,
         prisma_service_1.PrismaService,
-        tenant_service_1.TenantService])
+        tenant_service_1.TenantService,
+        localizacao_acesso_service_1.LocalizacaoAcessoService])
 ], RegistrosJornadaController);
 //# sourceMappingURL=registros-jornada.controller.js.map

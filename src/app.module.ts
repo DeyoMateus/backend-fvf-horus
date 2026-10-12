@@ -7,6 +7,7 @@ import { AppService } from './app.service';
 import { BullModule } from '@nestjs/bullmq';
 import { AlertasJornadaModule } from './alertas-jornada/alertas-jornada.module';
 import { AuditModule } from './common/audit/audit.module';
+import { LocalizacaoAcessoModule } from './common/localizacao/localizacao-acesso.module';
 import { CryptoModule } from './common/crypto/crypto.module';
 import { HashChainModule } from './common/hash-chain/hash-chain.module';
 import { StorageModule } from './common/storage/storage.module';
@@ -42,6 +43,7 @@ import { AjudantesModule } from './ajudantes/ajudantes.module';
 import { RegistrosJornadaAjudanteModule } from './registros-jornada-ajudante/registros-jornada-ajudante.module';
 import { DossieCobrancaModule } from './dossie-cobranca/dossie-cobranca.module';
 import { FechamentoFiscalModule } from './fechamento-fiscal/fechamento-fiscal.module';
+import { MonitoramentoModule } from './common/monitoramento/monitoramento.module';
 import { LimpezaTokensModule } from './common/limpeza-tokens/limpeza-tokens.module';
 import { RedisThrottlerStorageService } from './common/throttler/redis-throttler-storage.service';
 import { AppThrottlerStorageModule } from './common/throttler/throttler.module';
@@ -87,6 +89,7 @@ import { FusoClienteInterceptor } from './common/fuso/fuso-cliente.interceptor';
     HashChainModule,
     SignatureModule,
     AuditModule,
+    LocalizacaoAcessoModule,
     AuthModule,
     EmpresasModule,
     MotoristasModule,
@@ -115,6 +118,7 @@ import { FusoClienteInterceptor } from './common/fuso/fuso-cliente.interceptor';
     DossieCobrancaModule,
     FechamentoFiscalModule,
     LimpezaTokensModule,
+    MonitoramentoModule,
   ],
   controllers: [AppController],
   providers: [

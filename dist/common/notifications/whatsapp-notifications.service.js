@@ -20,6 +20,7 @@ const bullmq_2 = require("bullmq");
 const fuso_brasil_util_1 = require("../fuso/fuso-brasil.util");
 const prisma_service_1 = require("../prisma/prisma.service");
 const whatsapp_notifications_constants_1 = require("./whatsapp-notifications.constants");
+const minimizar_dados_whatsapp_util_1 = require("./minimizar-dados-whatsapp.util");
 let WhatsappNotificationsService = WhatsappNotificationsService_1 = class WhatsappNotificationsService {
     fila;
     prisma;
@@ -61,7 +62,7 @@ let WhatsappNotificationsService = WhatsappNotificationsService_1 = class Whatsa
             attempts: 3,
             backoff: { type: 'exponential', delay: 5_000 },
             removeOnComplete: true,
-            removeOnFail: 50,
+            removeOnFail: { age: 24 * 3600, count: 50 },
         });
     }
     async notificarGestoresDaEmpresa(empresaId, mensagem) {
@@ -102,7 +103,7 @@ let WhatsappNotificationsService = WhatsappNotificationsService_1 = class Whatsa
                     if (!telefone || jaEnfileirados.has(telefone))
                         continue;
                     jaEnfileirados.add(telefone);
-                    await this.enfileirar(telefone, this.formatarMensagemFormal((0, fuso_brasil_util_1.renderizarHorarios)(mensagem, fuso), empresa.razaoSocial));
+                    await this.enfileirar(telefone, this.formatarMensagemFormal((0, minimizar_dados_whatsapp_util_1.mascararDadosPessoais)((0, fuso_brasil_util_1.renderizarHorarios)(mensagem, fuso)), empresa.razaoSocial));
                 }
             }
             if (jaEnfileirados.size === 0) {
@@ -112,6 +113,43 @@ let WhatsappNotificationsService = WhatsappNotificationsService_1 = class Whatsa
         catch (err) {
             this.logger.error(`Falha ao enfileirar notificação WhatsApp para empresa ${empresaId}`, err);
         }
+    }
+    async diagnostico() {
+        const configurado = this.configurado();
+        let redis = 'ok';
+        let falhasUltimaHora = 0;
+        try {
+            const falhas = await Promise.race([
+                this.fila.getFailed(0, 49),
+                new Promise((_, rejeitar) => setTimeout(() => rejeitar(new Error('Redis sem resposta')), 5_000)),
+            ]);
+            const umaHoraAtras = Date.now() - 60 * 60 * 1000;
+            falhasUltimaHora = falhas.filter((j) => (j.finishedOn ?? 0) >= umaHoraAtras).length;
+        }
+        catch {
+            redis = 'erro';
+        }
+        let evolution = 'nao_configurada';
+        const url = process.env.EVOLUTION_API_URL;
+        const chave = process.env.EVOLUTION_API_KEY;
+        const instancia = process.env.EVOLUTION_INSTANCE;
+        if (url && chave && instancia) {
+            try {
+                const resp = await fetch(`${url.replace(/\/+$/, '')}/instance/connectionState/${encodeURIComponent(instancia)}`, { headers: { apikey: chave }, signal: AbortSignal.timeout(8_000) });
+                if (!resp.ok) {
+                    evolution = 'indisponivel';
+                }
+                else {
+                    const corpo = (await resp.json());
+                    const estado = corpo.instance?.state ?? corpo.state;
+                    evolution = estado === 'open' ? 'ok' : 'desconectada';
+                }
+            }
+            catch {
+                evolution = 'indisponivel';
+            }
+        }
+        return { configurado, redis, falhasUltimaHora, evolution };
     }
 };
 exports.WhatsappNotificationsService = WhatsappNotificationsService;

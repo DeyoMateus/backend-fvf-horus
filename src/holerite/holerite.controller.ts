@@ -1,6 +1,8 @@
 import {
   Controller,
   Get,
+  Headers,
+  Ip,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -16,6 +18,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { LocalizacaoAcessoService } from '../common/localizacao/localizacao-acesso.service';
 import { GerarHoleriteQueryDto } from './dto/gerar-holerite.dto';
 import { gerarPdfHolerite } from './holerite-pdf.util';
 import { HoleriteService } from './holerite.service';
@@ -35,6 +38,7 @@ export class HoleriteController {
   constructor(
     private readonly holeriteService: HoleriteService,
     private readonly prisma: PrismaService,
+    private readonly localizacao: LocalizacaoAcessoService,
   ) {}
 
   // JSON , usado pela tela do painel pra mostrar a prévia antes de baixar o PDF.
@@ -43,8 +47,10 @@ export class HoleriteController {
     @Param('motoristaId', ParseUUIDPipe) motoristaId: string,
     @Query() query: GerarHoleriteQueryDto,
     @CurrentUser() user: UsuarioAutenticado,
+    @Ip() ip: string,
+    @Headers('user-agent') userAgent?: string,
   ) {
-    return this.holeriteService.calcular(
+    const resultado = await this.holeriteService.calcular(
       motoristaId,
       new Date(query.inicio),
       new Date(query.fim),
@@ -55,6 +61,11 @@ export class HoleriteController {
       },
       user.grupoId,
     );
+    // Rodada 213: coordenadas só para ADMIN (com auditoria).
+    return this.localizacao.filtrar(user, motoristaId, 'HOLERITE', resultado, {
+      ip,
+      userAgent,
+    });
   }
 
   @Get('pdf')
@@ -63,18 +74,27 @@ export class HoleriteController {
     @Query() query: GerarHoleriteQueryDto,
     @CurrentUser() user: UsuarioAutenticado,
     @Res() res: Response,
+    @Ip() ip: string,
   ) {
     const opcoes = {
       direcaoEspera: query.direcaoEspera !== 'false',
       normalExtra: query.normalExtra !== 'false',
       adicionalNoturno: query.adicionalNoturno !== 'false',
     };
-    const resultado = await this.holeriteService.calcular(
+    const resultadoBruto = await this.holeriteService.calcular(
       motoristaId,
       new Date(query.inicio),
       new Date(query.fim),
       opcoes,
       user.grupoId,
+    );
+    // Rodada 213: coordenadas/links de mapa só para ADMIN (com auditoria).
+    const resultado = await this.localizacao.filtrar(
+      user,
+      motoristaId,
+      'HOLERITE',
+      resultadoBruto,
+      { ip },
     );
 
     const motorista = await this.prisma.motorista.findUnique({

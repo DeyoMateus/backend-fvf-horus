@@ -5,6 +5,7 @@ import { ComprovanteService } from '../common/comprovante/comprovante.service';
 import { RepPService } from '../common/rep-p/rep-p.service';
 import { FeriadosService } from '../feriados/feriados.service';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { LocalizacaoAcessoService } from '../common/localizacao/localizacao-acesso.service';
 import { TenantService } from '../common/tenant/tenant.service';
 import { CreateRegistroJornadaDto } from './dto/create-registro-jornada.dto';
 import { LoteRegistroJornadaDto } from './dto/lote-registro-jornada.dto';
@@ -17,7 +18,8 @@ export declare class RegistrosJornadaController {
     private readonly feriadosService;
     private readonly prisma;
     private readonly tenant;
-    constructor(registrosService: RegistrosJornadaService, comprovanteService: ComprovanteService, aejService: AejService, repPService: RepPService, feriadosService: FeriadosService, prisma: PrismaService, tenant: TenantService);
+    private readonly localizacao;
+    constructor(registrosService: RegistrosJornadaService, comprovanteService: ComprovanteService, aejService: AejService, repPService: RepPService, feriadosService: FeriadosService, prisma: PrismaService, tenant: TenantService, localizacao: LocalizacaoAcessoService);
     create(req: {
         motorista: {
             id: string;
@@ -75,7 +77,7 @@ export declare class RegistrosJornadaController {
             id: string;
         };
     }, res: Response, idLocal: string): Promise<void>;
-    list(motoristaId: string, user: UsuarioAutenticado): Promise<{
+    list(motoristaId: string, user: UsuarioAutenticado, ip: string, userAgent?: string): Promise<{
         id: string;
         createdAt: Date;
         fusoOffsetMin: number | null;
@@ -121,7 +123,7 @@ export declare class RegistrosJornadaController {
         assinaturasInvalidas: number[];
         integro: boolean;
     }>;
-    analisarEventoIntegridade(motoristaId: string, sequencial: string, user: UsuarioAutenticado): Promise<{
+    analisarEventoIntegridade(motoristaId: string, sequencial: string, user: UsuarioAutenticado, ip: string, userAgent?: string): Promise<{
         motoristaId: string;
         divergente: boolean;
         explicacao: string;
@@ -183,9 +185,9 @@ export declare class RegistrosJornadaController {
         aceitoEm: Date;
     }>;
     viagens(motoristaId: string, user: UsuarioAutenticado): Promise<import("./registros-jornada.service").ViagemConsolidada[]>;
-    aej(motoristaId: string, res: Response, user: UsuarioAutenticado, inicio?: string, fim?: string): Promise<void>;
-    comprovante(motoristaId: string, res: Response, user: UsuarioAutenticado, inicio?: string, fim?: string): Promise<void>;
-    espelhoRepP(motoristaId: string, res: Response, user: UsuarioAutenticado, inicio?: string, fim?: string): Promise<void>;
+    aej(motoristaId: string, res: Response, user: UsuarioAutenticado, ip: string, inicio?: string, fim?: string): Promise<void>;
+    comprovante(motoristaId: string, res: Response, user: UsuarioAutenticado, ip: string, inicio?: string, fim?: string): Promise<void>;
+    espelhoRepP(motoristaId: string, res: Response, user: UsuarioAutenticado, ip: string, inicio?: string, fim?: string): Promise<void>;
     meuEspelhoRepP(req: {
         motorista: {
             id: string;

@@ -15,4 +15,10 @@ export declare class WhatsappNotificationsService {
     private formatarMensagemFormal;
     private enfileirar;
     notificarGestoresDaEmpresa(empresaId: string, mensagem: string): Promise<void>;
+    diagnostico(): Promise<{
+        configurado: boolean;
+        redis: 'ok' | 'erro';
+        falhasUltimaHora: number;
+        evolution: 'ok' | 'desconectada' | 'indisponivel' | 'nao_configurada';
+    }>;
 }

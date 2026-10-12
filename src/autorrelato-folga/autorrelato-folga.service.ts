@@ -16,6 +16,7 @@ import {
   offsetPadraoDaEmpresa,
   paraParedeBrt,
 } from '../common/fuso/fuso-brasil.util';
+import { nomeAbreviado } from '../common/notifications/minimizar-dados-whatsapp.util';
 
 function paraDiaUtc(data: string | Date): Date {
   const d = typeof data === 'string' ? new Date(data) : data;
@@ -145,7 +146,7 @@ export class AutorrelatoFolgaService {
       const diaFormatado = chaveDia(dia);
       void this.whatsapp.notificarGestoresDaEmpresa(
         motorista.empresaId,
-        `${motorista.nome} bateu ponto em ${diaFormatado.split('-').reverse().join('/')}, dia que tinha avisado como folga , a folga foi anulada automaticamente.`,
+        `${nomeAbreviado(motorista.nome)} bateu ponto em ${diaFormatado.split('-').reverse().join('/')}, dia que tinha avisado como folga , a folga foi anulada automaticamente.`,
       );
     }
 

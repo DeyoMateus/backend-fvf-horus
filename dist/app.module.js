@@ -16,6 +16,7 @@ const app_service_1 = require("./app.service");
 const bullmq_1 = require("@nestjs/bullmq");
 const alertas_jornada_module_1 = require("./alertas-jornada/alertas-jornada.module");
 const audit_module_1 = require("./common/audit/audit.module");
+const localizacao_acesso_module_1 = require("./common/localizacao/localizacao-acesso.module");
 const crypto_module_1 = require("./common/crypto/crypto.module");
 const hash_chain_module_1 = require("./common/hash-chain/hash-chain.module");
 const storage_module_1 = require("./common/storage/storage.module");
@@ -51,6 +52,7 @@ const ajudantes_module_1 = require("./ajudantes/ajudantes.module");
 const registros_jornada_ajudante_module_1 = require("./registros-jornada-ajudante/registros-jornada-ajudante.module");
 const dossie_cobranca_module_1 = require("./dossie-cobranca/dossie-cobranca.module");
 const fechamento_fiscal_module_1 = require("./fechamento-fiscal/fechamento-fiscal.module");
+const monitoramento_module_1 = require("./common/monitoramento/monitoramento.module");
 const limpeza_tokens_module_1 = require("./common/limpeza-tokens/limpeza-tokens.module");
 const redis_throttler_storage_service_1 = require("./common/throttler/redis-throttler-storage.service");
 const throttler_module_1 = require("./common/throttler/throttler.module");
@@ -90,6 +92,7 @@ exports.AppModule = AppModule = __decorate([
             hash_chain_module_1.HashChainModule,
             signature_module_1.SignatureModule,
             audit_module_1.AuditModule,
+            localizacao_acesso_module_1.LocalizacaoAcessoModule,
             auth_module_1.AuthModule,
             empresas_module_1.EmpresasModule,
             motoristas_module_1.MotoristasModule,
@@ -118,6 +121,7 @@ exports.AppModule = AppModule = __decorate([
             dossie_cobranca_module_1.DossieCobrancaModule,
             fechamento_fiscal_module_1.FechamentoFiscalModule,
             limpeza_tokens_module_1.LimpezaTokensModule,
+            monitoramento_module_1.MonitoramentoModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

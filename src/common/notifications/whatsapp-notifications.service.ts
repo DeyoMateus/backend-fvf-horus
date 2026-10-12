@@ -8,6 +8,7 @@ import {
 } from '../fuso/fuso-brasil.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { FILA_NOTIFICACOES_WHATSAPP } from './whatsapp-notifications.constants';
+import { mascararDadosPessoais } from './minimizar-dados-whatsapp.util';
 
 export interface JobNotificacaoWhatsapp {
   telefone: string; // E.164, ex.: +5511999998888
@@ -95,7 +96,7 @@ export class WhatsappNotificationsService {
         attempts: 3,
         backoff: { type: 'exponential', delay: 5_000 },
         removeOnComplete: true,
-        removeOnFail: 50,
+        removeOnFail: { age: 24 * 3600, count: 50 },
       },
     );
   }
@@ -156,7 +157,7 @@ export class WhatsappNotificationsService {
           await this.enfileirar(
             telefone,
             this.formatarMensagemFormal(
-              renderizarHorarios(mensagem, fuso),
+              mascararDadosPessoais(renderizarHorarios(mensagem, fuso)),
               empresa.razaoSocial,
             ),
           );
@@ -173,5 +174,64 @@ export class WhatsappNotificationsService {
         err as Error,
       );
     }
+  }
+
+  /**
+   * Rodada 213: estado do canal de WhatsApp para o monitoramento. Nunca
+   * lança; qualquer falha vira um estado "erro"/"indisponivel".
+   */
+  async diagnostico(): Promise<{
+    configurado: boolean;
+    redis: 'ok' | 'erro';
+    falhasUltimaHora: number;
+    evolution: 'ok' | 'desconectada' | 'indisponivel' | 'nao_configurada';
+  }> {
+    const configurado = this.configurado();
+    let redis: 'ok' | 'erro' = 'ok';
+    let falhasUltimaHora = 0;
+    try {
+      // Sem `client`/ping direto (a API do Queue varia entre versões do
+      // BullMQ): qualquer chamada à fila serve de teste do Redis, com
+      // prazo curto para não ficar pendurada se o Redis estiver fora.
+      const falhas = await Promise.race([
+        this.fila.getFailed(0, 49),
+        new Promise<never>((_, rejeitar) =>
+          setTimeout(() => rejeitar(new Error('Redis sem resposta')), 5_000),
+        ),
+      ]);
+      const umaHoraAtras = Date.now() - 60 * 60 * 1000;
+      falhasUltimaHora = falhas.filter(
+        (j) => (j.finishedOn ?? 0) >= umaHoraAtras,
+      ).length;
+    } catch {
+      redis = 'erro';
+    }
+
+    let evolution: 'ok' | 'desconectada' | 'indisponivel' | 'nao_configurada' =
+      'nao_configurada';
+    const url = process.env.EVOLUTION_API_URL;
+    const chave = process.env.EVOLUTION_API_KEY;
+    const instancia = process.env.EVOLUTION_INSTANCE;
+    if (url && chave && instancia) {
+      try {
+        const resp = await fetch(
+          `${url.replace(/\/+$/, '')}/instance/connectionState/${encodeURIComponent(instancia)}`,
+          { headers: { apikey: chave }, signal: AbortSignal.timeout(8_000) },
+        );
+        if (!resp.ok) {
+          evolution = 'indisponivel';
+        } else {
+          const corpo = (await resp.json()) as {
+            instance?: { state?: string };
+            state?: string;
+          };
+          const estado = corpo.instance?.state ?? corpo.state;
+          evolution = estado === 'open' ? 'ok' : 'desconectada';
+        }
+      } catch {
+        evolution = 'indisponivel';
+      }
+    }
+    return { configurado, redis, falhasUltimaHora, evolution };
   }
 }

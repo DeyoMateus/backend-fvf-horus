@@ -4,8 +4,21 @@ import compression from 'compression';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import {
+  criarMiddlewareCloudflare,
+  semCacheNaApi,
+} from './common/cloudflare/cloudflare.middleware';
+import { verificarConfiguracaoDeProducao } from './common/config/verificacao-producao.util';
 
 async function bootstrap() {
+  // Rodada 213: falha alto se faltar segredo essencial em produção; avisa o resto.
+  const { erros, avisos } = verificarConfiguracaoDeProducao(process.env);
+  for (const aviso of avisos) console.warn(`[config] AVISO: ${aviso}`);
+  if (erros.length > 0) {
+    for (const erro of erros) console.error(`[config] ERRO: ${erro}`);
+    throw new Error('Configuração de produção inválida; veja os erros acima.');
+  }
+
   // Logging estruturado (Rodada 34): fora de desenvolvimento, cada
   // linha de log vira um objeto JSON em vez de texto colorido de
   // terminal , não é "logging centralizado" por si só (isso ainda
@@ -17,6 +30,12 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: new ConsoleLogger({ json: process.env.NODE_ENV === 'production' }),
   });
+
+  // Rodada 214: atrás da Cloudflare (CLOUDFLARE_ATIVO=true) só aceita tráfego
+  // que passou por ela e usa o IP real do cliente. Primeiro middleware de todos.
+  const cloudflare = criarMiddlewareCloudflare(process.env);
+  if (cloudflare) app.use(cloudflare);
+  app.use(semCacheNaApi());
 
   // Cabeçalhos HTTP de segurança (HSTS, no-sniff, sem X-Powered-By, CSP básica).
   app.use(helmet());
@@ -56,7 +75,14 @@ async function bootstrap() {
   app.useGlobalFilters(new AllExceptionsFilter());
 
   // Necessário para @Ip() funcionar corretamente atrás de um load balancer/proxy.
-  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  // TRUST_PROXY_HOPS = quantos proxies confiáveis existem na frente (padrão 1 =
+  // Traefik do Easypanel). Com CLOUDFLARE_ATIVO o IP real vem do cabeçalho da
+  // Cloudflare (ver cloudflare.middleware.ts) e este valor deixa de importar.
+  const saltosProxy = Number(process.env.TRUST_PROXY_HOPS ?? 1);
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .set('trust proxy', Number.isInteger(saltosProxy) && saltosProxy >= 0 ? saltosProxy : 1);
 
   // Rodada 94 , achado real: filtros de múltipla seleção (ex.: "ações"
   // na Trilha de auditoria) sempre deram 400 Bad Request. Causa: o

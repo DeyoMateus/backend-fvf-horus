@@ -3,7 +3,7 @@
  * conteúdo exige nova VERSAO_DOCUMENTOS (o app pede nova ciência).
  * RASCUNHO PARA REVISÃO JURÍDICA antes do uso com motoristas reais.
  */
-export const VERSAO_DOCUMENTOS = '2026-10-11';
+export const VERSAO_DOCUMENTOS = '2026-10-13';
 
 /** Prazo legal de resposta ao titular (LGPD art. 19, II): 15 dias. */
 export const PRAZO_RESPOSTA_TITULAR_DIAS = 15;
@@ -45,7 +45,7 @@ Não coletamos dados de saúde, biometria, religião, opinião política ou outr
 Não usamos seus dados para publicidade, perfilamento comercial ou venda a terceiros.
 
 4. Localização
-A localização é usada somente para comprovar onde a marcação foi feita e para a segurança da jornada. Ela é coletada apenas durante a jornada e não é usada para vigiar você fora do trabalho. Se você negar a permissão, a marcação continua possível, mas a localização não será registrada.
+A localização é usada somente para comprovar onde a marcação foi feita e para a segurança da jornada. Ela é coletada apenas durante a jornada e não é usada para vigiar você fora do trabalho. O acesso à localização no painel é restrito a usuários autorizados da empresa e cada consulta fica registrada. Se você negar a permissão, a marcação continua possível, mas a localização não será registrada.
 
 5. Com quem compartilhamos
 Seu empregador (gestores autorizados do painel e a equipe de gerenciamento de risco), a fiscalização do trabalho e autoridades quando houver obrigação legal, e fornecedores de infraestrutura que atuam como suboperadores sob contrato (hospedagem, armazenamento de arquivos e backup, envio de notificações push e mensagens de alerta). Não vendemos seus dados. Pode haver processamento em servidores fora do Brasil por esses fornecedores, com as garantias do art. 33 da LGPD.
@@ -76,7 +76,7 @@ Se não ficar satisfeito, você pode reclamar à Autoridade Nacional de Proteç�
 Estou ciente de que, ao usar o FVF Hórus a serviço de ${controlador}:
 1. O aplicativo registra a minha localização no momento de cada marcação de ponto e, se eu autorizar a permissão de localização em segundo plano, uma amostra por hora durante a jornada.
 2. A localização serve para comprovar o local do registro, apoiar a segurança da operação e a segurança do trabalho, e cumprir obrigações legais. Não é usada fora do horário de trabalho nem para fins pessoais ou comerciais.
-3. A localização pode ser vista pelos gestores autorizados da minha empresa e pela equipe de gerenciamento de risco, e fornecida à fiscalização quando exigido por lei.
+3. A localização pode ser vista no painel apenas por usuários autorizados da minha empresa (com login e senha próprios) e pela equipe de gerenciamento de risco, e fornecida à fiscalização quando exigido por lei. Cada consulta à minha localização feita por um usuário do painel fica registrada no sistema (quem consultou e quando).
 4. Posso negar ou retirar a permissão nas configurações do telefone; nesse caso a marcação continua possível, mas sem coordenadas, e isso fica registrado.
 5. Posso exercer meus direitos de titular (acesso, correção, informação etc.) na opção "Privacidade e meus direitos" do aplicativo.`;
 
