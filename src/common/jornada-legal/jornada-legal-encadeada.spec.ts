@@ -179,4 +179,86 @@ describe('JornadaLegalService , jornadas encadeadas (Rodada 182)', () => {
       );
     });
   });
+
+  describe('Rodada 225: direção só da jornada atual (8h/10h) além da soma encadeada', () => {
+    const base = () => [
+      reg('INICIO_JORNADA', '2026-10-05T00:00:00Z'),
+      reg('INICIO_DIRECAO', '2026-10-05T00:00:00Z'),
+      reg('FIM_DIRECAO', '2026-10-05T10:00:00Z'), // 10h na jornada anterior
+      reg('FIM_JORNADA', '2026-10-05T10:00:00Z'),
+      reg('INICIO_JORNADA', '2026-10-05T15:00:00Z'), // 5h de descanso (< 11h)
+      reg('INICIO_DIRECAO', '2026-10-05T15:00:00Z'),
+    ];
+
+    it('com 8h só nesta jornada avisa "perto de 8h" mesmo com a soma já estourada', () => {
+      const registros = base();
+      const ultimo = registros[registros.length - 1];
+      const tipos = service
+        .avaliar(
+          registros,
+          ultimo,
+          new Set(['JORNADA_DIRECAO_PROXIMA_LIMITE', 'JORNADA_DIRECAO_EXCEDIDA'] as any),
+          new Date('2026-10-05T23:00:00Z'), // +8h
+        )
+        .map((a) => a.tipo);
+      expect(tipos).toContain('JORNADA_ATUAL_DIRECAO_PROXIMA_LIMITE');
+      expect(tipos).not.toContain('JORNADA_ATUAL_DIRECAO_EXCEDIDA');
+    });
+
+    it('com 10h só nesta jornada avisa "passou de 10h"', () => {
+      const registros = base();
+      const ultimo = registros[registros.length - 1];
+      const tipos = service
+        .avaliar(
+          registros,
+          ultimo,
+          new Set(['JORNADA_DIRECAO_EXCEDIDA'] as any),
+          new Date('2026-10-06T01:00:00Z'), // +10h
+        )
+        .map((a) => a.tipo);
+      expect(tipos).toContain('JORNADA_ATUAL_DIRECAO_EXCEDIDA');
+    });
+
+    it('não repete o aviso já gerado nesta jornada', () => {
+      const registros = base();
+      const ultimo = registros[registros.length - 1];
+      const tipos = service
+        .avaliar(
+          registros,
+          ultimo,
+          new Set(['JORNADA_ATUAL_DIRECAO_EXCEDIDA'] as any),
+          new Date('2026-10-06T01:00:00Z'),
+        )
+        .map((a) => a.tipo);
+      expect(tipos).not.toContain('JORNADA_ATUAL_DIRECAO_EXCEDIDA');
+    });
+
+    it('sem jornada anterior encadeada não gera os avisos novos (os antigos já cobrem)', () => {
+      const registros = [
+        reg('INICIO_JORNADA', '2026-10-05T00:00:00Z'),
+        reg('INICIO_DIRECAO', '2026-10-05T00:00:00Z'),
+      ];
+      const tipos = service
+        .avaliar(
+          registros,
+          registros[1],
+          new Set(),
+          new Date('2026-10-05T10:30:00Z'),
+        )
+        .map((a) => a.tipo);
+      expect(tipos).toContain('JORNADA_DIRECAO_EXCEDIDA');
+      expect(tipos).not.toContain('JORNADA_ATUAL_DIRECAO_EXCEDIDA');
+      expect(tipos).not.toContain('JORNADA_ATUAL_DIRECAO_PROXIMA_LIMITE');
+    });
+
+    it('calcularProximoLimiar inclui o limiar de 8h da jornada atual quando a soma já passou dele', () => {
+      const registros = base();
+      const r = service.calcularProximoLimiar(
+        registros,
+        new Date('2026-10-05T21:00:00Z'), // 6h na jornada atual (contínua já passou de 5h30); soma 16h
+      );
+      // faltam 2h para as 8h da jornada atual
+      expect(r?.emMs).toBe(2 * 3_600_000);
+    });
+  });
 });

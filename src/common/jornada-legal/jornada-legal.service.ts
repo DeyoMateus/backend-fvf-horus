@@ -320,6 +320,49 @@ export class JornadaLegalService {
       });
     }
 
+    // Rodada 225: direção SÓ da jornada atual. A soma encadeada acima não
+    // muda; este é um aviso a mais, só quando há jornada anterior encadeada
+    // (descanso < 11h) , sem ela os alertas acima já cobrem o mesmo número.
+    const direcaoJornadaAtualMin = this.somarMinutos(
+      this.intervalosDeDirecao(jornada, agora),
+    );
+    if (totalDirecaoMin - direcaoJornadaAtualMin >= 1) {
+      const complemento = ` (somando a jornada anterior encadeada, sem descanso de 11h, são ${this.formatarHoras(totalDirecaoMin)})`;
+      if (
+        direcaoJornadaAtualMin >= LIMITE_JORNADA_DIRECAO_CRITICO_MIN &&
+        !alertasExistentesTipos.has(
+          TipoAlertaJornada.JORNADA_ATUAL_DIRECAO_EXCEDIDA,
+        )
+      ) {
+        alertas.push({
+          tipo: TipoAlertaJornada.JORNADA_ATUAL_DIRECAO_EXCEDIDA,
+          severidade: SeveridadeAlerta.CRITICO,
+          mensagem: `Direção desta jornada: ${this.formatarHoras(direcaoJornadaAtualMin)}, excedeu o limite de 8h regulares + 2h extras (10:00)${complemento}.`,
+          janelaInicio,
+          janelaFim: agora,
+          minutosAcumulados: Math.round(direcaoJornadaAtualMin),
+        });
+      } else if (
+        direcaoJornadaAtualMin >= LIMITE_JORNADA_DIRECAO_ATENCAO_MIN &&
+        direcaoJornadaAtualMin < LIMITE_JORNADA_DIRECAO_CRITICO_MIN &&
+        !alertasExistentesTipos.has(
+          TipoAlertaJornada.JORNADA_ATUAL_DIRECAO_PROXIMA_LIMITE,
+        ) &&
+        !alertasExistentesTipos.has(
+          TipoAlertaJornada.JORNADA_ATUAL_DIRECAO_EXCEDIDA,
+        )
+      ) {
+        alertas.push({
+          tipo: TipoAlertaJornada.JORNADA_ATUAL_DIRECAO_PROXIMA_LIMITE,
+          severidade: SeveridadeAlerta.ATENCAO,
+          mensagem: `Direção desta jornada: ${this.formatarHoras(direcaoJornadaAtualMin)}, aproximando do limite de 8h regulares (08:00)${complemento}.`,
+          janelaInicio,
+          janelaFim: agora,
+          minutosAcumulados: Math.round(direcaoJornadaAtualMin),
+        });
+      }
+    }
+
     // --- Espera em carga/descarga ---
     // FIM_DESCARREGAMENTO fecha a espera igual FIM_ESPERA_CARGA_DESCARGA
     // (é a mesma espera legal , só sinaliza adicionalmente que foi uma
@@ -475,6 +518,20 @@ export class JornadaLegalService {
       ]) {
         if (totalDirecaoMin < limite)
           candidatosMin.push(limite - totalDirecaoMin);
+      }
+      // Rodada 225: limiares da direção só da jornada atual (quando há
+      // jornada anterior encadeada, a soma encadeada chega neles antes).
+      const direcaoAtualMin = this.somarMinutos(
+        this.intervalosDeDirecao(jornada, agora),
+      );
+      if (totalDirecaoMin - direcaoAtualMin >= 1) {
+        for (const limite of [
+          LIMITE_JORNADA_DIRECAO_ATENCAO_MIN,
+          LIMITE_JORNADA_DIRECAO_CRITICO_MIN,
+        ]) {
+          if (direcaoAtualMin < limite)
+            candidatosMin.push(limite - direcaoAtualMin);
+        }
       }
     } else if (ultimoEvento === TipoEvento.ESPERA_CARGA_DESCARGA) {
       const totalEsperaMin = this.somarMinutos(

@@ -999,6 +999,12 @@ enum TipoAlertaJornada {
   JORNADA_ABERTA_PROLONGADA
   JORNADA_DIRECAO_PROXIMA_LIMITE
   JORNADA_DIRECAO_EXCEDIDA
+  /// Rodada 225: direção SÓ da jornada atual (desde o último INICIO_JORNADA)
+  /// chegou a 8h / 10h, mesmo quando a soma encadeada (descanso < 11h) já
+  /// tinha estourado antes. Convive com os dois alertas acima; só é gerado
+  /// quando há jornada anterior encadeada (senão seria repetição).
+  JORNADA_ATUAL_DIRECAO_PROXIMA_LIMITE
+  JORNADA_ATUAL_DIRECAO_EXCEDIDA
   ESPERA_PROXIMA_LIMITE
   ESPERA_LIMITE_LEGAL_ATINGIDO
   /// "Regra das 2 Conferências Consecutivas": duas conferências de GPS

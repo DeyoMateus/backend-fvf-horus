@@ -167,6 +167,34 @@ let JornadaLegalService = class JornadaLegalService {
                 minutosAcumulados: Math.round(totalDirecaoMin),
             });
         }
+        const direcaoJornadaAtualMin = this.somarMinutos(this.intervalosDeDirecao(jornada, agora));
+        if (totalDirecaoMin - direcaoJornadaAtualMin >= 1) {
+            const complemento = ` (somando a jornada anterior encadeada, sem descanso de 11h, são ${this.formatarHoras(totalDirecaoMin)})`;
+            if (direcaoJornadaAtualMin >= LIMITE_JORNADA_DIRECAO_CRITICO_MIN &&
+                !alertasExistentesTipos.has(client_1.TipoAlertaJornada.JORNADA_ATUAL_DIRECAO_EXCEDIDA)) {
+                alertas.push({
+                    tipo: client_1.TipoAlertaJornada.JORNADA_ATUAL_DIRECAO_EXCEDIDA,
+                    severidade: client_1.SeveridadeAlerta.CRITICO,
+                    mensagem: `Direção desta jornada: ${this.formatarHoras(direcaoJornadaAtualMin)}, excedeu o limite de 8h regulares + 2h extras (10:00)${complemento}.`,
+                    janelaInicio,
+                    janelaFim: agora,
+                    minutosAcumulados: Math.round(direcaoJornadaAtualMin),
+                });
+            }
+            else if (direcaoJornadaAtualMin >= LIMITE_JORNADA_DIRECAO_ATENCAO_MIN &&
+                direcaoJornadaAtualMin < LIMITE_JORNADA_DIRECAO_CRITICO_MIN &&
+                !alertasExistentesTipos.has(client_1.TipoAlertaJornada.JORNADA_ATUAL_DIRECAO_PROXIMA_LIMITE) &&
+                !alertasExistentesTipos.has(client_1.TipoAlertaJornada.JORNADA_ATUAL_DIRECAO_EXCEDIDA)) {
+                alertas.push({
+                    tipo: client_1.TipoAlertaJornada.JORNADA_ATUAL_DIRECAO_PROXIMA_LIMITE,
+                    severidade: client_1.SeveridadeAlerta.ATENCAO,
+                    mensagem: `Direção desta jornada: ${this.formatarHoras(direcaoJornadaAtualMin)}, aproximando do limite de 8h regulares (08:00)${complemento}.`,
+                    janelaInicio,
+                    janelaFim: agora,
+                    minutosAcumulados: Math.round(direcaoJornadaAtualMin),
+                });
+            }
+        }
         const esperaIntervalos = this.construirIntervalos(jornada, 'ESPERA_CARGA_DESCARGA', ['FIM_ESPERA_CARGA_DESCARGA', 'FIM_DESCARREGAMENTO'], agora);
         const totalEsperaMin = this.somarMinutos(esperaIntervalos);
         if (totalEsperaMin >= limitesEspera.criticoMin &&
@@ -250,6 +278,16 @@ let JornadaLegalService = class JornadaLegalService {
             ]) {
                 if (totalDirecaoMin < limite)
                     candidatosMin.push(limite - totalDirecaoMin);
+            }
+            const direcaoAtualMin = this.somarMinutos(this.intervalosDeDirecao(jornada, agora));
+            if (totalDirecaoMin - direcaoAtualMin >= 1) {
+                for (const limite of [
+                    LIMITE_JORNADA_DIRECAO_ATENCAO_MIN,
+                    LIMITE_JORNADA_DIRECAO_CRITICO_MIN,
+                ]) {
+                    if (direcaoAtualMin < limite)
+                        candidatosMin.push(limite - direcaoAtualMin);
+                }
             }
         }
         else if (ultimoEvento === client_1.TipoEvento.ESPERA_CARGA_DESCARGA) {
