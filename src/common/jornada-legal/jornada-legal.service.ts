@@ -880,9 +880,14 @@ export class JornadaLegalService {
     registros: RegistroJornada[],
     agora: Date,
   ): RegistroJornada[] {
-    const ordenados = [...registros]
-      .filter((r) => r.timestampEvento.getTime() <= agora.getTime())
-      .sort(compararPorTimestampEvento);
+    // Rodada 229: jornada "vazia" (INICIO_JORNADA direto seguido de
+    // FIM_JORNADA) não encadeia nem quebra o ciclo: o descanso é contado
+    // desde o fim da última jornada com trabalho (igual à rodada 205).
+    const ordenados = this.removerJornadasVazias(
+      [...registros]
+        .filter((r) => r.timestampEvento.getTime() <= agora.getTime())
+        .sort(compararPorTimestampEvento),
+    );
     let inicioIdx = ordenados
       .map((r) => r.tipoEvento)
       .lastIndexOf(TipoEvento.INICIO_JORNADA);
