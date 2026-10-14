@@ -1,4 +1,4 @@
-import PDFDocument from 'pdfkit';
+import { RelatorioPdf, type ColunaPdf } from '../common/pdf/relatorio-pdf';
 import {
   instanteDoCliente,
   instanteDoEvento,
@@ -112,185 +112,34 @@ function primeira(v: unknown): string {
   return texto(v).replace(/\s+/g, ' ');
 }
 
-interface Coluna {
-  titulo: string;
-  largura: number;
-}
-
-const COR_TEXTO = '#111827';
-const COR_SUAVE = '#6b7280';
-const COR_LINHA = '#d1d5db';
-const COR_CABECALHO = '#1f2937';
-const COR_FAIXA = '#f3f4f6';
-
 export function gerarPdfMeusDados(d: DadosExportadosMotorista): Promise<Buffer> {
-  const doc = new PDFDocument({
-    margin: 48,
-    size: 'A4',
-    bufferPages: true,
-    info: {
-      Title: 'Cópia dos dados pessoais - FVF Hórus',
-      Author: 'FVF Hórus',
-      Subject: 'LGPD art. 18, II e V',
-    },
+  const r = new RelatorioPdf({
+    titulo: 'Cópia dos dados pessoais - FVF Hórus',
+    assunto: 'LGPD art. 18, II e V',
+    rodape: 'Cópia dos dados pessoais',
   });
-  const chunks: Buffer[] = [];
-  doc.on('data', (c: Buffer) => chunks.push(c));
-  const pronto = new Promise<Buffer>((resolve, reject) => {
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
-  });
-
-  const esquerda = doc.page.margins.left;
-  const largura = doc.page.width - esquerda - doc.page.margins.right;
-  const limiteY = () => doc.page.height - doc.page.margins.bottom - 20;
-
-  function garantirEspaco(altura: number) {
-    if (doc.y + altura > limiteY()) doc.addPage();
-  }
-
-  function secao(titulo: string, subtitulo?: string) {
-    garantirEspaco(60);
-    doc.moveDown(0.8);
-    const y = doc.y;
-    doc
-      .font('Helvetica-Bold')
-      .fontSize(12)
-      .fillColor(COR_CABECALHO)
-      .text(titulo, esquerda, y, { width: largura });
-    const yLinha = doc.y + 2;
-    doc
-      .moveTo(esquerda, yLinha)
-      .lineTo(esquerda + largura, yLinha)
-      .lineWidth(1)
-      .strokeColor(COR_CABECALHO)
-      .stroke();
-    doc.y = yLinha + 6;
-    if (subtitulo) {
-      doc
-        .font('Helvetica')
-        .fontSize(8.5)
-        .fillColor(COR_SUAVE)
-        .text(subtitulo, esquerda, doc.y, { width: largura });
-      doc.moveDown(0.4);
-    }
-  }
-
-  function vazio(msg: string) {
-    doc
-      .font('Helvetica-Oblique')
-      .fontSize(9)
-      .fillColor(COR_SUAVE)
-      .text(msg, esquerda, doc.y, { width: largura });
-  }
-
-  function camposChaveValor(pares: Array<[string, string]>) {
-    const wRot = 130;
-    for (const [rot, val] of pares) {
-      garantirEspaco(18);
-      const y = doc.y;
-      doc
-        .font('Helvetica-Bold')
-        .fontSize(9)
-        .fillColor(COR_SUAVE)
-        .text(rot, esquerda, y, { width: wRot });
-      const yFim1 = doc.y;
-      doc
-        .font('Helvetica')
-        .fontSize(10)
-        .fillColor(COR_TEXTO)
-        .text(val, esquerda + wRot, y, { width: largura - wRot });
-      doc.y = Math.max(yFim1, doc.y) + 3;
-    }
-  }
-
-  function tabela(colunas: Coluna[], linhas: string[][]) {
-    const soma = colunas.reduce((a, c) => a + c.largura, 0);
-    const esc = largura / soma;
-    const ws = colunas.map((c) => c.largura * esc);
-    const pad = 4;
-
-    function cabecalho() {
-      garantirEspaco(26);
-      let x = esquerda;
-      const y = doc.y;
-      doc.rect(esquerda, y, largura, 16).fill(COR_CABECALHO);
-      doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff');
-      colunas.forEach((c, i) => {
-        doc.text(c.titulo, x + pad, y + 4, {
-          width: ws[i] - pad * 2,
-          lineBreak: false,
-          ellipsis: true,
-        });
-        x += ws[i];
-      });
-      doc.y = y + 16;
-    }
-
-    cabecalho();
-    linhas.forEach((cels, idx) => {
-      doc.font('Helvetica').fontSize(8);
-      const alturas = cels.map((c, i) =>
-        doc.heightOfString(c, { width: ws[i] - pad * 2 }),
-      );
-      const h = Math.max(...alturas) + 6;
-      if (doc.y + h > limiteY()) {
-        doc.addPage();
-        cabecalho();
-      }
-      const y = doc.y;
-      if (idx % 2 === 1) doc.rect(esquerda, y, largura, h).fill(COR_FAIXA);
-      doc.fillColor(COR_TEXTO).font('Helvetica').fontSize(8);
-      let x = esquerda;
-      cels.forEach((c, i) => {
-        doc.text(c, x + pad, y + 3, { width: ws[i] - pad * 2 });
-        x += ws[i];
-      });
-      doc
-        .moveTo(esquerda, y + h)
-        .lineTo(esquerda + largura, y + h)
-        .lineWidth(0.4)
-        .strokeColor(COR_LINHA)
-        .stroke();
-      doc.y = y + h;
-    });
-  }
-
-  function listaLimitada<T>(itens: T[], max: number): { itens: T[]; nota: string | null } {
-    if (itens.length <= max) return { itens, nota: null };
-    return {
-      itens: itens.slice(0, max),
-      nota: `Exibidos os ${max} mais recentes de ${itens.length}. A cópia completa em formato estruturado (JSON) está disponível no aplicativo.`,
-    };
-  }
+  const { doc } = r;
+  const secao = r.secao.bind(r);
+  const vazio = r.vazio.bind(r);
+  const camposChaveValor = r.camposChaveValor.bind(r);
+  const tabela = (colunas: ColunaPdf[], linhas: string[][]) =>
+    r.tabela(colunas, linhas);
+  const garantirEspaco = r.garantirEspaco.bind(r);
+  const listaLimitada = <T,>(itens: T[], max: number) =>
+    RelatorioPdf.limitar(
+      itens,
+      max,
+      'A cópia completa em formato estruturado (JSON) está disponível no aplicativo.',
+    );
 
   // ---------- Capa / cabeçalho ----------
-  doc
-    .font('Helvetica-Bold')
-    .fontSize(9)
-    .fillColor(COR_SUAVE)
-    .text('FVF HÓRUS', esquerda, doc.y, { characterSpacing: 2 });
-  doc.moveDown(0.3);
-  doc
-    .font('Helvetica-Bold')
-    .fontSize(20)
-    .fillColor(COR_CABECALHO)
-    .text('Cópia dos dados pessoais do titular', { width: largura });
-  doc
-    .font('Helvetica')
-    .fontSize(10)
-    .fillColor(COR_SUAVE)
-    .text('Lei Geral de Proteção de Dados (Lei 13.709/2018), art. 18, incisos II e V', {
-      width: largura,
-    });
-  doc.moveDown(0.6);
-  camposChaveValor([['Gerado em', data(d.geradoEm)]]);
-  doc.moveDown(0.2);
-  doc
-    .font('Helvetica')
-    .fontSize(9)
-    .fillColor(COR_SUAVE)
-    .text(d.aviso, esquerda, doc.y, { width: largura, align: 'justify' });
+  r.cabecalho({
+    titulo: 'Cópia dos dados pessoais do titular',
+    subtitulo:
+      'Lei Geral de Proteção de Dados (Lei 13.709/2018), art. 18, incisos II e V',
+    campos: [['Gerado em', data(d.geradoEm)]],
+    aviso: d.aviso,
+  });
 
   // ---------- Identificação ----------
   const c = d.cadastro;
@@ -518,37 +367,11 @@ export function gerarPdfMeusDados(d: DadosExportadosMotorista): Promise<Buffer> 
   // ---------- Encerramento ----------
   garantirEspaco(80);
   doc.moveDown(1.2);
-  doc
-    .font('Helvetica')
-    .fontSize(8.5)
-    .fillColor(COR_SUAVE)
-    .text(
-      'Este documento reúne os dados pessoais que o FVF Hórus trata sobre você, extraídos do sistema na data indicada acima. ' +
-        'Para corrigir, eliminar ou questionar qualquer informação, use a opção "Fazer um pedido" na tela de Privacidade do aplicativo ' +
-        'ou fale com o encarregado de dados da sua transportadora.',
-      esquerda,
-      doc.y,
-      { width: largura, align: 'justify' },
-    );
+  r.nota(
+    'Este documento reúne os dados pessoais que o FVF Hórus trata sobre você, extraídos do sistema na data indicada acima. ' +
+      'Para corrigir, eliminar ou questionar qualquer informação, use a opção "Fazer um pedido" na tela de Privacidade do aplicativo ' +
+      'ou fale com o encarregado de dados da sua transportadora.',
+  );
 
-  // ---------- Rodapé com paginação ----------
-  const range = doc.bufferedPageRange();
-  for (let i = range.start; i < range.start + range.count; i++) {
-    doc.switchToPage(i);
-    const y = doc.page.height - doc.page.margins.bottom + 8;
-    doc.page.margins.bottom = 0; // evita nova página ao escrever no rodapé
-    doc
-      .font('Helvetica')
-      .fontSize(8)
-      .fillColor(COR_SUAVE)
-      .text(
-        `FVF Hórus - Cópia dos dados pessoais - Página ${i + 1} de ${range.count}`,
-        esquerda,
-        y,
-        { width: largura, align: 'center', lineBreak: false },
-      );
-  }
-
-  doc.end();
-  return pronto;
+  return r.finalizar();
 }

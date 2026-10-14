@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { agoraDoCliente } from '../common/fuso/fuso-contexto';
-import PDFDocument from 'pdfkit';
+import { RelatorioPdf } from '../common/pdf/relatorio-pdf';
 import { PDFDocument as PdfLibDocument } from 'pdf-lib';
 import { StatusMotorista } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -148,59 +148,44 @@ export class FechamentoFiscalService {
     dataInicio: Date,
     dataFim: Date,
   ): Promise<Buffer> {
-    const doc = new PDFDocument({ margin: 40, size: 'A4' });
-    const chunks: Buffer[] = [];
-    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
-    const finalizado = new Promise<Buffer>((resolve) => {
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
+    const r = new RelatorioPdf({
+      titulo: 'Espelhos de ponto eletrônico (REP-P) para fiscalização',
+      rodape: 'Espelhos de ponto (REP-P)',
     });
-
-    doc
-      .fontSize(16)
-      .text(
-        'FVF Hórus , Espelhos de Ponto Eletrônico (REP-P) para fiscalização',
-        { align: 'center' },
-      );
-    doc.moveDown(0.2);
-    doc
-      .fontSize(9)
-      .fillColor('#374151')
-      .text(
-        // Rodada 97 , mesmo bug/correção do holerite/comprovante: ver comentário completo em holerite-pdf.util.ts.
-        `Período: ${dataInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${dataFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}   |   ` +
-          `${nomesMotoristas.length} motorista(s)   |   Gerado em: ${agoraDoCliente()}`,
-        { align: 'center' },
-      );
-    doc.moveDown();
-    doc
-      .fontSize(8)
-      .fillColor('#6b7280')
-      .text(
+    r.cabecalho({
+      titulo: 'Espelhos de ponto eletrônico (REP-P)',
+      subtitulo: 'Para fiscalização',
+      campos: [
+        [
+          // Rodada 97 , mesmo bug/correção do holerite/comprovante: ver comentário completo em holerite-pdf.util.ts.
+          'Período',
+          `${dataInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${dataFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`,
+        ],
+        ['Motoristas', String(nomesMotoristas.length)],
+        ['Gerado em', agoraDoCliente()],
+      ],
+      aviso:
         'Cada espelho a seguir é assinado digitalmente com o certificado do próprio motorista (RSA-SHA256, CA ' +
-          'interna do FVF Hórus , não é uma assinatura ICP-Brasil A1/PKCS#7 válida; ver claude/bloqueios-dependentes-do-usuario.md ' +
-          'sobre o certificado ICP-Brasil e2CNPJ pendente) e traz a cadeia de hash do período, com status de ' +
-          'integridade. Para o arquivo AFD oficial (Portaria 671/2021, leiaute binário fixo), use a exportação ' +
-          'separada em Empresas.',
-        { align: 'left' },
-      );
-    doc.moveDown();
-    doc
-      .fontSize(10)
-      .fillColor('#111827')
-      .font('Helvetica-Bold')
-      .text('Motoristas incluídos:');
-    doc.font('Helvetica').fontSize(9);
+        'interna do FVF Hórus , não é uma assinatura ICP-Brasil A1/PKCS#7 válida; ver claude/bloqueios-dependentes-do-usuario.md ' +
+        'sobre o certificado ICP-Brasil e2CNPJ pendente) e traz a cadeia de hash do período, com status de ' +
+        'integridade. Para o arquivo AFD oficial (Portaria 671/2021, leiaute binário fixo), use a exportação ' +
+        'separada em Empresas.',
+    });
+    r.doc.moveDown(0.8);
+    r.secao('Motoristas incluídos');
     if (nomesMotoristas.length === 0) {
-      doc
-        .fillColor('#6b7280')
-        .text('Nenhum motorista encontrado para este filtro.');
+      r.vazio('Nenhum motorista encontrado para este filtro.');
+    } else {
+      r.tabela(
+        [
+          { titulo: '#', largura: 1, alinhamento: 'right' },
+          { titulo: 'Motorista', largura: 12 },
+        ],
+        nomesMotoristas.map((nome, i) => [String(i + 1), nome]),
+        { tamanhoFonte: 9 },
+      );
     }
-    for (const nome of nomesMotoristas) {
-      doc.text(`• ${nome}`);
-    }
-
-    doc.end();
-    return finalizado;
+    return r.finalizar();
   }
 
   private async mesclarPdfs(buffers: Buffer[]): Promise<Buffer> {

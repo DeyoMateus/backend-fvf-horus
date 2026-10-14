@@ -1,5 +1,6 @@
 import {
   IsEmail,
+  IsISO8601,
   IsEnum,
   IsOptional,
   IsString,
@@ -21,6 +22,15 @@ export class RegistrarAceiteDto {
   @IsString()
   @Length(1, 30)
   versao!: string;
+
+  /**
+   * Rodada 236: quando o motorista deu a ciência SEM internet, o app guarda
+   * a hora (relógio confiável do app) e envia aqui ao sincronizar. O
+   * servidor usa essa hora como data do aceite se for plausível.
+   */
+  @IsOptional()
+  @IsISO8601()
+  aceitoLocalEm?: string;
 }
 
 export class CriarSolicitacaoTitularDto {

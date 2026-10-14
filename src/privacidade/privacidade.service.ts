@@ -88,17 +88,36 @@ export class PrivacidadeService {
     tipoDocumento: TipoDocumentoPrivacidade,
     versao: string,
     ip?: string | null,
+    aceitoLocalEm?: string,
   ) {
     if (versao !== VERSAO_DOCUMENTOS) {
       throw new BadRequestException(
         'A versão do documento mudou. Atualize a tela e leia a versão atual.',
       );
     }
+    // Rodada 236: ciência dada sem internet traz a hora em que o motorista
+    // aceitou no aparelho. Só vale se plausível (não no futuro, no máximo
+    // 30 dias atrás); senão usa a hora de agora.
+    const agora = new Date();
+    let aceitoEm = agora;
+    let offline = false;
+    if (aceitoLocalEm) {
+      const t = new Date(aceitoLocalEm);
+      const ms = t.getTime();
+      if (
+        !Number.isNaN(ms) &&
+        ms <= agora.getTime() + 10 * 60 * 1000 &&
+        ms >= agora.getTime() - 30 * 24 * 60 * 60 * 1000
+      ) {
+        aceitoEm = t;
+        offline = true;
+      }
+    }
     await this.prisma.aceitePrivacidade.upsert({
       where: {
         motoristaId_tipoDocumento_versao: { motoristaId, tipoDocumento, versao },
       },
-      create: { motoristaId, tipoDocumento, versao },
+      create: { motoristaId, tipoDocumento, versao, aceitoEm },
       update: {},
     });
     await this.audit.registrar({
@@ -107,7 +126,17 @@ export class PrivacidadeService {
       acao: 'PRIVACIDADE_CIENCIA_REGISTRADA',
       entidade: 'AceitePrivacidade',
       entidadeId: motoristaId,
-      detalhes: { tipoDocumento, versao },
+      detalhes: {
+        tipoDocumento,
+        versao,
+        ...(offline
+          ? {
+              aceitoOffline: true,
+              aceitoLocalEm: aceitoEm.toISOString(),
+              recebidoEm: agora.toISOString(),
+            }
+          : {}),
+      },
       ip: ip ?? null,
     });
     return this.obterParaMotorista(motoristaId);

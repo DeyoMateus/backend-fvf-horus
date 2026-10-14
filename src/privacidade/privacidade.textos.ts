@@ -1,9 +1,28 @@
+import { createHash } from 'node:crypto';
+
 /**
- * Rodada 206 (LGPD): textos vigentes, versionados. Qualquer mudança de
- * conteúdo exige nova VERSAO_DOCUMENTOS (o app pede nova ciência).
+ * Rodada 206 (LGPD): textos vigentes, versionados.
  * RASCUNHO PARA REVISÃO JURÍDICA antes do uso com motoristas reais.
+ *
+ * Rodada 235: a versão é CALCULADA a partir do conteúdo (hash SHA-256 dos
+ * três textos-modelo, sem dados da empresa, com a versão trocada por um
+ * marcador). Editou qualquer palavra de um documento => a versão muda
+ * sozinha => todos os motoristas voltam a ficar pendentes de ciência e o
+ * servidor avisa os apps por push. Mudar só dados da empresa (controlador,
+ * encarregado) NÃO muda a versão. Ninguém precisa lembrar de trocar nada.
  */
-export const VERSAO_DOCUMENTOS = '2026-10-13';
+const MARCADOR_VERSAO = '{{VERSAO}}';
+
+function calcularVersaoDosDocumentos(): string {
+  const base = montarDocumentosComVersao(null, MARCADOR_VERSAO);
+  const hash = createHash('sha256')
+    .update(JSON.stringify(base.documentos))
+    .digest('hex')
+    .slice(0, 8);
+  return `h-${hash}`;
+}
+
+export const VERSAO_DOCUMENTOS: string = calcularVersaoDosDocumentos();
 
 /** Prazo legal de resposta ao titular (LGPD art. 19, II): 15 dias. */
 export const PRAZO_RESPOSTA_TITULAR_DIAS = 15;
@@ -17,6 +36,13 @@ export interface DadosControlador {
 }
 
 export function montarDocumentos(c: DadosControlador | null) {
+  return montarDocumentosComVersao(c, VERSAO_DOCUMENTOS);
+}
+
+function montarDocumentosComVersao(
+  c: DadosControlador | null,
+  versaoDocumentos: string,
+) {
   const controlador = c
     ? `${c.razaoSocial} (CNPJ ${c.cnpj})`
     : 'a empresa transportadora que contratou o FVF Hórus (seu empregador)';
@@ -24,7 +50,7 @@ export function montarDocumentos(c: DadosControlador | null) {
     ? `${c.encarregadoNome}${c.encarregadoEmail ? `, e-mail ${c.encarregadoEmail}` : ''}${c.encarregadoTelefone ? `, telefone ${c.encarregadoTelefone}` : ''}`
     : 'não há uma pessoa específica nomeada pela sua empresa; use a opção "Privacidade" do aplicativo (o pedido chega ao gestor da empresa) ou fale com o RH';
 
-  const politica = `POLÍTICA DE PRIVACIDADE DO FVF HÓRUS (versão ${VERSAO_DOCUMENTOS})
+  const politica = `POLÍTICA DE PRIVACIDADE DO FVF HÓRUS (versão ${versaoDocumentos})
 
 1. Quem trata os seus dados
 O controlador dos seus dados pessoais é ${controlador}, seu empregador, que decide por que e como os dados de jornada são usados. A FVF Hórus é a operadora: fornece o sistema e trata os dados apenas conforme as instruções do controlador. Encarregado (DPO) do controlador: ${encarregado}.
@@ -66,12 +92,12 @@ Os alertas de jornada e os indicadores de integridade são calculados automatica
 O sistema é destinado a trabalhadores maiores de 18 anos.
 
 11. Alterações
-Quando este documento mudar, o aplicativo pedirá uma nova ciência. A versão em vigor é a ${VERSAO_DOCUMENTOS}.
+Quando este documento mudar, o aplicativo pedirá uma nova ciência. A versão em vigor é a ${versaoDocumentos}.
 
 12. Reclamações
 Se não ficar satisfeito, você pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD) em gov.br/anpd.`;
 
-  const termoGps = `TERMO DE CIÊNCIA SOBRE LOCALIZAÇÃO (GPS) (versão ${VERSAO_DOCUMENTOS})
+  const termoGps = `TERMO DE CIÊNCIA SOBRE LOCALIZAÇÃO (GPS) (versão ${versaoDocumentos})
 
 Estou ciente de que, ao usar o FVF Hórus a serviço de ${controlador}:
 1. O aplicativo registra a minha localização no momento de cada marcação de ponto e, se eu autorizar a permissão de localização em segundo plano, uma amostra por hora durante a jornada.
@@ -80,7 +106,7 @@ Estou ciente de que, ao usar o FVF Hórus a serviço de ${controlador}:
 4. Posso negar ou retirar a permissão nas configurações do telefone; nesse caso a marcação continua possível, mas sem coordenadas, e isso fica registrado.
 5. Posso exercer meus direitos de titular (acesso, correção, informação etc.) na opção "Privacidade e meus direitos" do aplicativo.`;
 
-  const termoDados = `TERMO DE CIÊNCIA SOBRE DADOS PESSOAIS (versão ${VERSAO_DOCUMENTOS})
+  const termoDados = `TERMO DE CIÊNCIA SOBRE DADOS PESSOAIS (versão ${versaoDocumentos})
 
 Estou ciente de que, para controlar a minha jornada de trabalho, ${controlador} e o sistema FVF Hórus guardam os seguintes dados pessoais meus:
 1. Identificação: nome completo, CPF, número da CNH e telefone.
@@ -91,7 +117,7 @@ Estou ciente de que, para controlar a minha jornada de trabalho, ${controlador} 
 Esses dados são usados para cumprir o contrato de trabalho e as obrigações legais de controle de jornada, e protegidos conforme a Política de Privacidade. Meu CPF, CNH e telefone ficam criptografados no banco de dados e só são vistos por pessoas autorizadas da minha empresa. Estou ciente dos meus direitos (acesso, correção, informação, entre outros), que posso exercer na opção "Privacidade" do aplicativo. Não estou dando "consentimento" para este tratamento: ele é feito por obrigação legal e contrato de trabalho, e esta ciência serve para eu ser informado com transparência.`;
 
   return {
-    versao: VERSAO_DOCUMENTOS,
+    versao: versaoDocumentos,
     controlador: c
       ? { razaoSocial: c.razaoSocial, cnpj: c.cnpj }
       : null,

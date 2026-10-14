@@ -31,6 +31,7 @@ function canalDoPush(dados?: Record<string, unknown>): string {
   if (
     !tipo ||
     tipo.startsWith('SOLICITACAO_') ||
+    tipo.startsWith('PRIVACIDADE_') ||
     tipo === 'TRATAMENTO_PONTO'
   ) {
     return 'alertas-jornada-v3';

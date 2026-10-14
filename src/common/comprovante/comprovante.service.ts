@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { agoraDoCliente, instanteDoEvento } from '../fuso/fuso-contexto';
-import PDFDocument from 'pdfkit';
+import { RelatorioPdf } from '../pdf/relatorio-pdf';
 import type { Motorista, RegistroJornada } from '@prisma/client';
 
 /**
@@ -41,77 +41,71 @@ export class ComprovanteService {
     periodoInicio: Date,
     periodoFim: Date,
   ): Promise<Buffer> {
-    const doc = new PDFDocument({ margin: 40, size: 'A4' });
-    const chunks: Buffer[] = [];
-    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
-
-    const finalizado = new Promise<Buffer>((resolve) => {
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
+    const r = new RelatorioPdf({
+      titulo: 'Comprovante de registro de jornada',
+      rodape: 'Comprovante de registro de jornada',
     });
-
-    doc.fontSize(16).text('FVF Hórus , Comprovante de registro de jornada', {
-      align: 'center',
+    r.cabecalho({
+      titulo: 'Comprovante de registro de jornada',
+      subtitulo: motorista.nome,
+      // Empregador primeiro , é o dado que precisa bater com o contrato de
+      // trabalho do motorista quando o grupo tem mais de um CNPJ, mesmo o
+      // documento sendo emitido/assinado pela FVF Hórus.
+      campos: [
+        ['Empregador', empresa.razaoSocial],
+        ['CNPJ', empresa.cnpj],
+        ['Motorista', motorista.nome],
+        ['CPF', motorista.cpf],
+        ['CNH', motorista.cnh],
+        [
+          // Rodada 97 , periodoInicio/periodoFim vêm de <input type="date">
+          // (meia-noite UTC do dia escolhido, não um instante real) , ver
+          // holerite-pdf.util.ts. timeZone: 'UTC' evita imprimir o dia anterior.
+          'Período',
+          `${periodoInicio.toLocaleString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleString('pt-BR', { timeZone: 'UTC' })}`,
+        ],
+        ['Gerado em', agoraDoCliente()],
+        ['Hash gênesis da cadeia', motorista.hashGenesis],
+      ],
     });
-    doc.moveDown();
+    r.doc.moveDown(0.8);
 
-    doc.fontSize(10).fillColor('#374151');
-    // Empregador primeiro, em destaque , é o dado que precisa bater com
-    // o contrato de trabalho do motorista quando o grupo tem mais de um
-    // CNPJ, mesmo o documento sendo emitido/assinado pela FVF Hórus.
-    doc.font('Helvetica-Bold').text(`Empregador: ${empresa.razaoSocial}`);
-    doc.font('Helvetica').text(`CNPJ: ${empresa.cnpj}`);
-    doc.moveDown(0.5);
-    doc.text(`Motorista: ${motorista.nome}`);
-    doc.text(`CPF: ${motorista.cpf}   CNH: ${motorista.cnh}`);
-    doc.text(
-      // Rodada 97 , periodoInicio/periodoFim vêm de <input type="date">
-      // (meia-noite UTC do dia escolhido, não um instante real) , ver
-      // comentário completo em holerite-pdf.util.ts. timeZone: 'UTC'
-      // evita o processo imprimir o dia anterior por causa do fuso
-      // America/Sao_Paulo (UTC-3).
-      `Período: ${periodoInicio.toLocaleString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleString('pt-BR', { timeZone: 'UTC' })}`,
+    r.secao(
+      'Registros do período',
+      `Total de registros no período: ${registros.length}`,
     );
-    doc.text(
-      `Gerado em: ${agoraDoCliente()}`,
-    );
-    doc.text(`Hash gênesis da cadeia: ${motorista.hashGenesis}`);
-    doc.moveDown();
-
-    doc.fontSize(9).fillColor('#111827');
-    doc.text(`Total de registros no período: ${registros.length}`, {
-      underline: registros.length === 0,
-    });
-    doc.moveDown(0.5);
-
-    for (const registro of registros) {
-      doc
-        .fontSize(9)
-        .fillColor('#111827')
-        .text(
-          `#${registro.sequencial}  ${registro.tipoEvento}  ,  ${instanteDoEvento(new Date(registro.timestampEvento), registro.fusoOffsetMin)}` +
-            (registro.observacao ? `  (${registro.observacao})` : ''),
-        );
-      doc
-        .fontSize(7)
-        .fillColor('#6b7280')
-        .text(
-          `   hash: ${registro.hashAtual.slice(0, 24)}…  dispositivo: ${registro.deviceUuidUsado.slice(0, 8)}…`,
-        );
+    if (registros.length === 0) {
+      r.vazio('Nenhum registro no período.');
+    } else {
+      r.tabela(
+        [
+          { titulo: '#', largura: 1.2, alinhamento: 'right' },
+          { titulo: 'Evento', largura: 3 },
+          { titulo: 'Data e hora', largura: 3.4 },
+          { titulo: 'Hash', largura: 3.2 },
+          { titulo: 'Disp.', largura: 1.6 },
+        ],
+        registros.map((registro) => [
+          String(registro.sequencial),
+          registro.tipoEvento + (registro.observacao ? ` (${registro.observacao})` : ''),
+          instanteDoEvento(
+            new Date(registro.timestampEvento),
+            registro.fusoOffsetMin,
+          ),
+          `${registro.hashAtual.slice(0, 24)}…`,
+          `${registro.deviceUuidUsado.slice(0, 8)}…`,
+        ]),
+        { tamanhoFonte: 7.5 },
+      );
     }
 
-    doc.moveDown();
+    r.doc.moveDown(0.8);
     const ultimoHash = registros.at(-1)?.hashAtual ?? motorista.hashGenesis;
-    doc
-      .fontSize(8)
-      .fillColor('#6b7280')
-      .text(
-        `Este comprovante é um extrato do ledger imutável do motorista. O hash do último evento listado ` +
-          `(${ultimoHash}) pode ser conferido contra a verificação de integridade da cadeia a qualquer momento , ` +
-          `qualquer alteração posterior nos registros originais quebraria esse hash.`,
-        { align: 'justify' },
-      );
-
-    doc.end();
-    return finalizado;
+    r.nota(
+      `Este comprovante é um extrato do ledger imutável do motorista. O hash do último evento listado ` +
+        `(${ultimoHash}) pode ser conferido contra a verificação de integridade da cadeia a qualquer momento , ` +
+        `qualquer alteração posterior nos registros originais quebraria esse hash.`,
+    );
+    return r.finalizar();
   }
 }

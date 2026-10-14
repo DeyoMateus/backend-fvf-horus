@@ -68,6 +68,7 @@ export class PrivacidadeMobileController {
       dto.tipoDocumento,
       dto.versao,
       req.ip,
+      dto.aceitoLocalEm,
     );
   }
 

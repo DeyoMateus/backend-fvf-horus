@@ -1,4 +1,4 @@
-import PDFDocument from 'pdfkit';
+import { RelatorioPdf } from '../common/pdf/relatorio-pdf';
 import { agoraDoCliente, instanteDoEvento } from '../common/fuso/fuso-contexto';
 import type { ItemDossieCobranca } from './dossie-cobranca.service';
 
@@ -23,95 +23,75 @@ export async function gerarPdfDossieCobranca(
   periodoInicio: Date,
   periodoFim: Date,
 ): Promise<Buffer> {
-  const doc = new PDFDocument({ margin: 40, size: 'A4' });
-  const chunks: Buffer[] = [];
-  doc.on('data', (chunk: Buffer) => chunks.push(chunk));
-  const finalizado = new Promise<Buffer>((resolve) => {
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
+  const r = new RelatorioPdf({
+    titulo: 'Dossiê de Cobrança - Tempo de Espera em Carga/Descarga',
+    rodape: 'Dossiê de cobrança',
   });
-
-  doc
-    .fontSize(16)
-    .text('Dossiê de Cobrança , Tempo de Espera em Carga/Descarga', {
-      align: 'center',
-    });
-  doc.moveDown(0.2);
-  doc
-    .fontSize(9)
-    .fillColor('#374151')
-    .text(
-      // Rodada 97 , periodoInicio/periodoFim do filtro (calendário, meia-noite
-      // UTC) precisam de timeZone: 'UTC' pra não voltar 1 dia; "Gerado em"
-      // vai na hora de quem gerou o documento (fuso do computador).
-      `${empresaNome}   |   Período: ${periodoInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}   |   Gerado em: ${agoraDoCliente()}`,
-      { align: 'center' },
-    );
-  doc.moveDown();
-  doc
-    .fontSize(8)
-    .fillColor('#6b7280')
-    .text(
+  r.cabecalho({
+    titulo: 'Dossiê de Cobrança',
+    subtitulo: 'Tempo de espera em carga/descarga',
+    campos: [
+      ['Empresa', empresaNome],
+      [
+        // Rodada 97 , periodoInicio/periodoFim do filtro (calendário, meia-noite
+        // UTC) precisam de timeZone: 'UTC' pra não voltar 1 dia; "Gerado em"
+        // vai na hora de quem gerou o documento (fuso do computador).
+        'Período',
+        `${periodoInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`,
+      ],
+      ['Gerado em', agoraDoCliente()],
+    ],
+    aviso:
       'Base legal: Lei 13.103/2015 (Lei do Motorista), art. 235-A, §9º , o tempo de espera para carga/descarga ' +
-        'que excede 5 (cinco) horas na mesma jornada pode ser cobrado do embarcador/contratante do frete. Este ' +
-        'documento reúne as ocorrências detectadas automaticamente pelo motor de limites legais, com data, horários ' +
-        'e duração de cada espera. O valor a cobrar (frete/hora acordado) não é calculado aqui , preencher ' +
-        'manualmente na conferência com o setor de faturamento.',
-      { align: 'left' },
-    );
-  doc.moveDown();
+      'que excede 5 (cinco) horas na mesma jornada pode ser cobrado do embarcador/contratante do frete. Este ' +
+      'documento reúne as ocorrências detectadas automaticamente pelo motor de limites legais, com data, horários ' +
+      'e duração de cada espera. O valor a cobrar (frete/hora acordado) não é calculado aqui , preencher ' +
+      'manualmente na conferência com o setor de faturamento.',
+  });
+  r.doc.moveDown(0.8);
 
+  r.secao('Ocorrências', `${itens.length} ocorrência(s) no período`);
   if (itens.length === 0) {
-    doc
-      .fontSize(10)
-      .fillColor('#6b7280')
-      .text(
-        'Nenhuma ocorrência de espera acima do limiar legal neste período.',
-      );
-    doc.end();
-    return finalizado;
+    r.vazio('Nenhuma ocorrência de espera acima do limiar legal neste período.');
+    return r.finalizar();
   }
 
   for (const item of itens) {
-    doc
-      .fontSize(11)
-      .fillColor('#111827')
-      .font('Helvetica-Bold')
-      .text(item.motoristaNome);
-    doc
-      .fontSize(9)
-      .font('Helvetica')
-      .fillColor('#374151')
-      .text(
-        `CPF: ${item.motoristaCpf}   |   Ocorrência detectada em: ${instanteDoEvento(item.criadoEm, item.fusoCriadoEmMin)}`,
-      );
-    doc.text(
-      `Janela avaliada: ${instanteDoEvento(new Date(item.periodoInicio), item.fusoPeriodoInicioMin)} até ${instanteDoEvento(new Date(item.periodoFim), item.fusoPeriodoFimMin)}`,
+    r.garantirEspaco(110);
+    r.subsecao(
+      item.motoristaNome,
+      `CPF: ${item.motoristaCpf}   |   Ocorrência detectada em: ${instanteDoEvento(item.criadoEm, item.fusoCriadoEmMin)}`,
     );
-    doc
-      .font('Helvetica-Bold')
-      .text(`Total de espera: ${formatarHoras(item.minutosTotais)}`);
-    doc.font('Helvetica').moveDown(0.2);
-
-    doc.fontSize(9).text('Intervalos de espera:');
-    for (const intervalo of item.intervalos) {
-      const inicio = new Date(intervalo.inicio);
-      const fim = new Date(intervalo.fim);
-      const duracaoMin = Math.round((fim.getTime() - inicio.getTime()) / 60000);
-      doc.text(
-        `  • ${instanteDoEvento(inicio, intervalo.fusoInicioMin)} → ${instanteDoEvento(fim, intervalo.fusoFimMin)} (${formatarHoras(duracaoMin)})`,
-      );
-    }
-    doc.fontSize(8).fillColor('#6b7280').text(item.observacao);
-    doc.fillColor('#111827');
-    doc.moveDown(0.6);
-    doc
-      .moveTo(doc.x, doc.y)
-      .lineTo(doc.x + 515, doc.y)
-      .strokeColor('#e5e7eb')
-      .stroke();
-    doc.moveDown(0.6);
+    r.camposChaveValor([
+      [
+        'Janela avaliada',
+        `${instanteDoEvento(new Date(item.periodoInicio), item.fusoPeriodoInicioMin)} até ${instanteDoEvento(new Date(item.periodoFim), item.fusoPeriodoFimMin)}`,
+      ],
+      ['Total de espera', formatarHoras(item.minutosTotais)],
+    ]);
+    r.tabela(
+      [
+        { titulo: 'Início', largura: 4 },
+        { titulo: 'Fim', largura: 4 },
+        { titulo: 'Duração', largura: 2, alinhamento: 'right' },
+      ],
+      item.intervalos.map((intervalo) => {
+        const inicio = new Date(intervalo.inicio);
+        const fim = new Date(intervalo.fim);
+        const duracaoMin = Math.round(
+          (fim.getTime() - inicio.getTime()) / 60000,
+        );
+        return [
+          instanteDoEvento(inicio, intervalo.fusoInicioMin),
+          instanteDoEvento(fim, intervalo.fusoFimMin),
+          formatarHoras(duracaoMin),
+        ];
+      }),
+    );
+    r.doc.moveDown(0.3);
+    r.nota(item.observacao, { justificar: false });
+    r.doc.moveDown(0.6);
   }
 
-  doc.end();
-  return finalizado;
+  return r.finalizar();
 }
