@@ -7,6 +7,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
@@ -813,6 +814,9 @@ export class RegistrosJornadaService {
           index,
           sucesso: false,
           erro: (err as Error).message,
+          // Rodada 247: recusa DEFINITIVA (regra/validação, 4xx). Erro
+          // interno (5xx, banco, etc.) não é recusa: o app reenvia depois.
+          recusado: err instanceof HttpException && err.getStatus() < 500,
         });
       }
     }

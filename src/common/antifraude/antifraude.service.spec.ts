@@ -66,3 +66,48 @@ describe('AntifraudeService , ordem cronológica vs. ordem de chegada (Rodada 24
     ).toBeUndefined();
   });
 });
+
+describe('AntifraudeService , banco local adulterado (Rodada 242)', () => {
+  const service = new AntifraudeService();
+  const registro = {
+    id: 'r-1',
+    motoristaId: 'motorista-1',
+    tipoEvento: 'INICIO_DIRECAO',
+    timestampEvento: new Date('2026-10-04T08:00:00.000Z'),
+    sequencial: 1,
+    latitude: null,
+    longitude: null,
+    deviceUuidUsado: 'dev-1',
+  } as any;
+
+  it('flag BANCO_LOCAL_ADULTERADO gera alerta de integridade com mensagem própria', () => {
+    const alertas = service.avaliar(
+      [registro],
+      registro,
+      registro.timestampEvento,
+      ['BANCO_LOCAL_ADULTERADO'],
+      new Set<TipoAlertaJornada>(),
+    );
+    const a = alertas.find(
+      (x) => x.tipo === TipoAlertaJornada.INTEGRIDADE_DISPOSITIVO_SUSPEITA,
+    );
+    expect(a).toBeDefined();
+    expect(a!.mensagem).toContain('banco de dados local');
+    expect(a!.mensagem).toContain('só volta a aparecer');
+    expect((a!.detalhes as any).flags).toEqual(['BANCO_LOCAL_ADULTERADO']);
+  });
+
+  it('outras flags continuam com a mensagem antiga', () => {
+    const alertas = service.avaliar(
+      [registro],
+      registro,
+      registro.timestampEvento,
+      ['ROOT_OU_JAILBREAK_DETECTADO'],
+      new Set<TipoAlertaJornada>(),
+    );
+    const a = alertas.find(
+      (x) => x.tipo === TipoAlertaJornada.INTEGRIDADE_DISPOSITIVO_SUSPEITA,
+    );
+    expect(a!.mensagem).toContain('sinais de integridade comprometida');
+  });
+});

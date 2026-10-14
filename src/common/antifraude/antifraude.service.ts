@@ -358,10 +358,27 @@ export class AntifraudeService {
     atual: RegistroJornada,
     flags: string[],
   ): AlertaCalculado {
+    // Rodada 242: o banco local do app detectou linha editada/inserida fora
+    // do app. O app avisa UMA vez por adulteração nova (não a cada ponto).
+    const bancoAdulterado = flags.includes('BANCO_LOCAL_ADULTERADO');
+    // Rodada 245: o Keystore do aparelho não aceitou guardar a chave do banco
+    // local; o ponto foi salvo mesmo assim (com proteção reduzida).
+    const keystoreFalhou = flags.includes('KEYSTORE_INDISPONIVEL');
+    const outrasFlags = flags.filter(
+      (f) => f !== 'BANCO_LOCAL_ADULTERADO' && f !== 'KEYSTORE_INDISPONIVEL',
+    );
+    const mensagem = !bancoAdulterado && keystoreFalhou && outrasFlags.length === 0
+      ? 'O cofre de chaves do aparelho (Keystore) não estava disponível neste registro. O ponto foi salvo normalmente, mas a proteção do banco local ficou reduzida enquanto durar a falha. Não indica fraude por si só; se se repetir, peça ao motorista para reiniciar o celular.'
+      : bancoAdulterado
+      ? 'O banco de dados local do app deste motorista foi alterado fora do aplicativo (linha editada ou inserida manualmente). ' +
+        'Os registros alterados foram ignorados pelo app. Confira o histórico do motorista, converse com ele e trate este alerta com a apuração. ' +
+        'Este aviso só volta a aparecer se houver outra adulteração.' +
+        (outrasFlags.length ? ` Outros sinais: ${outrasFlags.join(', ')}.` : '')
+      : `O aparelho reportou sinais de integridade comprometida neste registro: ${flags.join(', ')}.`;
     return {
       tipo: TipoAlertaJornada.INTEGRIDADE_DISPOSITIVO_SUSPEITA,
       severidade: SeveridadeAlerta.ATENCAO,
-      mensagem: `O aparelho reportou sinais de integridade comprometida neste registro: ${flags.join(', ')}.`,
+      mensagem,
       janelaInicio: atual.timestampEvento,
       janelaFim: atual.timestampEvento,
       minutosAcumulados: 0,

@@ -1,0 +1,1 @@
+{ "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true }, "files": ["src/common/antifraude/antifraude.service.ts"], "include": [] }

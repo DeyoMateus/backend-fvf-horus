@@ -17,4 +17,6 @@ export interface ResultadoItemLote {
   /** Id do RegistroJornada criado (ou já existente, se era um reenvio idempotente). */
   registroId?: string;
   erro?: string;
+  /** Rodada 247: `true` = o servidor recusou de vez (4xx); `false` = falha interna, reenviar. */
+  recusado?: boolean;
 }
