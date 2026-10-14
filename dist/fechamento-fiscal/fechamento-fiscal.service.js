@@ -8,14 +8,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FechamentoFiscalService = void 0;
 const common_1 = require("@nestjs/common");
 const fuso_contexto_1 = require("../common/fuso/fuso-contexto");
-const pdfkit_1 = __importDefault(require("pdfkit"));
+const relatorio_pdf_1 = require("../common/pdf/relatorio-pdf");
 const pdf_lib_1 = require("pdf-lib");
 const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../common/prisma/prisma.service");
@@ -97,47 +94,39 @@ let FechamentoFiscalService = class FechamentoFiscalService {
         return this.mesclarPdfs(buffers);
     }
     async gerarCapa(nomesMotoristas, dataInicio, dataFim) {
-        const doc = new pdfkit_1.default({ margin: 40, size: 'A4' });
-        const chunks = [];
-        doc.on('data', (chunk) => chunks.push(chunk));
-        const finalizado = new Promise((resolve) => {
-            doc.on('end', () => resolve(Buffer.concat(chunks)));
+        const r = new relatorio_pdf_1.RelatorioPdf({
+            titulo: 'Espelhos de ponto eletrônico (REP-P) para fiscalização',
+            rodape: 'Espelhos de ponto (REP-P)',
         });
-        doc
-            .fontSize(16)
-            .text('FVF Hórus , Espelhos de Ponto Eletrônico (REP-P) para fiscalização', { align: 'center' });
-        doc.moveDown(0.2);
-        doc
-            .fontSize(9)
-            .fillColor('#374151')
-            .text(`Período: ${dataInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${dataFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}   |   ` +
-            `${nomesMotoristas.length} motorista(s)   |   Gerado em: ${(0, fuso_contexto_1.agoraDoCliente)()}`, { align: 'center' });
-        doc.moveDown();
-        doc
-            .fontSize(8)
-            .fillColor('#6b7280')
-            .text('Cada espelho a seguir é assinado digitalmente com o certificado do próprio motorista (RSA-SHA256, CA ' +
-            'interna do FVF Hórus , não é uma assinatura ICP-Brasil A1/PKCS#7 válida; ver claude/bloqueios-dependentes-do-usuario.md ' +
-            'sobre o certificado ICP-Brasil e2CNPJ pendente) e traz a cadeia de hash do período, com status de ' +
-            'integridade. Para o arquivo AFD oficial (Portaria 671/2021, leiaute binário fixo), use a exportação ' +
-            'separada em Empresas.', { align: 'left' });
-        doc.moveDown();
-        doc
-            .fontSize(10)
-            .fillColor('#111827')
-            .font('Helvetica-Bold')
-            .text('Motoristas incluídos:');
-        doc.font('Helvetica').fontSize(9);
+        r.cabecalho({
+            titulo: 'Espelhos de ponto eletrônico (REP-P)',
+            subtitulo: 'Para fiscalização',
+            campos: [
+                [
+                    'Período',
+                    `${dataInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${dataFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`,
+                ],
+                ['Motoristas', String(nomesMotoristas.length)],
+                ['Gerado em', (0, fuso_contexto_1.agoraDoCliente)()],
+            ],
+            aviso: 'Cada espelho a seguir é assinado digitalmente com o certificado do próprio motorista (RSA-SHA256, CA ' +
+                'interna do FVF Hórus , não é uma assinatura ICP-Brasil A1/PKCS#7 válida; ver claude/bloqueios-dependentes-do-usuario.md ' +
+                'sobre o certificado ICP-Brasil e2CNPJ pendente) e traz a cadeia de hash do período, com status de ' +
+                'integridade. Para o arquivo AFD oficial (Portaria 671/2021, leiaute binário fixo), use a exportação ' +
+                'separada em Empresas.',
+        });
+        r.doc.moveDown(0.8);
+        r.secao('Motoristas incluídos');
         if (nomesMotoristas.length === 0) {
-            doc
-                .fillColor('#6b7280')
-                .text('Nenhum motorista encontrado para este filtro.');
+            r.vazio('Nenhum motorista encontrado para este filtro.');
         }
-        for (const nome of nomesMotoristas) {
-            doc.text(`• ${nome}`);
+        else {
+            r.tabela([
+                { titulo: '#', largura: 1, alinhamento: 'right' },
+                { titulo: 'Motorista', largura: 12 },
+            ], nomesMotoristas.map((nome, i) => [String(i + 1), nome]), { tamanhoFonte: 9 });
         }
-        doc.end();
-        return finalizado;
+        return r.finalizar();
     }
     async mesclarPdfs(buffers) {
         const combinado = await pdf_lib_1.PDFDocument.create();

@@ -1,11 +1,8 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LIMITE_LINHAS_PDF = void 0;
 exports.gerarPdfMeusDados = gerarPdfMeusDados;
-const pdfkit_1 = __importDefault(require("pdfkit"));
+const relatorio_pdf_1 = require("../common/pdf/relatorio-pdf");
 const fuso_contexto_1 = require("../common/fuso/fuso-contexto");
 exports.LIMITE_LINHAS_PDF = {
     registros: 3000,
@@ -85,169 +82,25 @@ function rotulo(mapa, v) {
 function primeira(v) {
     return texto(v).replace(/\s+/g, ' ');
 }
-const COR_TEXTO = '#111827';
-const COR_SUAVE = '#6b7280';
-const COR_LINHA = '#d1d5db';
-const COR_CABECALHO = '#1f2937';
-const COR_FAIXA = '#f3f4f6';
 function gerarPdfMeusDados(d) {
-    const doc = new pdfkit_1.default({
-        margin: 48,
-        size: 'A4',
-        bufferPages: true,
-        info: {
-            Title: 'Cópia dos dados pessoais - FVF Hórus',
-            Author: 'FVF Hórus',
-            Subject: 'LGPD art. 18, II e V',
-        },
+    const r = new relatorio_pdf_1.RelatorioPdf({
+        titulo: 'Cópia dos dados pessoais - FVF Hórus',
+        assunto: 'LGPD art. 18, II e V',
+        rodape: 'Cópia dos dados pessoais',
     });
-    const chunks = [];
-    doc.on('data', (c) => chunks.push(c));
-    const pronto = new Promise((resolve, reject) => {
-        doc.on('end', () => resolve(Buffer.concat(chunks)));
-        doc.on('error', reject);
+    const { doc } = r;
+    const secao = r.secao.bind(r);
+    const vazio = r.vazio.bind(r);
+    const camposChaveValor = r.camposChaveValor.bind(r);
+    const tabela = (colunas, linhas) => r.tabela(colunas, linhas);
+    const garantirEspaco = r.garantirEspaco.bind(r);
+    const listaLimitada = (itens, max) => relatorio_pdf_1.RelatorioPdf.limitar(itens, max, 'A cópia completa em formato estruturado (JSON) está disponível no aplicativo.');
+    r.cabecalho({
+        titulo: 'Cópia dos dados pessoais do titular',
+        subtitulo: 'Lei Geral de Proteção de Dados (Lei 13.709/2018), art. 18, incisos II e V',
+        campos: [['Gerado em', data(d.geradoEm)]],
+        aviso: d.aviso,
     });
-    const esquerda = doc.page.margins.left;
-    const largura = doc.page.width - esquerda - doc.page.margins.right;
-    const limiteY = () => doc.page.height - doc.page.margins.bottom - 20;
-    function garantirEspaco(altura) {
-        if (doc.y + altura > limiteY())
-            doc.addPage();
-    }
-    function secao(titulo, subtitulo) {
-        garantirEspaco(60);
-        doc.moveDown(0.8);
-        const y = doc.y;
-        doc
-            .font('Helvetica-Bold')
-            .fontSize(12)
-            .fillColor(COR_CABECALHO)
-            .text(titulo, esquerda, y, { width: largura });
-        const yLinha = doc.y + 2;
-        doc
-            .moveTo(esquerda, yLinha)
-            .lineTo(esquerda + largura, yLinha)
-            .lineWidth(1)
-            .strokeColor(COR_CABECALHO)
-            .stroke();
-        doc.y = yLinha + 6;
-        if (subtitulo) {
-            doc
-                .font('Helvetica')
-                .fontSize(8.5)
-                .fillColor(COR_SUAVE)
-                .text(subtitulo, esquerda, doc.y, { width: largura });
-            doc.moveDown(0.4);
-        }
-    }
-    function vazio(msg) {
-        doc
-            .font('Helvetica-Oblique')
-            .fontSize(9)
-            .fillColor(COR_SUAVE)
-            .text(msg, esquerda, doc.y, { width: largura });
-    }
-    function camposChaveValor(pares) {
-        const wRot = 130;
-        for (const [rot, val] of pares) {
-            garantirEspaco(18);
-            const y = doc.y;
-            doc
-                .font('Helvetica-Bold')
-                .fontSize(9)
-                .fillColor(COR_SUAVE)
-                .text(rot, esquerda, y, { width: wRot });
-            const yFim1 = doc.y;
-            doc
-                .font('Helvetica')
-                .fontSize(10)
-                .fillColor(COR_TEXTO)
-                .text(val, esquerda + wRot, y, { width: largura - wRot });
-            doc.y = Math.max(yFim1, doc.y) + 3;
-        }
-    }
-    function tabela(colunas, linhas) {
-        const soma = colunas.reduce((a, c) => a + c.largura, 0);
-        const esc = largura / soma;
-        const ws = colunas.map((c) => c.largura * esc);
-        const pad = 4;
-        function cabecalho() {
-            garantirEspaco(26);
-            let x = esquerda;
-            const y = doc.y;
-            doc.rect(esquerda, y, largura, 16).fill(COR_CABECALHO);
-            doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff');
-            colunas.forEach((c, i) => {
-                doc.text(c.titulo, x + pad, y + 4, {
-                    width: ws[i] - pad * 2,
-                    lineBreak: false,
-                    ellipsis: true,
-                });
-                x += ws[i];
-            });
-            doc.y = y + 16;
-        }
-        cabecalho();
-        linhas.forEach((cels, idx) => {
-            doc.font('Helvetica').fontSize(8);
-            const alturas = cels.map((c, i) => doc.heightOfString(c, { width: ws[i] - pad * 2 }));
-            const h = Math.max(...alturas) + 6;
-            if (doc.y + h > limiteY()) {
-                doc.addPage();
-                cabecalho();
-            }
-            const y = doc.y;
-            if (idx % 2 === 1)
-                doc.rect(esquerda, y, largura, h).fill(COR_FAIXA);
-            doc.fillColor(COR_TEXTO).font('Helvetica').fontSize(8);
-            let x = esquerda;
-            cels.forEach((c, i) => {
-                doc.text(c, x + pad, y + 3, { width: ws[i] - pad * 2 });
-                x += ws[i];
-            });
-            doc
-                .moveTo(esquerda, y + h)
-                .lineTo(esquerda + largura, y + h)
-                .lineWidth(0.4)
-                .strokeColor(COR_LINHA)
-                .stroke();
-            doc.y = y + h;
-        });
-    }
-    function listaLimitada(itens, max) {
-        if (itens.length <= max)
-            return { itens, nota: null };
-        return {
-            itens: itens.slice(0, max),
-            nota: `Exibidos os ${max} mais recentes de ${itens.length}. A cópia completa em formato estruturado (JSON) está disponível no aplicativo.`,
-        };
-    }
-    doc
-        .font('Helvetica-Bold')
-        .fontSize(9)
-        .fillColor(COR_SUAVE)
-        .text('FVF HÓRUS', esquerda, doc.y, { characterSpacing: 2 });
-    doc.moveDown(0.3);
-    doc
-        .font('Helvetica-Bold')
-        .fontSize(20)
-        .fillColor(COR_CABECALHO)
-        .text('Cópia dos dados pessoais do titular', { width: largura });
-    doc
-        .font('Helvetica')
-        .fontSize(10)
-        .fillColor(COR_SUAVE)
-        .text('Lei Geral de Proteção de Dados (Lei 13.709/2018), art. 18, incisos II e V', {
-        width: largura,
-    });
-    doc.moveDown(0.6);
-    camposChaveValor([['Gerado em', data(d.geradoEm)]]);
-    doc.moveDown(0.2);
-    doc
-        .font('Helvetica')
-        .fontSize(9)
-        .fillColor(COR_SUAVE)
-        .text(d.aviso, esquerda, doc.y, { width: largura, align: 'justify' });
     const c = d.cadastro;
     secao('1. Dados de identificação');
     if (!c) {
@@ -432,25 +285,9 @@ function gerarPdfMeusDados(d) {
     }
     garantirEspaco(80);
     doc.moveDown(1.2);
-    doc
-        .font('Helvetica')
-        .fontSize(8.5)
-        .fillColor(COR_SUAVE)
-        .text('Este documento reúne os dados pessoais que o FVF Hórus trata sobre você, extraídos do sistema na data indicada acima. ' +
+    r.nota('Este documento reúne os dados pessoais que o FVF Hórus trata sobre você, extraídos do sistema na data indicada acima. ' +
         'Para corrigir, eliminar ou questionar qualquer informação, use a opção "Fazer um pedido" na tela de Privacidade do aplicativo ' +
-        'ou fale com o encarregado de dados da sua transportadora.', esquerda, doc.y, { width: largura, align: 'justify' });
-    const range = doc.bufferedPageRange();
-    for (let i = range.start; i < range.start + range.count; i++) {
-        doc.switchToPage(i);
-        const y = doc.page.height - doc.page.margins.bottom + 8;
-        doc.page.margins.bottom = 0;
-        doc
-            .font('Helvetica')
-            .fontSize(8)
-            .fillColor(COR_SUAVE)
-            .text(`FVF Hórus - Cópia dos dados pessoais - Página ${i + 1} de ${range.count}`, esquerda, y, { width: largura, align: 'center', lineBreak: false });
-    }
-    doc.end();
-    return pronto;
+        'ou fale com o encarregado de dados da sua transportadora.');
+    return r.finalizar();
 }
 //# sourceMappingURL=privacidade-pdf.util.js.map

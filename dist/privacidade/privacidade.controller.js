@@ -54,7 +54,7 @@ let PrivacidadeMobileController = class PrivacidadeMobileController {
         return this.service.obterParaMotorista(req.motorista.id);
     }
     ciencia(req, dto) {
-        return this.service.registrarAceite(req.motorista.id, dto.tipoDocumento, dto.versao, req.ip);
+        return this.service.registrarAceite(req.motorista.id, dto.tipoDocumento, dto.versao, req.ip, dto.aceitoLocalEm);
     }
     criar(req, dto) {
         return this.service.criarSolicitacao(req.motorista.id, dto.tipo, dto.descricao);

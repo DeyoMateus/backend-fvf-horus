@@ -2,16 +2,29 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PRAZO_RESPOSTA_TITULAR_DIAS = exports.VERSAO_DOCUMENTOS = void 0;
 exports.montarDocumentos = montarDocumentos;
-exports.VERSAO_DOCUMENTOS = '2026-10-13';
+const node_crypto_1 = require("node:crypto");
+const MARCADOR_VERSAO = '{{VERSAO}}';
+function calcularVersaoDosDocumentos() {
+    const base = montarDocumentosComVersao(null, MARCADOR_VERSAO);
+    const hash = (0, node_crypto_1.createHash)('sha256')
+        .update(JSON.stringify(base.documentos))
+        .digest('hex')
+        .slice(0, 8);
+    return `h-${hash}`;
+}
+exports.VERSAO_DOCUMENTOS = calcularVersaoDosDocumentos();
 exports.PRAZO_RESPOSTA_TITULAR_DIAS = 15;
 function montarDocumentos(c) {
+    return montarDocumentosComVersao(c, exports.VERSAO_DOCUMENTOS);
+}
+function montarDocumentosComVersao(c, versaoDocumentos) {
     const controlador = c
         ? `${c.razaoSocial} (CNPJ ${c.cnpj})`
         : 'a empresa transportadora que contratou o FVF Hórus (seu empregador)';
     const encarregado = c?.encarregadoNome
         ? `${c.encarregadoNome}${c.encarregadoEmail ? `, e-mail ${c.encarregadoEmail}` : ''}${c.encarregadoTelefone ? `, telefone ${c.encarregadoTelefone}` : ''}`
         : 'não há uma pessoa específica nomeada pela sua empresa; use a opção "Privacidade" do aplicativo (o pedido chega ao gestor da empresa) ou fale com o RH';
-    const politica = `POLÍTICA DE PRIVACIDADE DO FVF HÓRUS (versão ${exports.VERSAO_DOCUMENTOS})
+    const politica = `POLÍTICA DE PRIVACIDADE DO FVF HÓRUS (versão ${versaoDocumentos})
 
 1. Quem trata os seus dados
 O controlador dos seus dados pessoais é ${controlador}, seu empregador, que decide por que e como os dados de jornada são usados. A FVF Hórus é a operadora: fornece o sistema e trata os dados apenas conforme as instruções do controlador. Encarregado (DPO) do controlador: ${encarregado}.
@@ -53,11 +66,11 @@ Os alertas de jornada e os indicadores de integridade são calculados automatica
 O sistema é destinado a trabalhadores maiores de 18 anos.
 
 11. Alterações
-Quando este documento mudar, o aplicativo pedirá uma nova ciência. A versão em vigor é a ${exports.VERSAO_DOCUMENTOS}.
+Quando este documento mudar, o aplicativo pedirá uma nova ciência. A versão em vigor é a ${versaoDocumentos}.
 
 12. Reclamações
 Se não ficar satisfeito, você pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD) em gov.br/anpd.`;
-    const termoGps = `TERMO DE CIÊNCIA SOBRE LOCALIZAÇÃO (GPS) (versão ${exports.VERSAO_DOCUMENTOS})
+    const termoGps = `TERMO DE CIÊNCIA SOBRE LOCALIZAÇÃO (GPS) (versão ${versaoDocumentos})
 
 Estou ciente de que, ao usar o FVF Hórus a serviço de ${controlador}:
 1. O aplicativo registra a minha localização no momento de cada marcação de ponto e, se eu autorizar a permissão de localização em segundo plano, uma amostra por hora durante a jornada.
@@ -65,7 +78,7 @@ Estou ciente de que, ao usar o FVF Hórus a serviço de ${controlador}:
 3. A localização pode ser vista no painel apenas por usuários autorizados da minha empresa (com login e senha próprios) e pela equipe de gerenciamento de risco, e fornecida à fiscalização quando exigido por lei. Cada consulta à minha localização feita por um usuário do painel fica registrada no sistema (quem consultou e quando).
 4. Posso negar ou retirar a permissão nas configurações do telefone; nesse caso a marcação continua possível, mas sem coordenadas, e isso fica registrado.
 5. Posso exercer meus direitos de titular (acesso, correção, informação etc.) na opção "Privacidade e meus direitos" do aplicativo.`;
-    const termoDados = `TERMO DE CIÊNCIA SOBRE DADOS PESSOAIS (versão ${exports.VERSAO_DOCUMENTOS})
+    const termoDados = `TERMO DE CIÊNCIA SOBRE DADOS PESSOAIS (versão ${versaoDocumentos})
 
 Estou ciente de que, para controlar a minha jornada de trabalho, ${controlador} e o sistema FVF Hórus guardam os seguintes dados pessoais meus:
 1. Identificação: nome completo, CPF, número da CNH e telefone.
@@ -75,7 +88,7 @@ Estou ciente de que, para controlar a minha jornada de trabalho, ${controlador} 
 5. Registros de acesso e de ciência deste termo (data e versão).
 Esses dados são usados para cumprir o contrato de trabalho e as obrigações legais de controle de jornada, e protegidos conforme a Política de Privacidade. Meu CPF, CNH e telefone ficam criptografados no banco de dados e só são vistos por pessoas autorizadas da minha empresa. Estou ciente dos meus direitos (acesso, correção, informação, entre outros), que posso exercer na opção "Privacidade" do aplicativo. Não estou dando "consentimento" para este tratamento: ele é feito por obrigação legal e contrato de trabalho, e esta ciência serve para eu ser informado com transparência.`;
     return {
-        versao: exports.VERSAO_DOCUMENTOS,
+        versao: versaoDocumentos,
         controlador: c
             ? { razaoSocial: c.razaoSocial, cnpj: c.cnpj }
             : null,

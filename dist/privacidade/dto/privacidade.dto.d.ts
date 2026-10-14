@@ -2,6 +2,7 @@ import { StatusSolicitacaoTitular, TipoDocumentoPrivacidade, TipoSolicitacaoTitu
 export declare class RegistrarAceiteDto {
     tipoDocumento: TipoDocumentoPrivacidade;
     versao: string;
+    aceitoLocalEm?: string;
 }
 export declare class CriarSolicitacaoTitularDto {
     tipo: TipoSolicitacaoTitular;

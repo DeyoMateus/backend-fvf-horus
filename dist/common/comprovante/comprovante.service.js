@@ -5,62 +5,60 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ComprovanteService = void 0;
 const common_1 = require("@nestjs/common");
 const fuso_contexto_1 = require("../fuso/fuso-contexto");
-const pdfkit_1 = __importDefault(require("pdfkit"));
+const relatorio_pdf_1 = require("../pdf/relatorio-pdf");
 let ComprovanteService = class ComprovanteService {
     async gerarPdfRegistros(motorista, empresa, registros, periodoInicio, periodoFim) {
-        const doc = new pdfkit_1.default({ margin: 40, size: 'A4' });
-        const chunks = [];
-        doc.on('data', (chunk) => chunks.push(chunk));
-        const finalizado = new Promise((resolve) => {
-            doc.on('end', () => resolve(Buffer.concat(chunks)));
+        const r = new relatorio_pdf_1.RelatorioPdf({
+            titulo: 'Comprovante de registro de jornada',
+            rodape: 'Comprovante de registro de jornada',
         });
-        doc.fontSize(16).text('FVF Hórus , Comprovante de registro de jornada', {
-            align: 'center',
+        r.cabecalho({
+            titulo: 'Comprovante de registro de jornada',
+            subtitulo: motorista.nome,
+            campos: [
+                ['Empregador', empresa.razaoSocial],
+                ['CNPJ', empresa.cnpj],
+                ['Motorista', motorista.nome],
+                ['CPF', motorista.cpf],
+                ['CNH', motorista.cnh],
+                [
+                    'Período',
+                    `${periodoInicio.toLocaleString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleString('pt-BR', { timeZone: 'UTC' })}`,
+                ],
+                ['Gerado em', (0, fuso_contexto_1.agoraDoCliente)()],
+                ['Hash gênesis da cadeia', motorista.hashGenesis],
+            ],
         });
-        doc.moveDown();
-        doc.fontSize(10).fillColor('#374151');
-        doc.font('Helvetica-Bold').text(`Empregador: ${empresa.razaoSocial}`);
-        doc.font('Helvetica').text(`CNPJ: ${empresa.cnpj}`);
-        doc.moveDown(0.5);
-        doc.text(`Motorista: ${motorista.nome}`);
-        doc.text(`CPF: ${motorista.cpf}   CNH: ${motorista.cnh}`);
-        doc.text(`Período: ${periodoInicio.toLocaleString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleString('pt-BR', { timeZone: 'UTC' })}`);
-        doc.text(`Gerado em: ${(0, fuso_contexto_1.agoraDoCliente)()}`);
-        doc.text(`Hash gênesis da cadeia: ${motorista.hashGenesis}`);
-        doc.moveDown();
-        doc.fontSize(9).fillColor('#111827');
-        doc.text(`Total de registros no período: ${registros.length}`, {
-            underline: registros.length === 0,
-        });
-        doc.moveDown(0.5);
-        for (const registro of registros) {
-            doc
-                .fontSize(9)
-                .fillColor('#111827')
-                .text(`#${registro.sequencial}  ${registro.tipoEvento}  ,  ${(0, fuso_contexto_1.instanteDoEvento)(new Date(registro.timestampEvento), registro.fusoOffsetMin)}` +
-                (registro.observacao ? `  (${registro.observacao})` : ''));
-            doc
-                .fontSize(7)
-                .fillColor('#6b7280')
-                .text(`   hash: ${registro.hashAtual.slice(0, 24)}…  dispositivo: ${registro.deviceUuidUsado.slice(0, 8)}…`);
+        r.doc.moveDown(0.8);
+        r.secao('Registros do período', `Total de registros no período: ${registros.length}`);
+        if (registros.length === 0) {
+            r.vazio('Nenhum registro no período.');
         }
-        doc.moveDown();
+        else {
+            r.tabela([
+                { titulo: '#', largura: 1.2, alinhamento: 'right' },
+                { titulo: 'Evento', largura: 3 },
+                { titulo: 'Data e hora', largura: 3.4 },
+                { titulo: 'Hash', largura: 3.2 },
+                { titulo: 'Disp.', largura: 1.6 },
+            ], registros.map((registro) => [
+                String(registro.sequencial),
+                registro.tipoEvento + (registro.observacao ? ` (${registro.observacao})` : ''),
+                (0, fuso_contexto_1.instanteDoEvento)(new Date(registro.timestampEvento), registro.fusoOffsetMin),
+                `${registro.hashAtual.slice(0, 24)}…`,
+                `${registro.deviceUuidUsado.slice(0, 8)}…`,
+            ]), { tamanhoFonte: 7.5 });
+        }
+        r.doc.moveDown(0.8);
         const ultimoHash = registros.at(-1)?.hashAtual ?? motorista.hashGenesis;
-        doc
-            .fontSize(8)
-            .fillColor('#6b7280')
-            .text(`Este comprovante é um extrato do ledger imutável do motorista. O hash do último evento listado ` +
+        r.nota(`Este comprovante é um extrato do ledger imutável do motorista. O hash do último evento listado ` +
             `(${ultimoHash}) pode ser conferido contra a verificação de integridade da cadeia a qualquer momento , ` +
-            `qualquer alteração posterior nos registros originais quebraria esse hash.`, { align: 'justify' });
-        doc.end();
-        return finalizado;
+            `qualquer alteração posterior nos registros originais quebraria esse hash.`);
+        return r.finalizar();
     }
 };
 exports.ComprovanteService = ComprovanteService;

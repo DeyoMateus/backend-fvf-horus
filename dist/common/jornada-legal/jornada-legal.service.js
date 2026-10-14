@@ -446,9 +446,9 @@ let JornadaLegalService = class JornadaLegalService {
         return resultado;
     }
     recortarJornadaLegal(registros, agora) {
-        const ordenados = [...registros]
+        const ordenados = this.removerJornadasVazias([...registros]
             .filter((r) => r.timestampEvento.getTime() <= agora.getTime())
-            .sort(ordenacao_temporal_util_1.compararPorTimestampEvento);
+            .sort(ordenacao_temporal_util_1.compararPorTimestampEvento));
         let inicioIdx = ordenados
             .map((r) => r.tipoEvento)
             .lastIndexOf(client_1.TipoEvento.INICIO_JORNADA);

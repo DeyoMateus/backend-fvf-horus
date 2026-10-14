@@ -1,11 +1,8 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.gerarPdfHolerite = gerarPdfHolerite;
 exports.gerarPdfFechamentoLote = gerarPdfFechamentoLote;
-const pdfkit_1 = __importDefault(require("pdfkit"));
+const relatorio_pdf_1 = require("../common/pdf/relatorio-pdf");
 const fuso_contexto_1 = require("../common/fuso/fuso-contexto");
 const fuso_brasil_util_1 = require("../common/fuso/fuso-brasil.util");
 function formatarDiaBr(diaIso) {
@@ -36,99 +33,58 @@ function horaDoEvento(evento, fusoEmpresaOffsetMin) {
         ? texto
         : `${texto} (${(0, fuso_brasil_util_1.rotuloFuso)(offset)})`;
 }
-function desenharSecaoMotorista(doc, motorista, empresa, resultado) {
-    doc.fontSize(10).fillColor('#374151');
-    doc.font('Helvetica-Bold').text(`Empregador: ${empresa.razaoSocial}`);
-    doc.font('Helvetica').text(`CNPJ: ${empresa.cnpj}`);
-    doc.moveDown(0.5);
-    doc.text(`Motorista: ${motorista.nome}`);
-    doc.text(`CPF: ${motorista.cpf}   CNH: ${motorista.cnh}`);
-    doc.text(`Período: ${resultado.periodoInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${resultado.periodoFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`);
-    doc.text(`Gerado em: ${(0, fuso_contexto_1.agoraDoCliente)()}`);
+function desenharSecaoMotorista(rel, motorista, empresa, resultado) {
+    const doc = rel.doc;
+    rel.secao('Identificação');
+    const pares = [
+        ['Empregador', empresa.razaoSocial],
+        ['CNPJ', empresa.cnpj],
+        ['Motorista', motorista.nome],
+        ['CPF', motorista.cpf],
+        ['CNH', motorista.cnh],
+        [
+            'Período',
+            `${resultado.periodoInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${resultado.periodoFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`,
+        ],
+        ['Gerado em', (0, fuso_contexto_1.agoraDoCliente)()],
+    ];
     if (resultado.regraSindicalAplicada) {
-        doc.text(`Convenção coletiva aplicada: ${resultado.regraSindicalAplicada.nome}`);
+        pares.push([
+            'Convenção coletiva aplicada',
+            resultado.regraSindicalAplicada.nome,
+        ]);
     }
-    doc.moveDown();
-    const colunas = [{ titulo: 'Dia', largura: 70, valor: (d) => formatarDiaBr(d.dia) }];
+    rel.camposChaveValor(pares, 150);
+    const colunas = [
+        {
+            titulo: 'Dia',
+            largura: 70,
+            valor: (d) => formatarDiaBr(d.dia),
+        },
+    ];
+    const horas = (titulo, largura, campo) => colunas.push({
+        titulo,
+        largura,
+        alinhamento: 'right',
+        valor: (d) => formatarHoras(d[campo]),
+    });
     if (resultado.opcoes.direcaoEspera) {
-        colunas.push({
-            titulo: 'Direção',
-            largura: 65,
-            valor: (d) => formatarHoras(d.direcaoMin),
-        });
-        colunas.push({
-            titulo: 'Espera',
-            largura: 65,
-            valor: (d) => formatarHoras(d.esperaMin),
-        });
+        horas('Direção', 65, 'direcaoMin');
+        horas('Espera', 65, 'esperaMin');
     }
     if (resultado.opcoes.normalExtra) {
-        colunas.push({
-            titulo: 'H. normal',
-            largura: 65,
-            valor: (d) => formatarHoras(d.normalMin),
-        });
-        colunas.push({
-            titulo: 'H. extra',
-            largura: 65,
-            valor: (d) => formatarHoras(d.extraMin),
-        });
+        horas('H. normal', 65, 'normalMin');
+        horas('H. extra', 65, 'extraMin');
     }
-    if (resultado.opcoes.adicionalNoturno) {
-        colunas.push({
-            titulo: 'Hora noturna',
-            largura: 75,
-            valor: (d) => formatarHoras(d.noturnoMin),
-        });
-    }
+    if (resultado.opcoes.adicionalNoturno)
+        horas('Hora noturna', 75, 'noturnoMin');
     colunas.push({
         titulo: 'Obs.',
-        largura: 60,
+        largura: 80,
         valor: (d) => (d.teveFechamentoGestor ? 'Fechado p/ gestor' : ''),
     });
-    const xInicial = doc.x;
-    const desenharLinha = (celulas, negrito) => {
-        doc
-            .font(negrito ? 'Helvetica-Bold' : 'Helvetica')
-            .fontSize(8)
-            .fillColor('#111827');
-        let x = xInicial;
-        const y = doc.y;
-        let alturaLinha = 0;
-        for (let i = 0; i < celulas.length; i++) {
-            doc.text(celulas[i], x, y, {
-                width: colunas[i].largura,
-                continued: false,
-            });
-            alturaLinha = Math.max(alturaLinha, doc.heightOfString(celulas[i], { width: colunas[i].largura }));
-            x += colunas[i].largura;
-        }
-        doc.y = y + alturaLinha;
-        doc.moveDown(0.3);
-    };
-    desenharLinha(colunas.map((c) => c.titulo), true);
-    doc
-        .moveTo(xInicial, doc.y)
-        .lineTo(xInicial + colunas.reduce((s, c) => s + c.largura, 0), doc.y)
-        .strokeColor('#9ca3af')
-        .stroke();
-    doc.moveDown(0.2);
-    if (resultado.dias.length === 0) {
-        doc
-            .fontSize(9)
-            .fillColor('#6b7280')
-            .text('Nenhum ponto registrado (ou ajustado pelo gestor) no período.');
-    }
-    for (const dia of resultado.dias) {
-        desenharLinha(colunas.map((c) => c.valor(dia)), false);
-    }
-    doc.moveDown();
-    doc
-        .moveTo(xInicial, doc.y)
-        .lineTo(xInicial + colunas.reduce((s, c) => s + c.largura, 0), doc.y)
-        .strokeColor('#9ca3af')
-        .stroke();
-    doc.moveDown(0.3);
+    rel.secao('Apuração por dia');
+    const linhas = resultado.dias.map((d) => colunas.map((c) => c.valor(d)));
     const totalLinha = ['Total'];
     if (resultado.opcoes.direcaoEspera) {
         totalLinha.push(formatarHoras(resultado.totais.direcaoMin), formatarHoras(resultado.totais.esperaMin));
@@ -140,19 +96,28 @@ function desenharSecaoMotorista(doc, motorista, empresa, resultado) {
         totalLinha.push(formatarHoras(resultado.totais.noturnoMin));
     }
     totalLinha.push('');
-    desenharLinha(totalLinha, true);
-    doc.moveDown();
-    const larguraTotalPagina = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    doc
-        .font('Helvetica')
-        .fontSize(8)
-        .fillColor('#6b7280')
-        .text('Dias marcados como "Fechado p/ gestor" incluem ajuste lançado pela empresa (ponto que o motorista ' +
+    if (resultado.dias.length === 0) {
+        rel.vazio('Nenhum ponto registrado (ou ajustado pelo gestor) no período.');
+        doc.moveDown(0.3);
+    }
+    rel.tabela(colunas, [...linhas, totalLinha], {
+        tamanhoFonte: 8.5,
+        ultimaLinhaTotal: true,
+    });
+    doc.moveDown(0.8);
+    rel.nota('Dias marcados como "Fechado p/ gestor" incluem ajuste lançado pela empresa (ponto que o motorista ' +
         'esqueceu de bater), com evidência anexada e notificação enviada ao app do motorista , ver histórico ' +
         'de ajustes dele para o motivo e os comprovantes. Este documento é gerado a partir do ledger imutável ' +
-        'do motorista (registros de ponto) combinado com os ajustes registrados pelo gestor no período.', xInicial, doc.y, { width: larguraTotalPagina, align: 'justify' });
-    desenharBlocoAssinaturas(doc, motorista.nome, empresa.razaoSocial);
+        'do motorista (registros de ponto) combinado com os ajustes registrados pelo gestor no período.');
+    desenharBlocoAssinaturas(rel, motorista.nome, empresa.razaoSocial);
     doc.addPage();
+    rel.secao('Registros detalhados do período', 'Os eventos abaixo estão agrupados por jornada , do "Início de jornada" até o "Fim de jornada" ' +
+        'correspondente batido pelo motorista (uma jornada pode ter mais de um dia, e o mesmo dia pode ter ' +
+        'mais de uma jornada). Mesmos eventos que compõem os totais da folha anterior.');
+    if (resultado.eventos.length === 0) {
+        rel.vazio('Nenhum evento registrado (nem ajustado pelo gestor) no período.');
+    }
+    const fusoEmpresaOffsetMin = resultado.fusoEmpresaOffsetMin ?? fuso_brasil_util_1.OFFSET_PADRAO_MIN;
     const colunasDetalhe = [
         { titulo: 'Data/Hora', largura: 85 },
         { titulo: 'Evento (status da ação)', largura: 130 },
@@ -160,71 +125,6 @@ function desenharSecaoMotorista(doc, motorista, empresa, resultado) {
         { titulo: 'Localização', largura: 90 },
         { titulo: 'Motivo/Observação', largura: 160 },
     ];
-    const xInicialDetalhe = doc.page.margins.left;
-    const yMaximoUtil = doc.page.height - doc.page.margins.bottom;
-    const desenharLinhaDetalhe = (celulas, negrito) => {
-        let x = xInicialDetalhe;
-        const y = doc.y;
-        let alturaLinha = 0;
-        for (let i = 0; i < celulas.length; i++) {
-            const celula = typeof celulas[i] === 'string'
-                ? { texto: celulas[i] }
-                : celulas[i];
-            doc
-                .font(negrito ? 'Helvetica-Bold' : 'Helvetica')
-                .fontSize(8)
-                .fillColor(celula.link ? '#1a56db' : '#111827');
-            doc.text(celula.texto, x, y, {
-                width: colunasDetalhe[i].largura,
-                continued: false,
-                link: celula.link,
-                underline: Boolean(celula.link),
-            });
-            alturaLinha = Math.max(alturaLinha, doc.heightOfString(celula.texto, { width: colunasDetalhe[i].largura }));
-            x += colunasDetalhe[i].largura;
-        }
-        doc.y = y + alturaLinha;
-        doc.moveDown(0.3);
-    };
-    const desenharCabecalhoColunas = () => {
-        doc.x = xInicialDetalhe;
-        desenharLinhaDetalhe(colunasDetalhe.map((c) => c.titulo), true);
-        doc
-            .moveTo(xInicialDetalhe, doc.y)
-            .lineTo(xInicialDetalhe + colunasDetalhe.reduce((s, c) => s + c.largura, 0), doc.y)
-            .strokeColor('#9ca3af')
-            .stroke();
-        doc.moveDown(0.2);
-    };
-    const quebrarPaginaSeNecessario = (alturaNecessaria) => {
-        if (doc.y + alturaNecessaria > yMaximoUtil) {
-            doc.addPage();
-            desenharCabecalhoColunas();
-        }
-    };
-    doc
-        .fontSize(12)
-        .fillColor('#111827')
-        .font('Helvetica-Bold')
-        .text('Registros detalhados do período', xInicialDetalhe, doc.y);
-    doc
-        .fontSize(8)
-        .fillColor('#6b7280')
-        .font('Helvetica')
-        .text('Os eventos abaixo estão agrupados por jornada , do "Início de jornada" até o "Fim de jornada" ' +
-        'correspondente batido pelo motorista (uma jornada pode ter mais de um dia, e o mesmo dia pode ter ' +
-        'mais de uma jornada). Mesmos eventos que compõem os totais da folha anterior.', xInicialDetalhe, doc.y, {
-        width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
-    });
-    doc.moveDown(0.5);
-    desenharCabecalhoColunas();
-    if (resultado.eventos.length === 0) {
-        doc
-            .fontSize(9)
-            .fillColor('#6b7280')
-            .text('Nenhum evento registrado (nem ajustado pelo gestor) no período.', xInicialDetalhe, doc.y);
-    }
-    const fusoEmpresaOffsetMin = resultado.fusoEmpresaOffsetMin ?? fuso_brasil_util_1.OFFSET_PADRAO_MIN;
     const blocos = [];
     const avulsos = [];
     let atual = null;
@@ -264,31 +164,30 @@ function desenharSecaoMotorista(doc, motorista, empresa, resultado) {
     }
     fecharAtual(null);
     const desenharBlocoDeEventos = (titulo, eventos) => {
-        quebrarPaginaSeNecessario(18 + 24);
-        doc
-            .font('Helvetica-Bold')
-            .fontSize(9)
-            .fillColor('#1f2937')
-            .text(titulo, xInicialDetalhe, doc.y, {
-            width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
-        });
-        doc.moveDown(0.2);
+        rel.garantirEspaco(80);
+        rel.subsecao(titulo);
+        const linhasEv = [];
+        const links = [];
         for (const evento of eventos) {
-            quebrarPaginaSeNecessario(24);
             const temLocalizacao = evento.latitude != null && evento.longitude != null;
-            desenharLinhaDetalhe([
+            linhasEv.push([
                 horaDoEvento(evento, fusoEmpresaOffsetMin),
                 ROTULO_EVENTO_DETALHADO[evento.tipoEvento] ?? evento.tipoEvento,
                 evento.origemGestor ? 'RH' : 'Motorista',
-                temLocalizacao
-                    ? {
-                        texto: 'Ver no mapa',
-                        link: `https://www.google.com/maps/search/?api=1&query=${evento.latitude},${evento.longitude}`,
-                    }
-                    : ',',
+                temLocalizacao ? 'Ver no mapa' : ',',
                 evento.detalhe ?? '',
-            ], false);
+            ]);
+            links.push([
+                undefined,
+                undefined,
+                undefined,
+                temLocalizacao
+                    ? `https://www.google.com/maps/search/?api=1&query=${evento.latitude},${evento.longitude}`
+                    : undefined,
+                undefined,
+            ]);
         }
+        rel.tabela(colunasDetalhe, linhasEv, { links });
         doc.moveDown(0.4);
     };
     if (avulsos.length > 0) {
@@ -298,30 +197,23 @@ function desenharSecaoMotorista(doc, motorista, empresa, resultado) {
         desenharBlocoDeEventos(`Jornada ${indice + 1} , ${bloco.titulo}`, bloco.eventos);
     });
 }
-function desenharBlocoAssinaturas(doc, nomeMotorista, nomeEmpresa) {
-    const xInicial = doc.page.margins.left;
-    const larguraTotal = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const alturaBloco = 70;
-    const yMaximoUtil = doc.page.height - doc.page.margins.bottom;
-    if (doc.y + alturaBloco > yMaximoUtil) {
-        doc.addPage();
-    }
-    doc.moveDown(2);
-    const larguraColuna = larguraTotal / 2;
+function desenharBlocoAssinaturas(rel, nomeMotorista, nomeEmpresa) {
+    const doc = rel.doc;
+    const xInicial = rel.esquerda;
+    const alturaBloco = 90;
+    rel.garantirEspaco(alturaBloco);
+    doc.moveDown(2.5);
+    const larguraColuna = rel.largura / 2;
     const larguraLinha = larguraColuna - 30;
     const y = doc.y;
-    doc.strokeColor('#374151');
-    doc
-        .moveTo(xInicial, y)
-        .lineTo(xInicial + larguraLinha, y)
-        .stroke();
+    doc.lineWidth(0.8).strokeColor(relatorio_pdf_1.COR_TEXTO);
+    doc.moveTo(xInicial, y).lineTo(xInicial + larguraLinha, y).stroke();
     doc
         .moveTo(xInicial + larguraColuna, y)
         .lineTo(xInicial + larguraColuna + larguraLinha, y)
         .stroke();
-    doc.moveDown(0.3);
-    let yLinha = doc.y;
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#111827');
+    let yLinha = y + 4;
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(relatorio_pdf_1.COR_TEXTO);
     doc.text(nomeMotorista, xInicial, yLinha, {
         width: larguraLinha,
         align: 'center',
@@ -332,95 +224,56 @@ function desenharBlocoAssinaturas(doc, nomeMotorista, nomeEmpresa) {
         align: 'center',
     });
     const alturaMaxNome = Math.max(alturaNome, doc.heightOfString(nomeEmpresa, { width: larguraLinha }));
-    doc.y = yLinha + alturaMaxNome;
-    yLinha = doc.y;
-    doc.font('Helvetica').fontSize(8).fillColor('#6b7280');
+    yLinha = yLinha + alturaMaxNome;
+    doc.font('Helvetica').fontSize(8).fillColor(relatorio_pdf_1.COR_SUAVE);
     doc.text('Assinatura do motorista', xInicial, yLinha, {
         width: larguraLinha,
         align: 'center',
     });
     doc.text('Assinatura da empresa contratante', xInicial + larguraColuna, yLinha, { width: larguraLinha, align: 'center' });
+    doc.y = yLinha + 12;
 }
 async function gerarPdfHolerite(motorista, empresa, resultado) {
-    const doc = new pdfkit_1.default({ margin: 40, size: 'A4' });
-    const chunks = [];
-    doc.on('data', (chunk) => chunks.push(chunk));
-    const finalizado = new Promise((resolve) => {
-        doc.on('end', () => resolve(Buffer.concat(chunks)));
+    const rel = new relatorio_pdf_1.RelatorioPdf({
+        titulo: 'Apuração de jornada (espelho de ponto)',
+        rodape: 'Folha de ponto',
     });
-    doc.fontSize(16).text('FVF Hórus , Apuração de jornada (espelho de ponto)', {
-        align: 'center',
+    rel.cabecalho({
+        titulo: 'Apuração de jornada (espelho de ponto)',
+        aviso: 'Este documento organiza e categoriza a jornada (direção, espera, normal/extra, noturno) pra apoiar o ' +
+            'fechamento da folha , não é o cálculo completo da folha de pagamento (salário, DSR, verbas) nem o ' +
+            'holerite pronto.',
     });
-    doc.moveDown(0.2);
-    doc
-        .fontSize(8)
-        .fillColor('#6b7280')
-        .text('Este documento organiza e categoriza a jornada (direção, espera, normal/extra, noturno) pra apoiar o \n' +
-        'fechamento da folha , não é o cálculo completo da folha de pagamento (salário, DSR, verbas) nem o \n' +
-        'holerite pronto.', { align: 'center' });
-    doc.moveDown();
-    desenharSecaoMotorista(doc, motorista, empresa, resultado);
-    doc.end();
-    return finalizado;
+    desenharSecaoMotorista(rel, motorista, empresa, resultado);
+    return rel.finalizar();
 }
 async function gerarPdfFechamentoLote(itens, periodoInicio, periodoFim) {
-    const doc = new pdfkit_1.default({ margin: 40, size: 'A4' });
-    const chunks = [];
-    doc.on('data', (chunk) => chunks.push(chunk));
-    const finalizado = new Promise((resolve) => {
-        doc.on('end', () => resolve(Buffer.concat(chunks)));
+    const rel = new relatorio_pdf_1.RelatorioPdf({
+        titulo: 'Fechamento de jornada da frota',
+        rodape: 'Fechamento de jornada da frota',
     });
-    doc
-        .fontSize(16)
-        .text('FVF Hórus , Fechamento de jornada da frota', { align: 'center' });
-    doc.moveDown(0.2);
-    doc
-        .fontSize(9)
-        .fillColor('#374151')
-        .text(`Período: ${periodoInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}   |   ` +
-        `${itens.length} motorista(s)   |   Gerado em: ${(0, fuso_contexto_1.agoraDoCliente)()}`, { align: 'center' });
-    doc.moveDown();
-    doc
-        .fontSize(8)
-        .fillColor('#6b7280')
-        .text('Resumo por motorista, seguido do detalhamento diário completo de cada um. Somente horas , nenhum ' +
-        'valor monetário é calculado ou exibido; o pagamento é decisão da empresa/RH fora desta plataforma.', { align: 'center' });
-    doc.moveDown();
+    rel.cabecalho({
+        titulo: 'Fechamento de jornada da frota',
+        campos: [
+            [
+                'Período',
+                `${periodoInicio.toLocaleDateString('pt-BR', { timeZone: 'UTC' })} até ${periodoFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`,
+            ],
+            ['Motoristas', `${itens.length} motorista(s)`],
+            ['Gerado em', (0, fuso_contexto_1.agoraDoCliente)()],
+        ],
+        aviso: 'Resumo por motorista, seguido do detalhamento diário completo de cada um. Somente horas , nenhum ' +
+            'valor monetário é calculado ou exibido; o pagamento é decisão da empresa/RH fora desta plataforma.',
+    });
+    rel.secao('Resumo por motorista');
     const colunasResumo = [
         { titulo: 'Motorista', largura: 160 },
-        { titulo: 'Direção', largura: 65 },
-        { titulo: 'Espera', largura: 65 },
-        { titulo: 'H. normal', largura: 65 },
-        { titulo: 'H. extra', largura: 65 },
-        { titulo: 'Hora noturna', largura: 75 },
+        { titulo: 'Direção', largura: 65, alinhamento: 'right' },
+        { titulo: 'Espera', largura: 65, alinhamento: 'right' },
+        { titulo: 'H. normal', largura: 65, alinhamento: 'right' },
+        { titulo: 'H. extra', largura: 65, alinhamento: 'right' },
+        { titulo: 'Hora noturna', largura: 75, alinhamento: 'right' },
     ];
-    const xInicialResumo = doc.x;
-    const desenharLinhaResumo = (celulas, negrito) => {
-        doc
-            .font(negrito ? 'Helvetica-Bold' : 'Helvetica')
-            .fontSize(8)
-            .fillColor('#111827');
-        let x = xInicialResumo;
-        const y = doc.y;
-        let alturaLinha = 0;
-        for (let i = 0; i < celulas.length; i++) {
-            doc.text(celulas[i], x, y, {
-                width: colunasResumo[i].largura,
-                continued: false,
-            });
-            alturaLinha = Math.max(alturaLinha, doc.heightOfString(celulas[i], { width: colunasResumo[i].largura }));
-            x += colunasResumo[i].largura;
-        }
-        doc.y = y + alturaLinha;
-        doc.moveDown(0.3);
-    };
-    desenharLinhaResumo(colunasResumo.map((c) => c.titulo), true);
-    doc
-        .moveTo(xInicialResumo, doc.y)
-        .lineTo(xInicialResumo + colunasResumo.reduce((s, c) => s + c.largura, 0), doc.y)
-        .strokeColor('#9ca3af')
-        .stroke();
-    doc.moveDown(0.2);
     const totalGeral = {
         direcaoMin: 0,
         esperaMin: 0,
@@ -429,45 +282,42 @@ async function gerarPdfFechamentoLote(itens, periodoInicio, periodoFim) {
         noturnoMin: 0,
     };
     if (itens.length === 0) {
-        doc
-            .fontSize(9)
-            .fillColor('#6b7280')
-            .text('Nenhum motorista encontrado para este fechamento.');
+        rel.vazio('Nenhum motorista encontrado para este fechamento.');
+        rel.doc.moveDown(0.3);
     }
+    const linhas = [];
     for (const item of itens) {
-        desenharLinhaResumo([
+        const t = item.resultado.totais;
+        linhas.push([
             item.motorista.nome,
-            formatarHoras(item.resultado.totais.direcaoMin),
-            formatarHoras(item.resultado.totais.esperaMin),
-            formatarHoras(item.resultado.totais.normalMin),
-            formatarHoras(item.resultado.totais.extraMin),
-            formatarHoras(item.resultado.totais.noturnoMin),
-        ], false);
-        totalGeral.direcaoMin += item.resultado.totais.direcaoMin;
-        totalGeral.esperaMin += item.resultado.totais.esperaMin;
-        totalGeral.normalMin += item.resultado.totais.normalMin;
-        totalGeral.extraMin += item.resultado.totais.extraMin;
-        totalGeral.noturnoMin += item.resultado.totais.noturnoMin;
+            formatarHoras(t.direcaoMin),
+            formatarHoras(t.esperaMin),
+            formatarHoras(t.normalMin),
+            formatarHoras(t.extraMin),
+            formatarHoras(t.noturnoMin),
+        ]);
+        totalGeral.direcaoMin += t.direcaoMin;
+        totalGeral.esperaMin += t.esperaMin;
+        totalGeral.normalMin += t.normalMin;
+        totalGeral.extraMin += t.extraMin;
+        totalGeral.noturnoMin += t.noturnoMin;
     }
-    doc
-        .moveTo(xInicialResumo, doc.y)
-        .lineTo(xInicialResumo + colunasResumo.reduce((s, c) => s + c.largura, 0), doc.y)
-        .strokeColor('#9ca3af')
-        .stroke();
-    doc.moveDown(0.2);
-    desenharLinhaResumo([
+    linhas.push([
         'Total da frota',
         formatarHoras(totalGeral.direcaoMin),
         formatarHoras(totalGeral.esperaMin),
         formatarHoras(totalGeral.normalMin),
         formatarHoras(totalGeral.extraMin),
         formatarHoras(totalGeral.noturnoMin),
-    ], true);
+    ]);
+    rel.tabela(colunasResumo, linhas, {
+        tamanhoFonte: 8.5,
+        ultimaLinhaTotal: true,
+    });
     for (const item of itens) {
-        doc.addPage();
-        desenharSecaoMotorista(doc, item.motorista, item.empresa, item.resultado);
+        rel.doc.addPage();
+        desenharSecaoMotorista(rel, item.motorista, item.empresa, item.resultado);
     }
-    doc.end();
-    return finalizado;
+    return rel.finalizar();
 }
 //# sourceMappingURL=holerite-pdf.util.js.map

@@ -8,14 +8,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RepPService = void 0;
 const common_1 = require("@nestjs/common");
 const fuso_contexto_1 = require("../fuso/fuso-contexto");
-const pdfkit_1 = __importDefault(require("pdfkit"));
+const relatorio_pdf_1 = require("../pdf/relatorio-pdf");
 const client_1 = require("@prisma/client");
 const nsr_service_1 = require("../nsr/nsr.service");
 const ordenacao_temporal_util_1 = require("../ordenacao-temporal.util");
@@ -84,70 +81,77 @@ let RepPService = class RepPService {
         }
         const diasChaves = Array.from(offsetPorDia.keys()).sort();
         const resumosPorDia = diasChaves.map((dia) => this.resumirDia(dia, registros, regraSindical, feriadosPagosSet, feriadosPorDia, offsetPorDia.get(dia) ?? offsetEmpresaMin, linhaFuso));
-        const doc = new pdfkit_1.default({ margin: 40, size: 'A4' });
-        const chunks = [];
-        doc.on('data', (chunk) => chunks.push(chunk));
-        const finalizado = new Promise((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));
-        this.escreverCabecalho(doc, motorista, empresa, opcoes, regraSindical, feriadosNoPeriodo);
-        this.escreverTabelaEventos(doc, eventos, offsetEmpresaMin);
-        this.escreverResumosDiarios(doc, resumosPorDia);
-        if (tratamentos.length > 0) {
-            this.escreverAjustesRh(doc, tratamentos, linhaFuso, offsetEmpresaMin);
-        }
-        this.escreverRodape(doc, motorista, registros, tratamentos, deviceUuidAtual);
-        doc.end();
-        return finalizado;
-    }
-    escreverCabecalho(doc, motorista, empresa, opcoes, regraSindical, feriadosNoPeriodo) {
-        doc
-            .fontSize(15)
-            .font('Helvetica-Bold')
-            .text('ESPELHO DE PONTO ELETRÔNICO (REP-P)', { align: 'center' });
-        doc
-            .fontSize(9)
-            .font('Helvetica')
-            .fillColor('#4b5563')
-            .text('Lei nº 13.103/2015 ("Lei do Motorista") · Portaria MTP 671/2021', {
-            align: 'center',
+        const r = new relatorio_pdf_1.RelatorioPdf({
+            titulo: 'Espelho de Ponto Eletrônico (REP-P) - FVF Hórus',
+            assunto: 'Lei nº 13.103/2015 e Portaria MTP 671/2021',
+            rodape: 'Espelho de ponto eletrônico (REP-P)',
         });
-        doc.moveDown(0.8);
-        doc.fontSize(10).fillColor('#111827');
-        doc.font('Helvetica-Bold').text(`Empregador: ${empresa.razaoSocial}`);
-        doc.font('Helvetica').text(`CNPJ: ${empresa.cnpj}`);
-        doc.moveDown(0.3);
-        doc.text(`Motorista: ${motorista.nome}`);
-        doc.text(`CPF: ${motorista.cpf}   CNH: ${motorista.cnh}`);
-        doc.text(`Período: ${opcoes.periodoInicio.toLocaleString('pt-BR', { timeZone: 'UTC' })} até ${opcoes.periodoFim.toLocaleString('pt-BR', { timeZone: 'UTC' })}`);
-        doc.text(`Gerado em: ${(0, fuso_contexto_1.agoraDoCliente)()}`);
-        doc.text(regraSindical
-            ? `Convenção coletiva aplicada: ${regraSindical.nome} (${regraSindical.categoriaTransporte})`
-            : 'Convenção coletiva aplicada: nenhuma vinculada a este CNPJ , parâmetros de referência CLT/Lei 13.103');
-        doc.text(feriadosNoPeriodo.length > 0
-            ? `Feriados cadastrados pelo RH e considerados neste período: ${feriadosNoPeriodo
-                .map((f) => `${this.formatarDiaBr(f.data)} (${f.descricao}${f.pagoComoDomingo ? '' : ', informativo , sem percentual diferenciado'})`)
-                .join('; ')}`
-            : 'Feriados cadastrados pelo RH e considerados neste período: nenhum , só domingos recebem o percentual diferenciado, quando configurado na convenção coletiva.', { align: 'justify' });
-        doc.moveDown();
+        this.escreverCabecalho(r, motorista, empresa, opcoes, regraSindical, feriadosNoPeriodo);
+        this.escreverTabelaEventos(r, eventos, offsetEmpresaMin);
+        this.escreverResumosDiarios(r, resumosPorDia);
+        if (tratamentos.length > 0) {
+            this.escreverAjustesRh(r, tratamentos, linhaFuso, offsetEmpresaMin);
+        }
+        this.escreverRodape(r, motorista, registros, tratamentos, deviceUuidAtual);
+        return r.finalizar();
     }
-    escreverTabelaEventos(doc, eventos, offsetEmpresaMin) {
-        doc
-            .fontSize(11)
-            .font('Helvetica-Bold')
-            .fillColor('#111827')
-            .text('Marcações do período');
-        doc.moveDown(0.3);
+    escreverCabecalho(r, motorista, empresa, opcoes, regraSindical, feriadosNoPeriodo) {
+        r.cabecalho({
+            titulo: 'Espelho de Ponto Eletrônico (REP-P)',
+            subtitulo: 'Lei nº 13.103/2015 ("Lei do Motorista") · Portaria MTP 671/2021',
+            campos: [
+                ['Empregador', empresa.razaoSocial],
+                ['CNPJ', empresa.cnpj],
+                ['Motorista', motorista.nome],
+                ['CPF', motorista.cpf],
+                ['CNH', motorista.cnh],
+                [
+                    'Período',
+                    `${opcoes.periodoInicio.toLocaleString('pt-BR', { timeZone: 'UTC' })} até ${opcoes.periodoFim.toLocaleString('pt-BR', { timeZone: 'UTC' })}`,
+                ],
+                ['Gerado em', (0, fuso_contexto_1.agoraDoCliente)()],
+                [
+                    'Convenção coletiva aplicada',
+                    regraSindical
+                        ? `${regraSindical.nome} (${regraSindical.categoriaTransporte})`
+                        : 'nenhuma vinculada a este CNPJ , parâmetros de referência CLT/Lei 13.103',
+                ],
+                [
+                    'Feriados cadastrados pelo RH e considerados neste período',
+                    feriadosNoPeriodo.length > 0
+                        ? feriadosNoPeriodo
+                            .map((f) => `${this.formatarDiaBr(f.data)} (${f.descricao}${f.pagoComoDomingo ? '' : ', informativo , sem percentual diferenciado'})`)
+                            .join('; ')
+                        : 'nenhum , só domingos recebem o percentual diferenciado, quando configurado na convenção coletiva.',
+                ],
+            ],
+        });
+    }
+    escreverTabelaEventos(r, eventos, offsetEmpresaMin) {
+        r.secao('Marcações do período');
+        const colunas = [
+            { titulo: 'Horário', largura: 13 },
+            { titulo: 'Evento', largura: 24 },
+            { titulo: 'Localização GPS', largura: 26 },
+            { titulo: 'Categoria legal', largura: 28 },
+            { titulo: 'NSR', largura: 9, alinhamento: 'right' },
+        ];
         let diaAtual = null;
+        let linhas = [];
+        const descarregar = () => {
+            if (diaAtual === null)
+                return;
+            r.garantirEspaco(90);
+            r.subsecao(this.formatarDiaBr(diaAtual));
+            r.tabela(colunas, linhas);
+            linhas = [];
+        };
         for (const evento of eventos) {
             const offsetEvento = evento.registro?.fusoOffsetMin ?? offsetEmpresaMin;
             const dia = this.chaveDia(evento.timestampEvento, offsetEvento);
             if (dia !== diaAtual) {
+                descarregar();
                 diaAtual = dia;
-                doc.moveDown(0.4);
-                doc
-                    .fontSize(9)
-                    .font('Helvetica-Bold')
-                    .fillColor('#1f2937')
-                    .text(`, ${this.formatarDiaBr(dia)} ,`);
             }
             const registro = evento.registro;
             const horarioBase = (0, fuso_brasil_util_1.paraParedeBrt)(evento.timestampEvento, offsetEvento)
@@ -162,130 +166,126 @@ let RepPService = class RepPService {
                         ? ` (±${Math.round(registro.precisaoGpsM)}m)`
                         : '')
                 : 'GPS indisponível neste evento';
-            doc
-                .fontSize(8.5)
-                .font('Helvetica')
-                .fillColor('#111827')
-                .text(`${horario}  ,  ${ROTULO_EVENTO[evento.tipoEvento]}`, {
-                continued: false,
-            });
-            doc
-                .fontSize(7.5)
-                .fillColor('#6b7280')
-                .text(`   Localização GPS: ${gps}   |   Categoria legal: ${CATEGORIA_LEGAL[evento.tipoEvento]}   |   NSR: ${registro.nsr}`);
+            linhas.push([
+                horario,
+                ROTULO_EVENTO[evento.tipoEvento],
+                gps,
+                CATEGORIA_LEGAL[evento.tipoEvento],
+                String(registro.nsr),
+            ]);
         }
-        doc.moveDown();
+        descarregar();
+        if (eventos.length === 0)
+            r.vazio('Nenhuma marcação no período.');
     }
-    escreverResumosDiarios(doc, resumos) {
-        doc.addPage();
-        doc
-            .fontSize(11)
-            .font('Helvetica-Bold')
-            .fillColor('#111827')
-            .text('Resumo diário categorizado');
-        doc.moveDown(0.3);
-        for (const r of resumos) {
-            doc
-                .fontSize(9.5)
-                .font('Helvetica-Bold')
-                .fillColor('#1f2937')
-                .text(this.formatarDiaBr(r.dia));
-            doc.fontSize(8).font('Helvetica').fillColor('#111827');
-            doc.text(`Tempo Total de Direção: ${this.formatarHoras(r.direcaoMin)}`);
-            doc.text(`Tempo Total de Espera: ${this.formatarHoras(r.esperaMin)}`);
-            doc.text(`Intervalo Intrajornada (1º período de descanso): ${this.formatarHoras(r.intrajornadaMin)}`);
-            doc.text(`Pausas de Direção Continuada (demais descansos do dia): ${this.formatarHoras(r.pausasDirecaoContinuadaMin)}`);
-            const rotuloDiferenciado = r.ehDomingo && r.ehFeriado
-                ? `domingo e feriado (${r.descricaoFeriado})`
-                : r.ehFeriado
-                    ? `feriado (${r.descricaoFeriado})`
-                    : r.ehDomingo
+    escreverResumosDiarios(r, resumos) {
+        r.secao('Resumo diário categorizado');
+        for (const d of resumos) {
+            const rotuloDiferenciado = d.ehDomingo && d.ehFeriado
+                ? `domingo e feriado (${d.descricaoFeriado})`
+                : d.ehFeriado
+                    ? `feriado (${d.descricaoFeriado})`
+                    : d.ehDomingo
                         ? 'domingo'
                         : null;
-            doc.text(`Horas Extras ${r.percentualExtra1}%: ${this.formatarHoras(r.extraFaixa1Min)}` +
-                (r.extraFaixa2Min > 0
-                    ? `   |   Horas Extras ${r.percentualExtra2}%: ${this.formatarHoras(r.extraFaixa2Min)}`
+            const extras = `${this.formatarHoras(d.extraFaixa1Min)}` +
+                (d.extraFaixa2Min > 0
+                    ? `   |   Horas Extras ${d.percentualExtra2}%: ${this.formatarHoras(d.extraFaixa2Min)}`
                     : '') +
                 (rotuloDiferenciado
                     ? `   (${rotuloDiferenciado} , percentual diferenciado da CCT aplicado, quando configurado)`
-                    : ''));
-            doc.text(`Adicional Noturno (${r.percentualNoturno}%): ${this.formatarHoras(r.noturnoMin)}`);
-            doc.text(r.descansoInterjornadaMin == null
-                ? 'Descanso Interjornada Próximo: não apurável (jornada seguinte ainda não iniciada no período consultado)'
-                : `Descanso Interjornada Próximo: ${this.formatarHoras(r.descansoInterjornadaMin)}` +
-                    (r.descansoInterjornadaAbaixoDoMinimo
+                    : '');
+            const interjornada = d.descansoInterjornadaMin == null
+                ? 'não apurável (jornada seguinte ainda não iniciada no período consultado)'
+                : `${this.formatarHoras(d.descansoInterjornadaMin)}` +
+                    (d.descansoInterjornadaAbaixoDoMinimo
                         ? '  ⚠ abaixo do mínimo legal de 11:00'
-                        : ''));
-            doc.moveDown(0.6);
+                        : '');
+            r.garantirEspaco(150);
+            r.subsecao(this.formatarDiaBr(d.dia));
+            r.camposChaveValor([
+                ['Tempo Total de Direção', this.formatarHoras(d.direcaoMin)],
+                ['Tempo Total de Espera', this.formatarHoras(d.esperaMin)],
+                [
+                    'Intervalo Intrajornada (1º período de descanso)',
+                    this.formatarHoras(d.intrajornadaMin),
+                ],
+                [
+                    'Pausas de Direção Continuada (demais descansos do dia)',
+                    this.formatarHoras(d.pausasDirecaoContinuadaMin),
+                ],
+                [`Horas Extras ${d.percentualExtra1}%`, extras],
+                [
+                    `Adicional Noturno (${d.percentualNoturno}%)`,
+                    this.formatarHoras(d.noturnoMin),
+                ],
+                ['Descanso Interjornada Próximo', interjornada],
+            ], 200);
+            r.separador();
         }
+        if (resumos.length === 0)
+            r.vazio('Nenhum dia com marcações no período.');
     }
-    escreverAjustesRh(doc, tratamentos, linhaFuso, padraoMin) {
-        doc.moveDown();
-        doc
-            .fontSize(11)
-            .font('Helvetica-Bold')
-            .fillColor('#b45309')
-            .text('Ajustes de RH aplicados neste período');
-        doc
-            .fontSize(7.5)
-            .font('Helvetica')
-            .fillColor('#6b7280')
-            .text('Estes horários foram lançados/aprovados pelo RH (fluxo direto do gestor ou solicitação aprovada do ' +
+    escreverAjustesRh(r, tratamentos, linhaFuso, padraoMin) {
+        r.secao('Ajustes de RH aplicados neste período');
+        r.nota('Estes horários foram lançados/aprovados pelo RH (fluxo direto do gestor ou solicitação aprovada do ' +
             'motorista) e entram na apuração de horas para pagamento , mas NÃO fazem parte das marcações reais com ' +
             'GPS acima, e um horário corrigido não comprova onde o motorista estava naquele instante. Cada ajuste ' +
             'registra o usuário do RH/gestor responsável e fica ancorado no hash-chain do motorista (prova sobre ' +
-            'qual estado da cadeia o ajuste foi lançado).', { align: 'justify' });
-        doc.moveDown(0.3);
-        for (const t of tratamentos) {
-            doc
-                .fontSize(8.5)
-                .font('Helvetica')
-                .fillColor('#111827')
-                .text(`${(0, fuso_contexto_1.instanteDoEvento)(t.timestampEvento, t.fusoOffsetMin ??
-                (0, fuso_brasil_util_1.offsetNoInstante)(linhaFuso, t.timestampEvento.getTime(), padraoMin))}  ,  ${ROTULO_EVENTO[t.tipoEvento]}`);
-            doc.fontSize(7.5).fillColor('#6b7280').text(`   Motivo: ${t.motivo}`);
-            doc
-                .fontSize(7.5)
-                .fillColor('#6b7280')
-                .text(`   Lançado por: ${t.usuario.nome}`);
-        }
-        doc.moveDown();
+            'qual estado da cadeia o ajuste foi lançado).');
+        r.doc.moveDown(0.5);
+        r.tabela([
+            { titulo: 'Horário', largura: 22 },
+            { titulo: 'Evento', largura: 26 },
+            { titulo: 'Motivo', largura: 32 },
+            { titulo: 'Lançado por', largura: 20 },
+        ], tratamentos.map((t) => [
+            (0, fuso_contexto_1.instanteDoEvento)(t.timestampEvento, t.fusoOffsetMin ??
+                (0, fuso_brasil_util_1.offsetNoInstante)(linhaFuso, t.timestampEvento.getTime(), padraoMin)),
+            ROTULO_EVENTO[t.tipoEvento],
+            t.motivo,
+            t.usuario.nome,
+        ]));
     }
-    escreverRodape(doc, motorista, registros, tratamentos, deviceUuidAtual) {
-        doc.moveDown();
-        doc
-            .fontSize(11)
-            .font('Helvetica-Bold')
-            .fillColor('#111827')
-            .text('Autenticidade e integridade');
-        doc.fontSize(8).font('Helvetica').fillColor('#111827');
+    escreverRodape(r, motorista, registros, tratamentos, deviceUuidAtual) {
+        r.secao('Autenticidade e integridade');
         const ultimoRegistro = registros.at(-1);
-        doc.text(`Hash gênesis da cadeia do motorista: ${motorista.hashGenesis}`);
-        doc.text(ultimoRegistro
-            ? `Hash do último evento no período (SHA-256, cadeia encadeada): ${ultimoRegistro.hashAtual}`
-            : 'Nenhum evento com GPS no período , cadeia de hash não avaliada.');
-        doc.text(`Status de alteração: ${tratamentos.length === 0
-            ? 'NENHUMA ALTERAÇÃO RETROATIVA DETECTADA'
-            : `${tratamentos.length} AJUSTE(S) DE RH APLICADO(S) NESTE PERÍODO , ver seção "Ajustes de RH" acima. As marcações originais com GPS nunca são sobrescritas (ledger imutável).`}`);
-        doc.text(`Dispositivo(s) usado(s) no período: ${Array.from(new Set(registros.map((r) => r.deviceUuidUsado))).join(', ') || 'nenhum'}` +
-            (deviceUuidAtual
-                ? `   |   Dispositivo vinculado atualmente: ${deviceUuidAtual}`
-                : ''));
-        doc.text(`Assinatura digital por evento: RSA-SHA256, certificado emitido pela cadeia interna da FVF Hórus ` +
+        r.camposChaveValor([
+            ['Hash gênesis da cadeia do motorista', motorista.hashGenesis],
+            [
+                'Hash do último evento no período (SHA-256, cadeia encadeada)',
+                ultimoRegistro
+                    ? ultimoRegistro.hashAtual
+                    : 'Nenhum evento com GPS no período , cadeia de hash não avaliada.',
+            ],
+            [
+                'Status de alteração',
+                tratamentos.length === 0
+                    ? 'NENHUMA ALTERAÇÃO RETROATIVA DETECTADA'
+                    : `${tratamentos.length} AJUSTE(S) DE RH APLICADO(S) NESTE PERÍODO , ver seção "Ajustes de RH" acima. As marcações originais com GPS nunca são sobrescritas (ledger imutável).`,
+            ],
+            [
+                'Dispositivo(s) usado(s) no período',
+                (Array.from(new Set(registros.map((x) => x.deviceUuidUsado))).join(', ') || 'nenhum') +
+                    (deviceUuidAtual
+                        ? `   |   Dispositivo vinculado atualmente: ${deviceUuidAtual}`
+                        : ''),
+            ],
+        ], 170);
+        r.doc.moveDown(0.4);
+        r.nota(`Assinatura digital por evento: RSA-SHA256, certificado emitido pela cadeia interna da FVF Hórus ` +
             `(fingerprint do motorista: ${motorista.certificadoFingerprint ?? 'não disponível'}). Os ajustes de RH ` +
             `deste período, quando houver, não são assinados com certificado (não exigido por lei , ver seção ` +
             `"Ajustes de RH") , ficam identificados pelo usuário responsável e ancorados no hash-chain. O ` +
-            `certificado do motorista não é ICP-Brasil A1 nesta versão , ver dívidas técnicas do projeto.`, { align: 'justify' });
-        doc.text(`Validação de horário: timestampEvento capturado no aparelho no momento do toque (com GPS do próprio ` +
+            `certificado do motorista não é ICP-Brasil A1 nesta versão , ver dívidas técnicas do projeto.`);
+        r.doc.moveDown(0.4);
+        r.nota(`Validação de horário: timestampEvento capturado no aparelho no momento do toque (com GPS do próprio ` +
             `celular quando disponível) e conferido contra deriva de relógio pelo motor antifraude , não é uma ` +
-            `validação formal por servidor NTP dedicado.`, { align: 'justify' });
-        doc.moveDown(0.5);
-        doc
-            .fontSize(7)
-            .fillColor('#6b7280')
-            .text('Este relatório organiza e categoriza a jornada registrada , não calcula a folha de pagamento completa ' +
+            `validação formal por servidor NTP dedicado.`);
+        r.doc.moveDown(0.5);
+        r.nota('Este relatório organiza e categoriza a jornada registrada , não calcula a folha de pagamento completa ' +
             '(salário, DSR e demais verbas) nem constitui, por si só, garantia de conformidade trabalhista. A ' +
-            'adequação depende das regras configuradas, dos processos internos e das normas aplicáveis à empresa.', { align: 'justify' });
+            'adequação depende das regras configuradas, dos processos internos e das normas aplicáveis à empresa.');
     }
     resumirDia(dia, registros, regra, feriadosPagosSet, feriadosPorDia, offsetMin, linhaFuso = []) {
         const inicioDia = new Date(new Date(`${dia}T00:00:00.000Z`).getTime() - offsetMin * 60_000);

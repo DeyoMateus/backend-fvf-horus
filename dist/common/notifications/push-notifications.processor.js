@@ -28,6 +28,7 @@ function canalDoPush(dados) {
     const tipo = typeof dados?.tipo === 'string' ? dados.tipo : undefined;
     if (!tipo ||
         tipo.startsWith('SOLICITACAO_') ||
+        tipo.startsWith('PRIVACIDADE_') ||
         tipo === 'TRATAMENTO_PONTO') {
         return 'alertas-jornada-v3';
     }

@@ -1,4 +1,4 @@
-export declare const VERSAO_DOCUMENTOS = "2026-10-13";
+export declare const VERSAO_DOCUMENTOS: string;
 export declare const PRAZO_RESPOSTA_TITULAR_DIAS = 15;
 export interface DadosControlador {
     razaoSocial: string;

@@ -16,6 +16,7 @@ const sanitizar_decorator_1 = require("../../common/sanitizacao/sanitizar.decora
 class RegistrarAceiteDto {
     tipoDocumento;
     versao;
+    aceitoLocalEm;
 }
 exports.RegistrarAceiteDto = RegistrarAceiteDto;
 __decorate([
@@ -27,6 +28,11 @@ __decorate([
     (0, class_validator_1.Length)(1, 30),
     __metadata("design:type", String)
 ], RegistrarAceiteDto.prototype, "versao", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsISO8601)(),
+    __metadata("design:type", String)
+], RegistrarAceiteDto.prototype, "aceitoLocalEm", void 0);
 class CriarSolicitacaoTitularDto {
     tipo;
     descricao;

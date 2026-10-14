@@ -55,7 +55,7 @@ export declare class PrivacidadeService {
             texto: string;
         }[];
     }>;
-    registrarAceite(motoristaId: string, tipoDocumento: TipoDocumentoPrivacidade, versao: string, ip?: string | null): Promise<{
+    registrarAceite(motoristaId: string, tipoDocumento: TipoDocumentoPrivacidade, versao: string, ip?: string | null, aceitoLocalEm?: string): Promise<{
         aceites: {
             [k: string]: Date | null;
         };

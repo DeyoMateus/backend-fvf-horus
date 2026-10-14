@@ -10,17 +10,20 @@ exports.PrivacidadeModule = void 0;
 const common_1 = require("@nestjs/common");
 const privacidade_controller_1 = require("./privacidade.controller");
 const privacidade_service_1 = require("./privacidade.service");
+const privacidade_aviso_politica_service_1 = require("./privacidade-aviso-politica.service");
+const push_notifications_module_1 = require("../common/notifications/push-notifications.module");
 let PrivacidadeModule = class PrivacidadeModule {
 };
 exports.PrivacidadeModule = PrivacidadeModule;
 exports.PrivacidadeModule = PrivacidadeModule = __decorate([
     (0, common_1.Module)({
+        imports: [push_notifications_module_1.PushNotificationsModule],
         controllers: [
             privacidade_controller_1.PrivacidadePublicaController,
             privacidade_controller_1.PrivacidadeMobileController,
             privacidade_controller_1.PrivacidadePainelController,
         ],
-        providers: [privacidade_service_1.PrivacidadeService],
+        providers: [privacidade_service_1.PrivacidadeService, privacidade_aviso_politica_service_1.PrivacidadeAvisoPoliticaService],
     })
 ], PrivacidadeModule);
 //# sourceMappingURL=privacidade.module.js.map
