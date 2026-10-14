@@ -85,6 +85,6 @@ export class VerificacaoJornadaAgendadaService {
   }
 
   private jobIdDoMotorista(motoristaId: string): string {
-    return `verificar-jornada:${motoristaId}`;
+    return `verificar-jornada-${motoristaId}`;
   }
 }
