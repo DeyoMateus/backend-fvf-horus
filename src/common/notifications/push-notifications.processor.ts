@@ -36,7 +36,7 @@ function canalDoPush(dados?: Record<string, unknown>): string {
   ) {
     return 'alertas-jornada-v3';
   }
-  return `alerta-voz-${SOM_POR_TIPO[tipo] ?? 'generico'}-v2`;
+  return `alerta-voz-${SOM_POR_TIPO[tipo] ?? 'generico'}-v3`;
 }
 
 const EXPO_PUSH_API_URL = 'https://exp.host/--/api/v2/push/send';
