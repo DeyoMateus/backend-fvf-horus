@@ -262,3 +262,69 @@ describe('JornadaLegalService , jornadas encadeadas (Rodada 182)', () => {
     });
   });
 });
+
+/**
+ * Rodada 265: o descanso entre jornadas conta desde o início da pausa de
+ * descanso que fechou a jornada, não só desde o "Fim de jornada" registrado
+ * depois de acordar.
+ */
+describe('JornadaLegalService , descanso desde o início da pausa (Rodada 265)', () => {
+  const service = new JornadaLegalService();
+  let seq = 1000;
+  const reg = (tipoEvento: string, iso: string) =>
+    ({
+      id: `q${++seq}`,
+      motoristaId: 'm1',
+      tipoEvento,
+      timestampEvento: new Date(iso),
+      sequencial: seq,
+    }) as any;
+
+  const base = () => [
+    reg('INICIO_JORNADA', '2026-10-15T12:00:00Z'),
+    reg('INICIO_DIRECAO', '2026-10-15T12:00:00Z'),
+    reg('FIM_DIRECAO', '2026-10-15T15:00:00Z'), // 3h
+    reg('INICIO_DIRECAO', '2026-10-15T17:34:18Z'),
+    reg('FIM_DIRECAO', '2026-10-15T21:24:16Z'), // 3h50
+    reg('INICIO_DESCANSO', '2026-10-15T21:24:29Z'),
+    reg('FIM_DESCANSO', '2026-10-16T05:07:33Z'),
+    reg('FIM_JORNADA', '2026-10-16T05:07:45Z'),
+  ];
+
+  it('não soma a jornada de ontem quando houve mais de 11h desde o início do descanso', () => {
+    const registros = [
+      ...base(),
+      reg('INICIO_JORNADA', '2026-10-16T15:33:54Z'), // 18h depois de parar
+      reg('INICIO_DIRECAO', '2026-10-16T15:43:13Z'),
+    ];
+    const ultimo = registros[registros.length - 1];
+    const alertas = service.avaliar(
+      registros,
+      ultimo,
+      new Set(),
+      new Date('2026-10-16T18:12:57Z'), // 2h29 de direção hoje
+    );
+    const tipos = alertas.map((a) => a.tipo);
+    expect(tipos).not.toContain('JORNADA_DIRECAO_PROXIMA_LIMITE');
+    expect(tipos).not.toContain('JORNADA_DIRECAO_EXCEDIDA');
+  });
+
+  it('ainda soma quando o descanso total é menor que 11h', () => {
+    const registros = [
+      ...base(),
+      reg('INICIO_JORNADA', '2026-10-16T06:00:00Z'), // 8h35 depois de parar
+      reg('INICIO_DIRECAO', '2026-10-16T06:10:00Z'),
+    ];
+    const ultimo = registros[registros.length - 1];
+    const alertas = service.avaliar(
+      registros,
+      ultimo,
+      new Set(),
+      new Date('2026-10-16T08:40:00Z'), // +2h30 => 9h20 no total
+    );
+    const alerta = alertas.find((a) => a.tipo === 'JORNADA_DIRECAO_PROXIMA_LIMITE');
+    expect(alerta).toBeDefined();
+    expect(alerta!.mensagem).toContain('nesta jornada');
+    expect(alerta!.mensagem).toContain('jornadas anteriores');
+  });
+});

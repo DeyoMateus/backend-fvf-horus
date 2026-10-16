@@ -10,6 +10,7 @@ import type {
 import { TipoEvento } from '@prisma/client';
 import { NsrService } from '../nsr/nsr.service';
 import { compararPorTimestampEvento } from '../ordenacao-temporal.util';
+import { inicioDoDescansoFinal } from '../jornada-legal/descanso-final';
 import {
   DIA_MS,
   type PontoFuso,
@@ -712,9 +713,16 @@ export class RepPService {
       }
     }
 
+    // Rodada 265: o descanso começa na pausa de descanso que fechou a jornada.
+    const ordenadosTodos = [...registros].sort(compararPorTimestampEvento);
+    const idxFim = ordenadosTodos.findIndex((r) => r.id === fimJornadaDoDia.id);
+    const inicioDescanso =
+      idxFim === -1
+        ? fimJornadaDoDia.timestampEvento
+        : inicioDoDescansoFinal(ordenadosTodos, idxFim);
     return {
       descansoInterjornadaMin: this.minutosEntre(
-        fimJornadaDoDia.timestampEvento,
+        inicioDescanso,
         proximoInicioJornada.timestampEvento,
       ),
     };

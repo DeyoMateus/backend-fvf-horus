@@ -1,3 +1,4 @@
+import { inicioDoDescansoFinal } from './descanso-final';
 import { Injectable } from '@nestjs/common';
 import {
   RegistroJornada,
@@ -298,7 +299,7 @@ export class JornadaLegalService {
       alertas.push({
         tipo: TipoAlertaJornada.JORNADA_DIRECAO_EXCEDIDA,
         severidade: SeveridadeAlerta.CRITICO,
-        mensagem: `Jornada de direção de ${this.formatarHoras(totalDirecaoMin)} no dia , excedeu o limite de 8h regulares + 2h extras (10:00).`,
+        mensagem: `Direção acumulada de ${this.formatarHoras(totalDirecaoMin)} desde o último descanso de 11h, excedeu o limite de 8h regulares + 2h extras (10:00)${this.detalheDaJornadaAtual(jornada, agora, totalDirecaoMin)}.`,
         janelaInicio,
         janelaFim: agora,
         minutosAcumulados: Math.round(totalDirecaoMin),
@@ -313,7 +314,7 @@ export class JornadaLegalService {
       alertas.push({
         tipo: TipoAlertaJornada.JORNADA_DIRECAO_PROXIMA_LIMITE,
         severidade: SeveridadeAlerta.ATENCAO,
-        mensagem: `Jornada de direção de ${this.formatarHoras(totalDirecaoMin)} no dia , aproximando do limite de 8h regulares (08:00).`,
+        mensagem: `Direção acumulada de ${this.formatarHoras(totalDirecaoMin)} desde o último descanso de 11h, aproximando do limite de 8h regulares (08:00)${this.detalheDaJornadaAtual(jornada, agora, totalDirecaoMin)}.`,
         janelaInicio,
         janelaFim: agora,
         minutosAcumulados: Math.round(totalDirecaoMin),
@@ -783,8 +784,10 @@ export class JornadaLegalService {
     // positivo.
     if (anterior.tipoEvento !== TipoEvento.FIM_JORNADA) return null;
 
+    // Rodada 265: descanso desde o início da pausa que fechou a jornada.
+    const inicioDescanso = inicioDoDescansoFinal(ordenados, idxAtual - 1);
     const descansoMin = this.minutosEntre(
-      anterior.timestampEvento,
+      inicioDescanso,
       registroRecemCriado.timestampEvento,
     );
     if (descansoMin >= DESCANSO_INTERJORNADA_MINIMO_MIN) return null;
@@ -835,7 +838,7 @@ export class JornadaLegalService {
         `Nova jornada iniciada após apenas ${this.formatarHoras(descansoMin)} de descanso desde o fim da jornada ` +
         `anterior (que já tinha cumprido a jornada legal de direção) , abaixo do mínimo legal de 11:00 ` +
         `(faltam ${this.formatarHoras(faltamMin)}).`,
-      janelaInicio: anterior.timestampEvento,
+      janelaInicio: inicioDescanso,
       janelaFim: registroRecemCriado.timestampEvento,
       minutosAcumulados: Math.round(descansoMin),
     };
@@ -896,8 +899,10 @@ export class JornadaLegalService {
       const anteriorIdx = inicioIdx - 1;
       const anterior = ordenados[anteriorIdx];
       if (anterior.tipoEvento !== TipoEvento.FIM_JORNADA) break;
+      // Rodada 265: o descanso conta desde o início da pausa de descanso
+      // que fecha a jornada anterior, não só desde o "Fim de jornada".
       const gapMin = this.minutosEntre(
-        anterior.timestampEvento,
+        inicioDoDescansoFinal(ordenados, anteriorIdx),
         ordenados[inicioIdx].timestampEvento,
       );
       if (gapMin >= DESCANSO_INTERJORNADA_MINIMO_MIN) break;
@@ -965,6 +970,21 @@ export class JornadaLegalService {
     }
     if (aberto) intervalos.push({ inicio: aberto, fim: agora });
     return intervalos;
+  }
+
+  /**
+   * Rodada 265: quando a direção acumulada inclui jornadas anteriores
+   * encadeadas, diz quanto foi desta jornada e quanto veio das anteriores.
+   */
+  private detalheDaJornadaAtual(
+    jornada: RegistroJornada[],
+    agora: Date,
+    totalDirecaoMin: number,
+  ): string {
+    const atualMin = this.somarMinutos(this.intervalosDeDirecao(jornada, agora));
+    const anteriorMin = totalDirecaoMin - atualMin;
+    if (anteriorMin < 1) return '';
+    return ` (${this.formatarHoras(atualMin)} nesta jornada e ${this.formatarHoras(anteriorMin)} das jornadas anteriores, que terminaram há menos de 11h)`;
   }
 
   /** Registros desde o último INICIO_JORNADA (inclusive), ou todo o histórico se não houver nenhum. */
