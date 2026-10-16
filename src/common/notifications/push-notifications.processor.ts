@@ -34,7 +34,7 @@ function canalDoPush(dados?: Record<string, unknown>): string {
     tipo.startsWith('PRIVACIDADE_') ||
     tipo === 'TRATAMENTO_PONTO'
   ) {
-    return 'alertas-jornada-v3';
+    return 'alertas-jornada-v4';
   }
   return `alerta-voz-${SOM_POR_TIPO[tipo] ?? 'generico'}-v3`;
 }

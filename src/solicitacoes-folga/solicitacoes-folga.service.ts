@@ -20,6 +20,8 @@ import { FolgaConcedidaService } from '../folga-concedida/folga-concedida.servic
 import { CreateSolicitacaoFolgaDto } from './dto/create-solicitacao-folga.dto';
 
 export const MAXIMO_DIAS_POR_PEDIDO = 15;
+/** Rodada 267 , justificativa gravada quando o pedido expira sem resposta do RH. */
+export const MOTIVO_NAO_ATENDIDO_NO_PRAZO = 'Não atendido no prazo';
 const DIA_MS = 86_400_000;
 
 const INCLUDE_PADRAO = {
@@ -346,6 +348,81 @@ export class SolicitacoesFolgaService {
     );
 
     return atualizada;
+  }
+
+  /**
+   * Rodada 267 , pedido pendente que o RH não respondeu até o dia pedido
+   * passar vira NEGADA automaticamente, com o motivo "Não atendido no
+   * prazo". "Passou do dia" = o primeiro dia pedido (`dataInicio`) já ficou
+   * para trás no fuso da empresa do motorista. Roda a cada hora pelo
+   * `ExpiracaoSolicitacoesFolgaService` (fora de requisição, sem usuário),
+   * então a decisão é do SISTEMA: `decididoPorUsuarioId` fica vazio.
+   * Devolve quantos pedidos foram negados.
+   */
+  async negarPendentesVencidos(agora = new Date()): Promise<number> {
+    // Candidatos com folga de ontem ou antes em qualquer fuso do Brasil;
+    // o corte exato é conferido por pedido, no fuso da empresa.
+    const limite = new Date(agora.getTime() + DIA_MS);
+    const candidatos = await this.prisma.solicitacaoFolga.findMany({
+      where: {
+        status: StatusSolicitacaoFolga.PENDENTE,
+        dataInicio: { lte: limite },
+      },
+      include: {
+        motorista: {
+          select: {
+            id: true,
+            nome: true,
+            empresa: { select: { grupoId: true, fusoHorario: true } },
+          },
+        },
+      },
+    });
+
+    let negados = 0;
+    for (const s of candidatos) {
+      const empresa = s.motorista.empresa as
+        | { grupoId?: string; fusoHorario?: string }
+        | undefined;
+      const hoje = chaveDiaBrt(
+        agora,
+        offsetPadraoDaEmpresa(empresa?.fusoHorario),
+      );
+      if (s.dataInicio.toISOString().slice(0, 10) >= hoje) continue;
+
+      // updateMany com status PENDENTE: se o RH decidiu agora há pouco, não sobrescreve.
+      const r = await this.prisma.solicitacaoFolga.updateMany({
+        where: { id: s.id, status: StatusSolicitacaoFolga.PENDENTE },
+        data: {
+          status: StatusSolicitacaoFolga.NEGADA,
+          decididoPorUsuarioId: null,
+          decididoEm: agora,
+          motivoDecisao: MOTIVO_NAO_ATENDIDO_NO_PRAZO,
+        },
+      });
+      if (r.count === 0) continue;
+      negados++;
+
+      await this.audit.registrar({
+        actorType: ActorType.SISTEMA,
+        acao: 'SOLICITACAO_FOLGA_NEGADA_AUTOMATICAMENTE',
+        entidade: 'SolicitacaoFolga',
+        entidadeId: s.id,
+        grupoId: empresa?.grupoId,
+        detalhes: {
+          motoristaId: s.motoristaId,
+          motivo: MOTIVO_NAO_ATENDIDO_NO_PRAZO,
+        },
+      });
+
+      await this.push.notificarMotorista(
+        s.motoristaId,
+        'Pedido de folga não atendido',
+        `Sua folga de ${descreverPeriodo(s.dataInicio, s.dataFim)} não foi atendida no prazo. Se ainda precisar, faça um novo pedido ou fale com o RH.`,
+        { tipo: 'SOLICITACAO_FOLGA_NEGADA', solicitacaoId: s.id },
+      );
+    }
+    return negados;
   }
 
   private async buscarPendentePertencente(

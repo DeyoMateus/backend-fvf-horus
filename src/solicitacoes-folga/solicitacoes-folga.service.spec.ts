@@ -140,3 +140,59 @@ describe('SolicitacoesFolgaService', () => {
     );
   });
 });
+
+describe('SolicitacoesFolgaService , expiração (Rodada 267)', () => {
+  function montar(candidatos: any[], updateCount = 1) {
+    const prisma = {
+      solicitacaoFolga: {
+        findMany: jest.fn().mockResolvedValue(candidatos),
+        updateMany: jest.fn().mockResolvedValue({ count: updateCount }),
+      },
+    } as any;
+    const audit = { registrar: jest.fn().mockResolvedValue(undefined) } as any;
+    const push = { notificarMotorista: jest.fn().mockResolvedValue(undefined) } as any;
+    const service = new SolicitacoesFolgaService(
+      prisma, audit, {} as any, push, {} as any, {} as any,
+    );
+    return { service, prisma, audit, push };
+  }
+  const pedido = (inicio: string, fim = inicio) => ({
+    id: 'sol-' + inicio,
+    motoristaId: 'mot-1',
+    dataInicio: new Date(inicio + 'T00:00:00Z'),
+    dataFim: new Date(fim + 'T00:00:00Z'),
+    status: 'PENDENTE',
+    motorista: {
+      id: 'mot-1',
+      nome: 'João',
+      empresa: { grupoId: 'g1', fusoHorario: 'America/Sao_Paulo' },
+    },
+  });
+
+  it('nega "não atendido no prazo" quando o primeiro dia pedido já passou', async () => {
+    const { service, prisma, audit, push } = montar([pedido('2026-11-10', '2026-11-12')]);
+    const n = await service.negarPendentesVencidos(new Date('2026-11-11T15:00:00Z'));
+    expect(n).toBe(1);
+    const data = prisma.solicitacaoFolga.updateMany.mock.calls[0][0].data;
+    expect(data.status).toBe('NEGADA');
+    expect(data.motivoDecisao).toBe('Não atendido no prazo');
+    expect(data.decididoPorUsuarioId).toBeNull();
+    expect(audit.registrar.mock.calls[0][0].acao).toBe('SOLICITACAO_FOLGA_NEGADA_AUTOMATICAMENTE');
+    expect(push.notificarMotorista).toHaveBeenCalledTimes(1);
+  });
+
+  it('não nega enquanto o dia pedido ainda é hoje (fuso da empresa)', async () => {
+    const { service, prisma } = montar([pedido('2026-11-10')]);
+    // 10/11 às 02:00 UTC ainda é 09/11 à noite no Brasil; 10/11 15:00 UTC é o próprio dia.
+    expect(await service.negarPendentesVencidos(new Date('2026-11-10T15:00:00Z'))).toBe(0);
+    expect(await service.negarPendentesVencidos(new Date('2026-11-10T02:00:00Z'))).toBe(0);
+    expect(prisma.solicitacaoFolga.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('não avisa nem audita se o RH decidiu no meio tempo', async () => {
+    const { service, audit, push } = montar([pedido('2026-11-10')], 0);
+    expect(await service.negarPendentesVencidos(new Date('2026-11-12T15:00:00Z'))).toBe(0);
+    expect(audit.registrar).not.toHaveBeenCalled();
+    expect(push.notificarMotorista).not.toHaveBeenCalled();
+  });
+});

@@ -6,6 +6,7 @@ import {
   SolicitacoesFolgaPorMotoristaController,
 } from './solicitacoes-folga.controller';
 import { SolicitacoesFolgaMobileController } from './solicitacoes-folga-mobile.controller';
+import { ExpiracaoSolicitacoesFolgaService } from './expiracao-solicitacoes-folga.service';
 import { SolicitacoesFolgaService } from './solicitacoes-folga.service';
 
 @Module({
@@ -15,7 +16,7 @@ import { SolicitacoesFolgaService } from './solicitacoes-folga.service';
     SolicitacoesFolgaPorMotoristaController,
     SolicitacoesFolgaMobileController,
   ],
-  providers: [SolicitacoesFolgaService],
+  providers: [SolicitacoesFolgaService, ExpiracaoSolicitacoesFolgaService],
   exports: [SolicitacoesFolgaService],
 })
 export class SolicitacoesFolgaModule {}
