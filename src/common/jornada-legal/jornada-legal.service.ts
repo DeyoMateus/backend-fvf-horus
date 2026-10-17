@@ -57,6 +57,9 @@ interface AlertaCalculado {
 
 const LIMITE_DIRECAO_CONTINUA_ATENCAO_MIN = 300; // 5h
 const LIMITE_DIRECAO_CONTINUA_CRITICO_MIN = 330; // 5h30
+// Rodada 272: motorista que NAO parou e segue dirigindo recebe o aviso de novo.
+const LIMITE_DIRECAO_CONTINUA_REPETIDO_10H_MIN = 600; // 10h
+const LIMITE_DIRECAO_CONTINUA_REPETIDO_11H_MIN = 660; // 11h
 const LIMITE_JORNADA_DIRECAO_ATENCAO_MIN = 480; // 8h
 const LIMITE_JORNADA_DIRECAO_CRITICO_MIN = 600; // 10h (8 regular + 2 extra)
 const LIMITE_ESPERA_INFO_MIN = 180; // 3h
@@ -267,6 +270,35 @@ export class JornadaLegalService {
         tipo: TipoAlertaJornada.DIRECAO_CONTINUA_PROXIMA_LIMITE,
         severidade: SeveridadeAlerta.ATENCAO,
         mensagem: `Direção contínua de ${this.formatarHoras(direcaoContinuaMin)} , aproximando do limite legal de 05:30 sem pausa.`,
+        janelaInicio: corteContinuo,
+        janelaFim: agora,
+        minutosAcumulados: Math.round(direcaoContinuaMin),
+      });
+    }
+
+    // Rodada 272: sem pausa de 30 min, o aviso volta aos 10h e aos 11h de
+    // direção contínua (mesmos áudios de 5h e 5h30), cada um uma vez por trecho.
+    if (
+      direcaoContinuaMin >= LIMITE_DIRECAO_CONTINUA_REPETIDO_10H_MIN &&
+      !alertasExistentesTipos.has(TipoAlertaJornada.DIRECAO_CONTINUA_REPETIDA_10H)
+    ) {
+      alertas.push({
+        tipo: TipoAlertaJornada.DIRECAO_CONTINUA_REPETIDA_10H,
+        severidade: SeveridadeAlerta.CRITICO,
+        mensagem: `Direção contínua de ${this.formatarHoras(direcaoContinuaMin)} sem pausa qualificada, o motorista não parou após os avisos de 05:00 e 05:30 (limite legal: 05:30).`,
+        janelaInicio: corteContinuo,
+        janelaFim: agora,
+        minutosAcumulados: Math.round(direcaoContinuaMin),
+      });
+    }
+    if (
+      direcaoContinuaMin >= LIMITE_DIRECAO_CONTINUA_REPETIDO_11H_MIN &&
+      !alertasExistentesTipos.has(TipoAlertaJornada.DIRECAO_CONTINUA_REPETIDA_11H)
+    ) {
+      alertas.push({
+        tipo: TipoAlertaJornada.DIRECAO_CONTINUA_REPETIDA_11H,
+        severidade: SeveridadeAlerta.CRITICO,
+        mensagem: `Direção contínua de ${this.formatarHoras(direcaoContinuaMin)} sem pausa qualificada, o motorista segue dirigindo sem descansar (limite legal: 05:30).`,
         janelaInicio: corteContinuo,
         janelaFim: agora,
         minutosAcumulados: Math.round(direcaoContinuaMin),
@@ -509,6 +541,8 @@ export class JornadaLegalService {
       for (const limite of [
         LIMITE_DIRECAO_CONTINUA_ATENCAO_MIN,
         LIMITE_DIRECAO_CONTINUA_CRITICO_MIN,
+        LIMITE_DIRECAO_CONTINUA_REPETIDO_10H_MIN,
+        LIMITE_DIRECAO_CONTINUA_REPETIDO_11H_MIN,
       ]) {
         if (direcaoContinuaMin < limite)
           candidatosMin.push(limite - direcaoContinuaMin);

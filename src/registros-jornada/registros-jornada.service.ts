@@ -726,6 +726,14 @@ export class RegistrosJornadaService {
     const eventoAntigoParaPush =
       Number.isFinite(momentoEvento) &&
       Date.now() - momentoEvento > LIMITE_EVENTO_ATRASADO_PUSH_MS;
+    // Rodada 272: o WhatsApp do gestor/GR passa a dizer QUEM gerou o alerta.
+    const nomeMotoristaWhatsapp =
+      alertasCriticosParaNotificar.length > 0
+        ? await this.prisma.motorista
+            .findUnique({ where: { id: motoristaId }, select: { nome: true } })
+            .then((m) => m?.nome)
+            .catch(() => undefined)
+        : undefined;
     for (const alerta of alertasCriticosParaNotificar) {
       const suprimir =
         eventoAntigoParaPush &&
@@ -743,7 +751,7 @@ export class RegistrosJornadaService {
       ) {
         void this.whatsapp.notificarGestoresDaEmpresa(
           empresaIdParaNotificar,
-          alerta.mensagem,
+          `Motorista: ${nomeMotoristaWhatsapp ?? 'não identificado'}\n${alerta.mensagem}`,
         );
       }
     }
@@ -975,6 +983,8 @@ export class RegistrosJornadaService {
       const TIPOS_DIRECAO_CONTINUA: string[] = [
         TipoAlertaJornada.DIRECAO_CONTINUA_PROXIMA_LIMITE,
         TipoAlertaJornada.DIRECAO_CONTINUA_EXCEDIDA,
+        TipoAlertaJornada.DIRECAO_CONTINUA_REPETIDA_10H,
+        TipoAlertaJornada.DIRECAO_CONTINUA_REPETIDA_11H,
       ];
       const tiposExistentes = new Set(
         (
@@ -1234,7 +1244,7 @@ export class RegistrosJornadaService {
           if (!TIPOS_ALERTA_SOMENTE_PAINEL.includes(alerta.tipo)) {
             void this.whatsapp.notificarGestoresDaEmpresa(
               motorista.empresaId,
-              alerta.mensagem,
+              `Motorista: ${motorista.nome}\n${alerta.mensagem}`,
             );
           }
         }

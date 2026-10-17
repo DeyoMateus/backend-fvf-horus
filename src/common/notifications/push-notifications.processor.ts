@@ -14,6 +14,9 @@ const SOM_POR_TIPO: Record<string, string> = {
   DIRECAO_CONTINUA_PROXIMA_LIMITE: 'direcao_300',
   DIRECAO_CONTINUA_EXCEDIDA: 'direcao_330',
   DIRECAO_RETOMADA_SEM_PAUSA: 'direcao_330',
+  // Rodada 272: repeticao aos 10h / 11h reaproveita os audios de 5h / 5h30.
+  DIRECAO_CONTINUA_REPETIDA_10H: 'direcao_300',
+  DIRECAO_CONTINUA_REPETIDA_11H: 'direcao_330',
   JORNADA_DIRECAO_PROXIMA_LIMITE: 'jornada_proxima',
   JORNADA_DIRECAO_EXCEDIDA: 'jornada_excedida',
   JORNADA_ATUAL_DIRECAO_PROXIMA_LIMITE: 'jornada_proxima',

@@ -991,6 +991,11 @@ enum TipoAlertaJornada {
   /// ou mais de direção contínua acumulada e sem pausa de 30 min. Gera
   /// alerta crítico a cada retomada (sem deduplicar por jornada).
   DIRECAO_RETOMADA_SEM_PAUSA
+  /// Rodada 272: motorista segue dirigindo sem pausa de 30 min e chegou a 10h /
+  /// 11h de direcao CONTINUA. Repete o aviso (mesmos audios de 5h / 5h30),
+  /// o WhatsApp aos gestores e a notificacao no painel.
+  DIRECAO_CONTINUA_REPETIDA_10H
+  DIRECAO_CONTINUA_REPETIDA_11H
   /// Rodada 184: o servidor recebeu um evento fora da ordem permitida (ex.:
   /// dois INICIO_DIRECAO seguidos). O ponto é aceito, mas o gestor é avisado.
   SEQUENCIA_EVENTOS_INCONSISTENTE
